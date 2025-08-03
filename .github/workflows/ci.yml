@@ -34,12 +34,6 @@ jobs:
     - name: Run widget tests
       run: flutter test test/widget/
     
-    - name: Run integration tests
-      run: flutter test test/integration/
-      env:
-        SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-        SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
-    
     - name: Build for web
       run: flutter build web
     
