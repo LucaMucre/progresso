@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 import 'services/db_service.dart';
 
 class LogActionPage extends StatefulWidget {
-  final ActionTemplate template;
-  const LogActionPage({Key? key, required this.template}) : super(key: key);
+  final ActionTemplate? template;
+  final String? selectedCategory;
+  final String? selectedArea;
+  
+  const LogActionPage({
+    Key? key, 
+    this.template,
+    this.selectedCategory,
+    this.selectedArea,
+  }) : super(key: key);
 
   @override
   State<LogActionPage> createState() => _LogActionPageState();
@@ -16,6 +24,11 @@ class _LogActionPageState extends State<LogActionPage> {
   String? _error;
 
   Future<void> _submitLog() async {
+    if (widget.template == null) {
+      setState(() { _error = 'Kein Template ausgewählt.'; });
+      return;
+    }
+
     final raw = _durationCtrl.text.trim();
     int? duration;
     if (raw.isNotEmpty) {
@@ -29,7 +42,7 @@ class _LogActionPageState extends State<LogActionPage> {
 
     try {
       final log = await createLog(
-        templateId : widget.template.id,
+        templateId : widget.template!.id,
         durationMin: duration,
         notes      : _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
@@ -56,9 +69,11 @@ class _LogActionPageState extends State<LogActionPage> {
   @override
   Widget build(BuildContext context) {
     final tpl = widget.template;
+    final title = tpl != null ? 'Log: ${tpl.name}' : 'Neue Aktion loggen';
+    
     return Scaffold(
       appBar: AppBar(
-        title: Text('Log: ${tpl.name}'),
+        title: Text(title),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
