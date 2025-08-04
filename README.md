@@ -1,186 +1,106 @@
-# Progresso - Personal Progress Tracker
+# Progresso - Flutter App mit Supabase Integration
 
-Eine Flutter-App für das Tracking persönlicher Fortschritte mit XP-System, Streaks und detaillierten Logs.
+Eine Flutter-App zur Verfolgung von Fortschritten und Gewohnheiten mit Supabase-Backend.
 
-## 🚀 Features
+## Features
 
-### ✅ Implementiert
-- **Authentifizierung**: Supabase Auth mit Email/Passwort
-- **XP-System**: Level-basiertes Fortschrittssystem
-- **Streak-Tracking**: Tägliche Aktivitätsverfolgung
-- **Action Templates**: Vorlagen für wiederkehrende Aktivitäten
-- **Detailed Logging**: Dauer, Notizen und XP-Berechnung
-- **Profile Management**: Avatar-Upload und Bio
-- **Cross-Platform**: Windows, Web, Android, iOS
+- 🔐 Authentifizierung mit Supabase
+- 📊 Fortschrittsverfolgung
+- 🏆 Badge-System
+- 📱 Cross-Platform (Web, Windows, Mobile)
+- 🔄 Offline-Caching
+- 🎯 Template-basierte Aktionen
 
-### 🔒 Sicherheit
-- **Row Level Security (RLS)**: Vollständige Datenisolation
-- **Storage Policies**: Sichere Avatar-Uploads
-- **User Authentication**: Supabase Auth Integration
-
-### 📱 State Management
-- **Riverpod**: Zentrales State Management
-- **Caching**: Offline-Support mit Local Cache
-- **Error Handling**: Konsistente Fehlerbehandlung
-
-## 🛠️ Technologie-Stack
+## Technologie-Stack
 
 - **Frontend**: Flutter 3.24.5
-- **Backend**: Supabase (PostgreSQL, Auth, Storage)
+- **Backend**: Supabase
 - **State Management**: Riverpod
-- **Testing**: Flutter Test
-- **CI/CD**: GitHub Actions
+- **Code Generation**: build_runner
+- **Testing**: flutter_test
 
-## 📦 Installation
+## Setup
 
-### Voraussetzungen
-- Flutter SDK 3.24.5+
-- Supabase Cloud Account
-- Git
+1. **Dependencies installieren:**
+   ```bash
+   flutter pub get
+   ```
 
-### Setup
-```bash
-# Repository klonen
-git clone https://github.com/your-username/progresso.git
-cd progresso
+2. **Code generieren:**
+   ```bash
+   flutter packages pub run build_runner build --delete-conflicting-outputs
+   ```
 
-# Dependencies installieren
-flutter pub get
+3. **Environment-Variablen setzen:**
+   Erstelle eine `.env` Datei mit:
+   ```
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
 
-# Code generieren (Riverpod)
-flutter packages pub run build_runner build
+4. **App starten:**
+   ```bash
+   flutter run
+   ```
 
-# App starten
-flutter run -d windows  # Windows
-flutter run -d chrome   # Web
-flutter run -d android  # Android
-```
+## Testing
 
-### Environment Setup
-Erstelle eine `.env` Datei im Root-Verzeichnis:
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-```
+- **Unit Tests:** `flutter test test/unit/`
+- **Widget Tests:** `flutter test test/widget/`
+- **Integration Tests:** `flutter test test/integration/`
 
-## 🗄️ Datenbank-Schema
+## CI/CD Pipeline
 
-### Tabellen
-- `users`: Benutzerprofile
-- `action_templates`: Aktivitätsvorlagen
-- `action_logs`: Aktivitätslogs
+Die GitHub Actions Pipeline führt folgende Schritte aus:
 
-### RLS Policies
-- Benutzer können nur eigene Daten sehen/bearbeiten
-- Storage-Policies für sichere Avatar-Uploads
-- Automatische User-Profile-Erstellung
+1. **Test Job:**
+   - Flutter Setup
+   - Dependencies installieren
+   - Code generieren
+   - Analyse durchführen
+   - Unit und Widget Tests ausführen
+   - Web und Windows Builds erstellen
 
-## 🧪 Testing
+2. **Build Jobs:**
+   - Separate Builds für Windows und Web
+   - Artifacts hochladen
 
-### Unit Tests
-```bash
-flutter test test/unit/
-```
-
-### Widget Tests
-```bash
-flutter test test/widget/
-```
-
-### Code Analysis
-```bash
-flutter analyze
-```
-
-## 🚀 Deployment
-
-### CI/CD Pipeline
-- Automatische Tests bei Push/PR
-- Windows Build mit Artifacts
-- Web Build mit Artifacts
-
-### Supabase Edge Functions
-- `calculate-xp`: Komplexe XP-Berechnung mit Boni
-- Streak-Boni für 7+ Tage
-- Duration-Boni für längere Aktivitäten
-
-## 📁 Projektstruktur
+## Projektstruktur
 
 ```
 lib/
-├── main.dart                 # App Entry Point
-├── auth_gate.dart           # Auth Routing
-├── auth_page.dart           # Login/Register
-├── dashboard_page.dart      # Haupt-Dashboard
-├── profile_page.dart        # Profil-Management
-├── history_page.dart        # Log-Historie
-├── templates_page.dart      # Template-Management
+├── main.dart              # App-Einstiegspunkt
+├── auth_gate.dart         # Authentifizierung
+├── auth_page.dart         # Login/Register UI
+├── dashboard_page.dart    # Hauptdashboard
+├── history_page.dart      # Verlaufsansicht
+├── log_action_page.dart   # Aktion loggen
+├── profile_page.dart      # Profilseite
+├── templates_page.dart    # Template-Verwaltung
 └── services/
-    ├── db_service.dart      # Datenbank-Operationen
-    ├── app_state.dart       # Riverpod State Management
-    ├── error_service.dart   # Error Handling
-    └── offline_cache.dart   # Offline-Support
-
-test/
-├── unit/                    # Unit Tests
-└── widget/                  # Widget Tests
-
-supabase/
-├── migrations/              # Datenbank-Migrationen
-└── functions/               # Edge Functions
-
-.github/workflows/
-└── ci.yml                  # CI/CD Pipeline
+    ├── app_state.dart     # Riverpod State Management
+    ├── db_service.dart    # Supabase Integration
+    ├── error_service.dart # Fehlerbehandlung
+    └── offline_cache.dart # Offline-Caching
 ```
 
-## 🔧 Konfiguration
+## Deployment
 
-### Supabase Setup
-1. Projekt in Supabase Console erstellen
-2. RLS-Policies aktivieren (siehe `migrations/`)
-3. Storage Bucket "avatars" erstellen
-4. Edge Functions deployen
+Die App kann auf folgenden Plattformen deployed werden:
 
-### Flutter Configuration
-- Riverpod für State Management
-- SharedPreferences für Offline-Cache
-- ImagePicker für Avatar-Uploads
+- **Web:** `flutter build web`
+- **Windows:** `flutter build windows`
+- **Android:** `flutter build apk`
+- **iOS:** `flutter build ios`
 
-## 📈 Roadmap
-
-### Geplant
-- [ ] Push-Notifications
-- [ ] Social Features (Freunde, Challenges)
-- [ ] Advanced Analytics
-- [ ] Export/Import von Daten
-- [ ] Dark Mode
-- [ ] Localization (i18n)
-
-### In Entwicklung
-- [ ] Offline-First Architecture
-- [ ] Advanced XP-Berechnungen
-- [ ] Achievement System
-- [ ] Data Visualization
-
-## 🤝 Contributing
+## Contributing
 
 1. Fork das Repository
-2. Feature Branch erstellen (`git checkout -b feature/AmazingFeature`)
-3. Changes committen (`git commit -m 'Add AmazingFeature'`)
-4. Branch pushen (`git push origin feature/AmazingFeature`)
-5. Pull Request erstellen
+2. Erstelle einen Feature Branch
+3. Committe deine Änderungen
+4. Push zum Branch
+5. Erstelle einen Pull Request
 
-## 📄 License
+## License
 
-Dieses Projekt ist unter der MIT License lizenziert - siehe [LICENSE](LICENSE) Datei für Details.
-
-## 🙏 Danksagungen
-
-- Flutter Team für das großartige Framework
-- Supabase für die Backend-as-a-Service Lösung
-- Riverpod für das State Management
-- Alle Contributors und Tester
-
----
-
-**Progresso** - Track your progress, level up your life! 🎯
+Dieses Projekt ist unter der MIT-Lizenz lizenziert.
