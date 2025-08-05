@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import '../services/life_areas_service.dart';
 import '../services/character_service.dart';
+import '../profile_page.dart';
 
 // Separate Character Widget to prevent rebuilding on hover
 class CharacterWidget extends StatefulWidget {
@@ -182,12 +183,20 @@ class _BubblesGridState extends State<BubblesGrid> {
         width: 300,
         child: Stack(
           children: [
-            // Character in the center - now isolated from hover effects
+            // Character in the center - clickable to navigate to profile
             Positioned(
               left: 110, // Center position (150 - 40)
               top: 110,  // Center position (150 - 40)
-              child: const IgnorePointer(
-                child: CharacterWidget(),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ProfilePage()),
+                  );
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: const CharacterWidget(),
+                ),
               ),
             ),
 

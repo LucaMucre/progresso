@@ -78,91 +78,214 @@ class _DashboardPageState extends State<DashboardPage> {
     String selectedColor = '#2196F3';
     String selectedIcon = 'fitness_center';
 
+    final List<Map<String, dynamic>> colorOptions = [
+      {'name': 'Blau', 'color': '#2196F3'},
+      {'name': 'Grün', 'color': '#4CAF50'},
+      {'name': 'Orange', 'color': '#FF9800'},
+      {'name': 'Rot', 'color': '#F44336'},
+      {'name': 'Lila', 'color': '#9C27B0'},
+      {'name': 'Pink', 'color': '#E91E63'},
+      {'name': 'Türkis', 'color': '#00BCD4'},
+      {'name': 'Gelb', 'color': '#FFEB3B'},
+      {'name': 'Grau', 'color': '#607D8B'},
+      {'name': 'Braun', 'color': '#795548'},
+    ];
+
+    final List<Map<String, dynamic>> iconOptions = [
+      {'name': 'Fitness', 'icon': 'fitness_center'},
+      {'name': 'Ernährung', 'icon': 'restaurant'},
+      {'name': 'Bildung', 'icon': 'school'},
+      {'name': 'Finanzen', 'icon': 'account_balance'},
+      {'name': 'Kunst', 'icon': 'palette'},
+      {'name': 'Beziehungen', 'icon': 'people'},
+      {'name': 'Karriere', 'icon': 'work'},
+      {'name': 'Zuhause', 'icon': 'home'},
+      {'name': 'Gesundheit', 'icon': 'local_hospital'},
+      {'name': 'Reisen', 'icon': 'flight'},
+      {'name': 'Musik', 'icon': 'music_note'},
+      {'name': 'Sport', 'icon': 'sports_soccer'},
+      {'name': 'Technologie', 'icon': 'computer'},
+      {'name': 'Natur', 'icon': 'eco'},
+      {'name': 'Lesen', 'icon': 'book'},
+      {'name': 'Schreiben', 'icon': 'edit'},
+    ];
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Neuen Lebensbereich hinzufügen'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'z.B. Fitness, Bildung, etc.',
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: categoryController,
-                decoration: const InputDecoration(
-                  labelText: 'Kategorie',
-                  hintText: 'z.B. Gesundheit, Entwicklung, etc.',
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('Farbe: '),
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: Color(int.parse(selectedColor.replaceAll('#', '0xFF'))),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black, width: 2),
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return AlertDialog(
+              title: const Text('Neuen Lebensbereich hinzufügen'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Name Field
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        hintText: 'z.B. Fitness, Bildung, etc.',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    
+                    // Category Field
+                    TextField(
+                      controller: categoryController,
+                      decoration: const InputDecoration(
+                        labelText: 'Kategorie (optional)',
+                        hintText: 'z.B. Gesundheit, Persönlich',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Color Selection
+                    const Text(
+                      'Farbe auswählen:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: colorOptions.map((colorOption) {
+                        bool isSelected = selectedColor == colorOption['color'];
+                        return GestureDetector(
+                          onTap: () {
+                            setDialogState(() {
+                              selectedColor = colorOption['color'];
+                            });
+                          },
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Color(int.parse(colorOption['color'].replaceAll('#', '0xFF'))),
+                              borderRadius: BorderRadius.circular(20),
+                              border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                              boxShadow: isSelected ? [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ] : null,
+                            ),
+                            child: isSelected
+                                ? const Icon(Icons.check, color: Colors.white, size: 20)
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Icon Selection
+                    const Text(
+                      'Icon auswählen:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: iconOptions.map((iconOption) {
+                        bool isSelected = selectedIcon == iconOption['icon'];
+                        return GestureDetector(
+                          onTap: () {
+                            setDialogState(() {
+                              selectedIcon = iconOption['icon'];
+                            });
+                          },
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: isSelected 
+                                  ? Color(int.parse(selectedColor.replaceAll('#', '0xFF'))).withOpacity(0.2)
+                                  : Colors.grey.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: isSelected 
+                                  ? Border.all(color: Color(int.parse(selectedColor.replaceAll('#', '0xFF'))), width: 2)
+                                  : null,
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _getIconData(iconOption['icon']),
+                                  color: isSelected 
+                                      ? Color(int.parse(selectedColor.replaceAll('#', '0xFF')))
+                                      : Colors.grey[600],
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  iconOption['name'],
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: isSelected 
+                                        ? Color(int.parse(selectedColor.replaceAll('#', '0xFF')))
+                                        : Colors.grey[600],
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('Icon: '),
-                  Icon(_getIconData(selectedIcon)),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Abbrechen'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Bitte geben Sie einen Namen ein')),
-                  );
-                  return;
-                }
-
-                                 try {
-                   await LifeAreasService.createLifeArea(
-                     name: nameController.text.trim(),
-                     category: categoryController.text.trim().isEmpty ? 'Allgemein' : categoryController.text.trim(),
-                     color: selectedColor,
-                     icon: selectedIcon,
-                   );
-                   Navigator.of(context).pop();
-                   // Force rebuild
-                   setState(() {
-                     _refreshCounter++;
-                   });
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     const SnackBar(content: Text('Lebensbereich erfolgreich erstellt')),
-                   );
-                 } catch (e) {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     SnackBar(content: Text('Fehler beim Erstellen: $e')),
-                   );
-                 }
-              },
-              child: const Text('Erstellen'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Abbrechen'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (nameController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Bitte gib einen Namen ein')),
+                      );
+                      return;
+                    }
+                    
+                    try {
+                      await LifeAreasService.createLifeArea(
+                        name: nameController.text.trim(),
+                        category: categoryController.text.trim().isEmpty ? 'Allgemein' : categoryController.text.trim(),
+                        color: selectedColor,
+                        icon: selectedIcon,
+                      );
+                      Navigator.of(context).pop();
+                      // Force rebuild
+                      setState(() {
+                        _refreshCounter++;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Lebensbereich erfolgreich erstellt')),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Fehler beim Erstellen: $e')),
+                      );
+                    }
+                  },
+                  child: const Text('Erstellen'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -297,27 +420,20 @@ class _DashboardPageState extends State<DashboardPage> {
           'Progresso',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Meine Logs',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const HistoryPage()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person),
-            tooltip: 'Mein Profil',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfilePage()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.exit_to_app),
-            tooltip: 'Abmelden',
-            onPressed: _signOut,
-          ),
-        ],
+                 actions: [
+           IconButton(
+             icon: const Icon(Icons.history),
+             tooltip: 'Meine Logs',
+             onPressed: () => Navigator.of(context).push(
+               MaterialPageRoute(builder: (_) => const HistoryPage()),
+             ),
+           ),
+           IconButton(
+             icon: const Icon(Icons.exit_to_app),
+             tooltip: 'Abmelden',
+             onPressed: _signOut,
+           ),
+         ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -326,7 +442,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             // Begrüßung
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -336,16 +452,26 @@ class _DashboardPageState extends State<DashboardPage> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.white.withOpacity(0.2),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Icon(
                       Icons.person,
-                      size: 30,
+                      size: 32,
                       color: Colors.white,
                     ),
                   ),
@@ -358,8 +484,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           'Willkommen zurück!',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -378,22 +504,121 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(height: 24),
 
+            // Streak & Badge Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: FutureBuilder<int>(
+                future: calculateStreak(),
+                builder: (ctx, snap) {
+                  if (snap.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snap.hasError) {
+                    return Text('Fehler: ${snap.error}');
+                  }
+                  final streak = snap.data ?? 0;
+                  final badge = badgeLevel(streak);
+                  
+                  return Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.orange, Colors.deepOrange],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          Icons.local_fire_department,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Dein Streak',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$streak Tage',
+                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (streak > 0)
+                              Text(
+                                'Du bist auf einem guten Weg!',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      _badgeIcon(badge),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Life Areas Section
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Lebensbereiche',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Lebensbereiche',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Verwalte deine persönlichen Bereiche',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () {
-                    _showAddLifeAreaDialog(context);
-                  },
-                  tooltip: 'Neuen Bereich hinzufügen',
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    onPressed: () {
+                      _showAddLifeAreaDialog(context);
+                    },
+                    tooltip: 'Neuen Bereich hinzufügen',
+                  ),
                 ),
               ],
             ),
@@ -407,8 +632,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ],
@@ -504,81 +729,23 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(height: 24),
 
-            // Streak & Badge Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: FutureBuilder<int>(
-                future: calculateStreak(),
-                builder: (ctx, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    return const SizedBox();
-                  }
-                  if (snap.hasError) {
-                    return Text('Fehler: ${snap.error}');
-                  }
-                  final streak = snap.data ?? 0;
-                  final badge = badgeLevel(streak);
-                  
-                  return Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.local_fire_department,
-                          color: Colors.orange,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Streak',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              '$streak Tage',
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _badgeIcon(badge),
-                    ],
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 24),
-
             // Actions Section
-            Text(
-              'Deine Actions',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deine Actions',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Schnellzugriff auf deine Aktivitäten',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -589,8 +756,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ],
