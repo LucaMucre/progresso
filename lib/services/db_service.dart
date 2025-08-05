@@ -37,6 +37,7 @@ class ActionLog {
   final String? notes;
   final int earnedXp;
   final String? templateId;
+  final String? activityName;
 
   ActionLog({
     required this.id,
@@ -45,6 +46,7 @@ class ActionLog {
     this.notes,
     required this.earnedXp,
     this.templateId,
+    this.activityName,
   });
 
   factory ActionLog.fromMap(Map<String, dynamic> m) => ActionLog(
@@ -54,6 +56,7 @@ class ActionLog {
         notes:       m['notes']           as String?,
         earnedXp:    m['earned_xp']       as int,
         templateId:  m['template_id']     as String?,
+        activityName: m['activity_name']   as String?,
       );
 }
 
@@ -119,6 +122,38 @@ Future<ActionLog> createLog({
   final insert = {
     'user_id':      _db.auth.currentUser!.id,
     'template_id':  templateId,
+    'duration_min': durationMin,
+    'notes':        notes,
+    'earned_xp':    earnedXp,
+  };
+  final out = await _db
+      .from('action_logs')
+      .insert(insert)
+      .select()
+      .single() as Map<String, dynamic>;
+
+  return ActionLog.fromMap(out);
+}
+
+/// Quick Log ohne Template erstellen
+Future<ActionLog> createQuickLog({
+  required String activityName,
+  required String category,
+  int? durationMin,
+  String? notes,
+}) async {
+  // Aktuelle Streak holen für XP-Berechnung
+  final currentStreak = await calculateStreak();
+  
+  // Standard-XP für Quick-Logs (25 XP)
+  final baseXp = 25;
+  
+  // Client-seitige XP-Berechnung
+  final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
+
+  // Eintrag zusammenbauen und schreiben (ohne template_id und activity_name für jetzt)
+  final insert = {
+    'user_id':      _db.auth.currentUser!.id,
     'duration_min': durationMin,
     'notes':        notes,
     'earned_xp':    earnedXp,

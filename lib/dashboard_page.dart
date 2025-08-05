@@ -1,16 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_page.dart';
+import 'dashboard_page.dart';
+import 'history_page.dart';
+import 'life_area_detail_page.dart';
+import 'log_action_page.dart';
+import 'profile_page.dart';
 import 'services/db_service.dart';
 import 'services/life_areas_service.dart';
-import 'history_page.dart';
-import 'profile_page.dart';
-import 'templates_page.dart';
-import 'life_area_detail_page.dart';
 import 'widgets/bubble_widget.dart';
+import 'templates_page.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
 
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  // Add a counter to force FutureBuilder rebuild
+  int _refreshCounter = 0;
+  
   Future<void> _signOut() async {
     try {
       await Supabase.instance.client.auth.signOut();
@@ -59,6 +70,217 @@ class DashboardPage extends StatelessWidget {
         builder: (context) => LifeAreaDetailPage(area: area),
       ),
     );
+  }
+
+  void _showAddLifeAreaDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final categoryController = TextEditingController();
+    String selectedColor = '#2196F3';
+    String selectedIcon = 'fitness_center';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Neuen Lebensbereich hinzufügen'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'z.B. Fitness, Bildung, etc.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: categoryController,
+                decoration: const InputDecoration(
+                  labelText: 'Kategorie',
+                  hintText: 'z.B. Gesundheit, Entwicklung, etc.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Farbe: '),
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: Color(int.parse(selectedColor.replaceAll('#', '0xFF'))),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black, width: 2),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('Icon: '),
+                  Icon(_getIconData(selectedIcon)),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Bitte geben Sie einen Namen ein')),
+                  );
+                  return;
+                }
+
+                                 try {
+                   await LifeAreasService.createLifeArea(
+                     name: nameController.text.trim(),
+                     category: categoryController.text.trim().isEmpty ? 'Allgemein' : categoryController.text.trim(),
+                     color: selectedColor,
+                     icon: selectedIcon,
+                   );
+                   Navigator.of(context).pop();
+                   // Force rebuild
+                   setState(() {
+                     _refreshCounter++;
+                   });
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     const SnackBar(content: Text('Lebensbereich erfolgreich erstellt')),
+                   );
+                 } catch (e) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     SnackBar(content: Text('Fehler beim Erstellen: $e')),
+                   );
+                 }
+              },
+              child: const Text('Erstellen'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  IconData _getIconData(String iconName) {
+    switch (iconName) {
+      case 'fitness_center':
+        return Icons.fitness_center;
+      case 'restaurant':
+        return Icons.restaurant;
+      case 'school':
+        return Icons.school;
+      case 'account_balance':
+        return Icons.account_balance;
+      case 'palette':
+        return Icons.palette;
+      case 'people':
+        return Icons.people;
+      case 'self_improvement':
+        return Icons.self_improvement;
+      case 'work':
+        return Icons.work;
+      case 'home':
+        return Icons.home;
+      case 'favorite':
+        return Icons.favorite;
+      case 'sports_soccer':
+        return Icons.sports_soccer;
+      case 'music_note':
+        return Icons.music_note;
+      case 'book':
+        return Icons.book;
+      case 'computer':
+        return Icons.computer;
+      case 'psychology':
+        return Icons.psychology;
+      case 'nature':
+        return Icons.nature;
+      case 'directions_car':
+        return Icons.directions_car;
+      case 'flight':
+        return Icons.flight;
+      case 'local_shipping':
+        return Icons.local_shipping;
+      case 'sports_esports':
+        return Icons.sports_esports;
+      case 'camera_alt':
+        return Icons.camera_alt;
+      case 'eco':
+        return Icons.eco;
+      case 'pets':
+        return Icons.pets;
+      case 'child_care':
+        return Icons.child_care;
+      default:
+        return Icons.circle;
+    }
+  }
+
+  int badgeLevel(int streak) {
+    if (streak >= 30) return 3;
+    if (streak >= 7) return 2;
+    if (streak >= 1) return 1;
+    return 0;
+  }
+
+  Future<int> calculateStreak() async {
+    try {
+      final dates = await fetchLoggedDates();
+      if (dates.isEmpty) return 0;
+
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      
+      int streak = 0;
+      DateTime currentDate = todayDate;
+
+      while (true) {
+        final hasEntry = dates.any((date) {
+          final entryDate = DateTime(date.year, date.month, date.day);
+          return entryDate.isAtSameMomentAs(currentDate);
+        });
+
+        if (hasEntry) {
+          streak++;
+          currentDate = currentDate.subtract(const Duration(days: 1));
+        } else {
+          break;
+        }
+      }
+
+      return streak;
+    } catch (e) {
+      print('Fehler beim Berechnen des Streaks: $e');
+      return 0;
+    }
+  }
+
+  Future<List<DateTime>> fetchLoggedDates() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return [];
+
+      final response = await Supabase.instance.client
+          .from('action_logs')
+          .select('occurred_at')
+          .eq('user_id', user.id);
+
+      final dates = (response as List)
+          .map((log) => DateTime.parse(log['occurred_at']))
+          .toList();
+
+      return dates;
+    } catch (e) {
+      print('Fehler beim Laden der Log-Daten: $e');
+      return [];
+    }
   }
 
   @override
@@ -169,8 +391,7 @@ class DashboardPage extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () {
-                    // TODO: Add new life area
-                    print('Add new life area');
+                    _showAddLifeAreaDialog(context);
                   },
                   tooltip: 'Neuen Bereich hinzufügen',
                 ),
@@ -192,8 +413,9 @@ class DashboardPage extends StatelessWidget {
                   ),
                 ],
               ),
-              child: FutureBuilder<List<LifeArea>>(
-                future: _loadLifeAreas(),
+                             child: FutureBuilder<List<LifeArea>>(
+                 key: ValueKey(_refreshCounter), // Force rebuild when counter changes
+                 future: _loadLifeAreas(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
@@ -215,13 +437,15 @@ class DashboardPage extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text('Fehler beim Laden der Lebensbereiche'),
                           const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              // Force rebuild
-                              (context as Element).markNeedsBuild();
-                            },
-                            child: const Text('Erneut versuchen'),
-                          ),
+                                                     ElevatedButton(
+                             onPressed: () {
+                               // Force rebuild
+                               setState(() {
+                                 _refreshCounter++;
+                               });
+                             },
+                             child: const Text('Erneut versuchen'),
+                           ),
                         ],
                       ),
                     );
@@ -247,15 +471,17 @@ class DashboardPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           ElevatedButton(
-                            onPressed: () async {
-                              try {
-                                await LifeAreasService.createDefaultLifeAreas();
-                                // Force rebuild
-                                (context as Element).markNeedsBuild();
-                              } catch (e) {
-                                print('Fehler beim Erstellen der Standard-Bereiche: $e');
-                              }
-                            },
+                                                         onPressed: () async {
+                               try {
+                                 await LifeAreasService.createDefaultLifeAreas();
+                                 // Force rebuild
+                                 setState(() {
+                                   _refreshCounter++;
+                                 });
+                               } catch (e) {
+                                 print('Fehler beim Erstellen der Standard-Bereiche: $e');
+                               }
+                             },
                             child: const Text('Standard-Bereiche erstellen'),
                           ),
                         ],
@@ -263,10 +489,16 @@ class DashboardPage extends StatelessWidget {
                     );
                   }
 
-                  return BubblesGrid(
-                    areas: areas,
-                    onBubbleTap: (area) => _onBubbleTap(context, area),
-                  );
+                                     return BubblesGrid(
+                     areas: areas,
+                     onBubbleTap: (area) => _onBubbleTap(context, area),
+                     onDelete: (area) {
+                       // Force rebuild when a life area is deleted
+                       setState(() {
+                         _refreshCounter++;
+                       });
+                     },
+                   );
                 },
               ),
             ),

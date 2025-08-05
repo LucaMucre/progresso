@@ -20,12 +20,23 @@ class LogActionPage extends StatefulWidget {
 class _LogActionPageState extends State<LogActionPage> {
   final _durationCtrl = TextEditingController();
   final _notesCtrl    = TextEditingController();
+  final _activityNameCtrl = TextEditingController();
   bool _loading       = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill activity name if we have a template
+    if (widget.template != null) {
+      _activityNameCtrl.text = widget.template!.name;
+    }
+  }
+
   Future<void> _submitLog() async {
-    if (widget.template == null) {
-      setState(() { _error = 'Kein Template ausgewählt.'; });
+    // Validate inputs
+    if (_activityNameCtrl.text.trim().isEmpty) {
+      setState(() { _error = 'Bitte gib einen Namen für die Aktivität ein.'; });
       return;
     }
 
@@ -41,11 +52,35 @@ class _LogActionPageState extends State<LogActionPage> {
     setState(() { _loading = true; _error = null; });
 
     try {
-      final log = await createLog(
-        templateId : widget.template!.id,
-        durationMin: duration,
-        notes      : _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-      );
+      ActionLog log;
+      
+      if (widget.template != null) {
+        // Use existing template
+        log = await createLog(
+          templateId : widget.template!.id,
+          durationMin: duration,
+          notes      : _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        );
+      } else {
+        // Create a quick log without template
+        final activityName = _activityNameCtrl.text.trim();
+        final notes = _notesCtrl.text.trim();
+        final areaName = widget.selectedArea ?? '';
+        final category = widget.selectedCategory ?? 'Allgemein';
+        
+        // Combine activity name, area, and notes for better filtering
+        final combinedNotes = notes.isEmpty 
+          ? '$activityName ($areaName)' 
+          : '$activityName ($areaName): $notes';
+        
+        log = await createQuickLog(
+          activityName: activityName,
+          category: category,
+          durationMin: duration,
+          notes: combinedNotes,
+        );
+      }
+      
       // Auf Erfolg hinweisen und zurück zur Liste
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -63,6 +98,7 @@ class _LogActionPageState extends State<LogActionPage> {
   void dispose() {
     _durationCtrl.dispose();
     _notesCtrl.dispose();
+    _activityNameCtrl.dispose();
     super.dispose();
   }
 
@@ -80,6 +116,18 @@ class _LogActionPageState extends State<LogActionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Activity name field (only show if no template)
+            if (widget.template == null) ...[
+              Text('Aktivitätsname:', style: Theme.of(context).textTheme.bodyMedium),
+              TextField(
+                controller: _activityNameCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'z. B. Laufen, Lesen, Meditation...',
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            
             Text('Dauer in Minuten (optional):', style: Theme.of(context).textTheme.bodyMedium),
             TextField(
               controller: _durationCtrl,

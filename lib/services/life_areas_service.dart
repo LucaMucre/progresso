@@ -9,6 +9,8 @@ class LifeArea {
   final String color;
   final String icon;
   final int orderIndex;
+  // Temporarily remove isVisible until migration is applied
+  // final bool isVisible;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -21,6 +23,7 @@ class LifeArea {
     required this.color,
     required this.icon,
     required this.orderIndex,
+    // this.isVisible = true,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -35,6 +38,7 @@ class LifeArea {
       color: json['color'],
       icon: json['icon'],
       orderIndex: json['order_index'],
+      // isVisible: json['is_visible'] ?? true,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );
@@ -50,6 +54,7 @@ class LifeArea {
       'color': color,
       'icon': icon,
       'order_index': orderIndex,
+      // 'is_visible': isVisible,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -73,6 +78,20 @@ class LifeAreasService {
     return (response as List).map((json) => LifeArea.fromJson(json)).toList();
   }
 
+  // Alle Life Areas (auch unsichtbare) für einen User abrufen
+  static Future<List<LifeArea>> getAllLifeAreas() async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('User nicht angemeldet');
+
+    final response = await _client
+        .from('life_areas')
+        .select()
+        .eq('user_id', user.id)
+        .order('order_index');
+
+    return (response as List).map((json) => LifeArea.fromJson(json)).toList();
+  }
+
   // Life Area erstellen
   static Future<LifeArea> createLifeArea({
     required String name,
@@ -81,6 +100,7 @@ class LifeAreasService {
     String color = '#2196F3',
     String icon = 'circle',
     int orderIndex = 0,
+    // bool isVisible = true,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('User nicht angemeldet');
@@ -93,6 +113,8 @@ class LifeAreasService {
       'color': color,
       'icon': icon,
       'order_index': orderIndex,
+      // Temporarily remove is_visible until migration is applied
+      // 'is_visible': isVisible,
     };
 
     final response = await _client
@@ -117,6 +139,12 @@ class LifeAreasService {
         })
         .eq('id', id)
         .eq('user_id', user.id);
+  }
+
+  // Sichtbarkeit einer Life Area umschalten
+  static Future<void> toggleLifeAreaVisibility(String id) async {
+    // Temporarily disabled until migration is applied
+    throw Exception('Sichtbarkeit-Umschaltung ist temporär deaktiviert. Bitte wenden Sie die Datenbank-Migration an.');
   }
 
   // Life Area löschen
