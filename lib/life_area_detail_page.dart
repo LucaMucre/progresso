@@ -17,13 +17,14 @@ class LifeAreaDetailPage extends StatefulWidget {
 }
 
 class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
+  bool _isLoading = true;
   List<ActionTemplate> _templates = [];
   List<ActionLog> _logs = [];
-  bool _isLoading = true;
   int _totalXp = 0;
   int _activityCount = 0;
   double _averageDuration = 0;
   final Random _random = Random();
+  bool _isBubbleView = true; // Toggle between bubble and table view
 
   @override
   void initState() {
@@ -42,27 +43,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                template.name.toLowerCase().contains(widget.area.name.toLowerCase());
       }).toList();
       
-      // Filter logs for this specific area
+      // Filter logs for this specific area - ONLY show logs that were created for this area
       final filteredLogs = logs.where((log) {
-        // For quick actions without templates, check the notes field for activity name
+        // For quick actions without templates, check if they were created for this specific area
         if (log.templateId == null && log.notes != null && log.notes!.isNotEmpty) {
           final notes = log.notes!.toLowerCase();
           final areaName = widget.area.name.toLowerCase();
           final category = widget.area.category.toLowerCase();
           
-          // Check if notes contain the area name, category, or common fitness keywords
-          return notes.contains(areaName) || 
-                 notes.contains(category) ||
-                 notes.contains('fitness') ||
-                 notes.contains('sport') ||
-                 notes.contains('training') ||
-                 notes.contains('workout') ||
-                 notes.contains('laufen') ||
-                 notes.contains('running') ||
-                 notes.contains('joggen');
+          // Only show logs that explicitly mention this area name or category
+          // AND were created through the quick action for this area
+          return notes.contains(areaName) || notes.contains(category);
         }
         
-        // For template-based actions, check the template
+        // For template-based actions, check if the template belongs to this area
         if (log.templateId != null) {
           final template = templates.firstWhere(
             (t) => t.id == log.templateId,
@@ -152,6 +146,77 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
 
   String _formatDate(DateTime date) {
     return '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDuration(double minutes) {
+    if (minutes <= 0) return '0 Min';
+    
+    final totalMinutes = minutes.round();
+    
+    // Wochen (7 Tage = 10080 Minuten)
+    if (totalMinutes >= 10080) {
+      final weeks = (totalMinutes / 10080).floor();
+      final remainingMinutes = totalMinutes - (weeks * 10080);
+      final days = (remainingMinutes / 1440).floor();
+      
+      if (weeks == 1) {
+        if (days > 0) {
+          return days == 1 ? '1 Woche, 1 Tag' : '1 Woche, $days Tage';
+        } else {
+          return '1 Woche';
+        }
+      } else {
+        if (days > 0) {
+          return days == 1 ? '$weeks Wochen, 1 Tag' : '$weeks Wochen, $days Tage';
+        } else {
+          return '$weeks Wochen';
+        }
+      }
+    }
+    
+    // Tage (24 Stunden = 1440 Minuten)
+    if (totalMinutes >= 1440) {
+      final days = (totalMinutes / 1440).floor();
+      final remainingMinutes = totalMinutes - (days * 1440);
+      final hours = (remainingMinutes / 60).floor();
+      
+      if (days == 1) {
+        if (hours > 0) {
+          return hours == 1 ? '1 Tag, 1 Std' : '1 Tag, $hours Std';
+        } else {
+          return '1 Tag';
+        }
+      } else {
+        if (hours > 0) {
+          return hours == 1 ? '$days Tage, 1 Std' : '$days Tage, $hours Std';
+        } else {
+          return '$days Tage';
+        }
+      }
+    }
+    
+    // Stunden (60 Minuten)
+    if (totalMinutes >= 60) {
+      final hours = (totalMinutes / 60).floor();
+      final remainingMinutes = totalMinutes - (hours * 60);
+      
+      if (hours == 1) {
+        if (remainingMinutes > 0) {
+          return remainingMinutes == 1 ? '1 Std, 1 Min' : '1 Std, $remainingMinutes Min';
+        } else {
+          return '1 Std';
+        }
+      } else {
+        if (remainingMinutes > 0) {
+          return remainingMinutes == 1 ? '$hours Std, 1 Min' : '$hours Std, $remainingMinutes Min';
+        } else {
+          return '$hours Std';
+        }
+      }
+    }
+    
+    // Minuten
+    return '$totalMinutes Min';
   }
 
   String _getActivityName(ActionLog log) {
@@ -254,8 +319,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               ),
               const SizedBox(height: 24),
 
-              // Activity Canvas Section
-              if (!_isLoading) _buildActivityCanvas(),
+              // Activity Canvas Section with View Toggle
+              if (!_isLoading) _buildActivityCanvasWithToggle(),
               const SizedBox(height: 24),
 
               // Progress Visualization Section
@@ -392,7 +457,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     );
   }
 
-  Widget _buildActivityCanvas() {
+  Widget _buildActivityCanvasWithToggle() {
     if (_logs.isEmpty) {
       return Container(
         height: 200,
@@ -433,8 +498,82 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       );
     }
 
+    return Column(
+      children: [
+        // View Toggle
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildToggleButton(
+                icon: Icons.bubble_chart,
+                label: 'Bubbles',
+                isSelected: _isBubbleView,
+                onTap: () => setState(() => _isBubbleView = true),
+              ),
+              const SizedBox(width: 8),
+              _buildToggleButton(
+                icon: Icons.table_chart,
+                label: 'Tabelle',
+                isSelected: !_isBubbleView,
+                onTap: () => setState(() => _isBubbleView = false),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        // Canvas Content
+        _isBubbleView ? _buildBubbleCanvas() : _buildTableCanvas(),
+      ],
+    );
+  }
+
+  Widget _buildToggleButton({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? _parseColor(widget.area.color) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : Colors.grey,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBubbleCanvas() {
     return Container(
-      height: 350, // Increased height for larger bubbles
+      height: 350,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -451,6 +590,163 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       ),
     );
   }
+
+  Widget _buildTableCanvas() {
+    // Sort logs by date (newest first)
+    final sortedLogs = List<ActionLog>.from(_logs)
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+
+    return Container(
+      height: 350,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Table Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _parseColor(widget.area.color).withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Aktivität',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _parseColor(widget.area.color),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'Datum',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _parseColor(widget.area.color),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'XP',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _parseColor(widget.area.color),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Table Body
+          Expanded(
+            child: ListView.builder(
+              itemCount: sortedLogs.length,
+              itemBuilder: (context, index) {
+                final log = sortedLogs[index];
+                final isEven = index % 2 == 0;
+                
+                return GestureDetector(
+                  onTap: () => _showActivityDetails(log),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isEven ? Colors.grey.withOpacity(0.05) : Colors.white,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey.withOpacity(0.1),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _getActivityName(log),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (log.durationMin != null)
+                                Text(
+                                  '${log.durationMin} Min',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.withOpacity(0.7),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            _formatDate(log.occurredAt),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.withOpacity(0.7),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _parseColor(widget.area.color).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${log.earnedXp}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _parseColor(widget.area.color),
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
 
   List<Widget> _generateBubblePositions() {
     final List<Widget> bubbles = [];
@@ -598,7 +894,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
           ),
           const SizedBox(height: 16),
           
-          // XP Progress
+          // All Statistics in one row
           Row(
             children: [
               Expanded(
@@ -609,27 +905,26 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                   color: Colors.amber,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildStatCard(
-                  icon: Icons.fitness_center,
+                  icon: _getIconData(widget.area.icon),
                   title: 'Aktivitäten',
                   value: '$_activityCount',
-                  color: Colors.green,
+                  color: _parseColor(widget.area.color),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.timer,
+                  title: 'Ø Dauer',
+                  value: _formatDuration(_averageDuration),
+                  color: Colors.blue,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          
-          // Average Duration
-          if (_averageDuration > 0)
-            _buildStatCard(
-              icon: Icons.timer,
-              title: 'Ø Dauer',
-              value: '${_averageDuration.round()} Min',
-              color: Colors.blue,
-            ),
           
           const SizedBox(height: 16),
           
@@ -686,15 +981,22 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       return DateTime(now.year, now.month, now.day - index);
     }).reversed.toList();
     
-    // Count activities per day
+    // Count activities per day for THIS specific life area only
     final activityCounts = last7Days.map((date) {
       return _logs.where((log) {
         final logDate = DateTime(log.occurredAt.year, log.occurredAt.month, log.occurredAt.day);
-        return logDate.isAtSameMomentAs(date);
+        final isSameDate = logDate.isAtSameMomentAs(date);
+        
+        // Check if the log is for this specific life area
+        // Notes format: "activityName (AreaName): notes" or "activityName (AreaName)"
+        final isForThisArea = log.notes?.toLowerCase().contains('(${widget.area.name.toLowerCase()})') ?? false;
+        
+        return isSameDate && isForThisArea;
       }).length;
     }).toList();
     
     final maxCount = activityCounts.isEmpty ? 1 : activityCounts.reduce(max);
+    final actualMaxCount = maxCount > 0 ? maxCount : 1;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -707,47 +1009,105 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 100,
+          height: 120,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: last7Days.asMap().entries.map((entry) {
-              final index = entry.key;
-              final date = entry.value;
-              final count = activityCounts[index];
-              final height = maxCount > 0 ? (count / maxCount) * 60 : 0.0;
-              
-              return Column(
-                children: [
-                  Expanded(
-                    child: Container(
-                      width: 20,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: _parseColor(widget.area.color).withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(10),
+            children: [
+              // Y-axis labels
+              SizedBox(
+                width: 30,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(5, (i) {
+                    final value = i;
+                    return Text(
+                      '$value',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: Colors.grey.withOpacity(0.7),
                       ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.bottomCenter,
-                        heightFactor: height / 60,
+                    );
+                  }).reversed.toList(),
+                ),
+              ),
+              
+              // Chart area
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Grid lines
+                    ...List.generate(4, (i) {
+                      final y = (i + 1) * 24.0;
+                      return Positioned(
+                        top: y,
+                        left: 0,
+                        right: 0,
                         child: Container(
+                          height: 1,
+                          color: Colors.grey.withOpacity(0.2),
+                        ),
+                      );
+                    }),
+                    
+                    // Line chart
+                    CustomPaint(
+                      size: Size(MediaQuery.of(context).size.width - 70, 120),
+                      painter: LineChartPainter(
+                        data: activityCounts,
+                        maxValue: 4.0,
+                        color: _parseColor(widget.area.color),
+                      ),
+                    ),
+                    
+                    // Data points
+                    ...last7Days.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final date = entry.value;
+                      final count = activityCounts[index];
+                      final y = 120 - (count / 4.0) * 96;
+                      final chartWidth = MediaQuery.of(context).size.width - 70;
+                      final x = (index / 6.0) * chartWidth;
+                      
+                      return Positioned(
+                        left: x - 4,
+                        top: y - 4,
+                        child: Container(
+                          width: 8,
+                          height: 8,
                           decoration: BoxDecoration(
                             color: _parseColor(widget.area.color),
-                            borderRadius: BorderRadius.circular(10),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 2,
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${date.day}/${date.month}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
+                      );
+                    }),
+                    
+                    // Date labels
+                    ...last7Days.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final date = entry.value;
+                      final chartWidth = MediaQuery.of(context).size.width - 70;
+                      final x = (index / 6.0) * chartWidth;
+                      
+                      return Positioned(
+                        bottom: 0,
+                        left: x - 10,
+                        child: Text(
+                          '${date.day}/${date.month}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: Colors.grey.withOpacity(0.7),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -804,4 +1164,47 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         return Icons.star;
     }
   }
-} 
+}
+
+class LineChartPainter extends CustomPainter {
+  final List<int> data;
+  final double maxValue;
+  final Color color;
+
+  LineChartPainter({
+    required this.data,
+    required this.maxValue,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final path = Path();
+    final width = size.width;
+    final height = size.height - 20; // Leave space for labels
+
+    for (int i = 0; i < data.length; i++) {
+      final x = (i / 6.0) * width;
+      final y = height - (data[i] / maxValue) * (height - 20);
+
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}

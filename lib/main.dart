@@ -6,30 +6,57 @@ import 'auth_gate.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  bool envLoaded = false;
+  String? supabaseUrl;
+  String? supabaseAnonKey;
+
   try {
     // Versuche die .env Datei zu laden
     await dotenv.load();
     
-    // Initialisiert Supabase mit deinen Cloud-Keys
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-    );
-    print('Supabase Cloud erfolgreich initialisiert');
-  } catch (e) {
-    print('Fehler beim Laden der .env Datei: $e');
-    print('Verwende echte Supabase-Keys...');
+    // Validiere die Umgebungsvariablen
+    supabaseUrl = dotenv.env['SUPABASE_URL'];
+    supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
     
-    try {
-      // Echte Supabase-Keys
-      await Supabase.initialize(
-        url: 'https://xssuhovxkpgorjxvflwo.supabase.co',
-        anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzc3Vob3Z4a3Bnb3JqeHZmbHdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5ODY2NTEsImV4cCI6MjA2OTU2MjY1MX0.y1fXBKBAQkNL17AcBiBNMIOyVyBD8_fexQWeWqGz1UY',
-      );
-      print('Supabase mit echten Keys initialisiert');
-    } catch (e2) {
-      print('Supabase Initialisierung fehlgeschlagen: $e2');
+    if (supabaseUrl != null && supabaseAnonKey != null && 
+        supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+      envLoaded = true;
+      print('✅ .env Datei erfolgreich geladen');
+      print('📡 Supabase URL: ${supabaseUrl.substring(0, 30)}...');
+      print('🔑 Anon Key: ${supabaseAnonKey.substring(0, 20)}...');
+    } else {
+      throw Exception('SUPABASE_URL oder SUPABASE_ANON_KEY fehlen in .env Datei');
     }
+  } catch (e) {
+    print('❌ Fehler beim Laden der .env Datei: $e');
+    print('🔄 Verwende Fallback-Keys...');
+    
+    // Fallback zu den echten Supabase-Keys
+    supabaseUrl = 'https://xssuhovxkpgorjxvflwo.supabase.co';
+    supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzc3Vob3Z4a3Bnb3JqeHZmbHdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5ODY2NTEsImV4cCI6MjA2OTU2MjY1MX0.y1fXBKBAQkNL17AcBiBNMIOyVyBD8_fexQWeWqGz1UY';
+  }
+
+  try {
+    // Initialisiert Supabase mit den Keys
+    await Supabase.initialize(
+      url: supabaseUrl!,
+      anonKey: supabaseAnonKey!,
+    );
+    
+    if (envLoaded) {
+      print('✅ Supabase erfolgreich mit .env Keys initialisiert');
+    } else {
+      print('✅ Supabase erfolgreich mit Fallback-Keys initialisiert');
+    }
+    
+    // Teste die Verbindung
+    final client = Supabase.instance.client;
+    final response = await client.from('users').select('count').limit(1);
+    print('✅ Supabase Verbindung getestet - erfolgreich');
+    
+  } catch (e) {
+    print('❌ Supabase Initialisierung fehlgeschlagen: $e');
+    print('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
   }
 
   runApp(const ProgressoApp());
