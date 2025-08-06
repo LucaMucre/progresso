@@ -119,20 +119,94 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   }
 
   void _showActivityDetails(ActionLog log) {
+    print('DEBUG: Showing activity details for log: ${log.id}');
+    print('DEBUG: Image URL: ${log.imageUrl}');
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Aktivitäts-Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Datum: ${_formatDate(log.occurredAt)}'),
-            Text('XP verdient: ${log.earnedXp}'),
-            if (log.durationMin != null) Text('Dauer: ${log.durationMin} Minuten'),
-            if (log.notes != null && log.notes!.isNotEmpty) 
-              Text('Notizen: ${log.notes}'),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image display
+              if (log.imageUrl != null) ...[
+                Container(
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                                          child: Image.network(
+                        log.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          // If the image fails to load, show a placeholder
+                          return Container(
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.image,
+                                    color: Colors.grey,
+                                    size: 48,
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Bild nicht verfügbar',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Bild wird geladen...',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Activity details
+              Text('Datum: ${_formatDate(log.occurredAt)}'),
+              const SizedBox(height: 8),
+              Text('XP verdient: ${log.earnedXp}'),
+              if (log.durationMin != null) ...[
+                const SizedBox(height: 8),
+                Text('Dauer: ${log.durationMin} Minuten'),
+              ],
+              if (log.notes != null && log.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Notizen: ${log.notes}'),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -833,31 +907,77 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                     ),
                   ],
                 ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.star,
-                        color: Colors.white,
-                        size: position.width * 0.25,
-                      ),
-                      const SizedBox(height: 4),
-                      Flexible(
-                        child: Text(
-                          _getActivityName(log),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: position.width * 0.15,
-                            fontWeight: FontWeight.bold,
+                child: Stack(
+                  children: [
+                    // Background image if available
+                    if (log.imageUrl != null)
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(position.width / 2),
+                          child: Image.network(
+                            log.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(); // Fallback to icon
+                            },
                           ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ),
+                    
+                    // Icon and text overlay
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.star,
+                            color: log.imageUrl != null ? Colors.white : Colors.white,
+                            size: position.width * 0.25,
+                          ),
+                          const SizedBox(height: 4),
+                          Flexible(
+                            child: Text(
+                              _getActivityName(log),
+                              style: TextStyle(
+                                color: log.imageUrl != null ? Colors.white : Colors.white,
+                                fontSize: position.width * 0.15,
+                                fontWeight: FontWeight.bold,
+                                shadows: log.imageUrl != null ? [
+                                  const Shadow(
+                                    offset: Offset(1, 1),
+                                    blurRadius: 2,
+                                    color: Colors.black54,
+                                  ),
+                                ] : null,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Image indicator
+                    if (log.imageUrl != null)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.image,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

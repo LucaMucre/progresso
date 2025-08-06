@@ -727,20 +727,21 @@ class _DashboardPageState extends State<DashboardPage> {
                 },
               ),
             ),
+
             const SizedBox(height: 24),
 
-            // Actions Section
+            // Quick Actions for All Life Areas
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Deine Actions',
+                  'Schnellzugriff auf alle Aktivitäten',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  'Schnellzugriff auf deine Aktivitäten',
+                  'Direkte Aktivitäten für alle Lebensbereiche',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey[600],
                   ),
@@ -749,7 +750,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(height: 16),
 
-            // Templates List
+            // Quick Actions Grid
             Container(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
@@ -762,7 +763,148 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ],
               ),
-              child: const TemplatesList(),
+              child: FutureBuilder<List<LifeArea>>(
+                future: _loadLifeAreas(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.all(40),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.error, color: Colors.red, size: 48),
+                            const SizedBox(height: 8),
+                            Text('Fehler beim Laden der Lebensbereiche'),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  final areas = snapshot.data ?? [];
+                  
+                  if (areas.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Center(
+                        child: Text('Keine Lebensbereiche verfügbar'),
+                      ),
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: areas.map((area) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => LogActionPage(
+                                      selectedArea: area.name,
+                                      selectedCategory: area.category,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: _parseColor(area.color).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        _getIconData(area.icon),
+                                        color: _parseColor(area.color),
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Aktivität hinzufügen',
+                                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${area.name} - ${area.category}',
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _parseColor(area.color).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.add,
+                                            size: 16,
+                                            color: _parseColor(area.color),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Schnell',
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: _parseColor(area.color),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_ios,
+                                      size: 16,
+                                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -783,5 +925,9 @@ class _DashboardPageState extends State<DashboardPage> {
       print('Fehler beim Laden der Life Areas: $e');
       rethrow;
     }
+  }
+
+  Color _parseColor(String hex) {
+    return Color(int.parse(hex.replaceAll('#', '0xFF')));
   }
 }

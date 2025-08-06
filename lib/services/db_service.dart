@@ -38,6 +38,7 @@ class ActionLog {
   final int earnedXp;
   final String? templateId;
   final String? activityName;
+  final String? imageUrl;
 
   ActionLog({
     required this.id,
@@ -47,6 +48,7 @@ class ActionLog {
     required this.earnedXp,
     this.templateId,
     this.activityName,
+    this.imageUrl,
   });
 
   factory ActionLog.fromMap(Map<String, dynamic> m) => ActionLog(
@@ -57,6 +59,7 @@ class ActionLog {
         earnedXp:    m['earned_xp']       as int,
         templateId:  m['template_id']     as String?,
         activityName: m['activity_name']   as String?,
+        imageUrl:    m['image_url']       as String?,
       );
 }
 
@@ -103,6 +106,7 @@ Future<ActionLog> createLog({
   required String templateId,
   int? durationMin,
   String? notes,
+  String? imageUrl,
 }) async {
   // Basis-XP der Vorlage holen
   final tplMap = await _db
@@ -119,13 +123,19 @@ Future<ActionLog> createLog({
   final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
 
   // Eintrag zusammenbauen und schreiben
-  final insert = {
+  final insert = <String, dynamic>{
     'user_id':      _db.auth.currentUser!.id,
     'template_id':  templateId,
     'duration_min': durationMin,
     'notes':        notes,
     'earned_xp':    earnedXp,
   };
+  
+  // Add image_url only if it's not null and the column exists
+  if (imageUrl != null) {
+    insert['image_url'] = imageUrl;
+  }
+  
   final out = await _db
       .from('action_logs')
       .insert(insert)
@@ -141,6 +151,7 @@ Future<ActionLog> createQuickLog({
   required String category,
   int? durationMin,
   String? notes,
+  String? imageUrl,
 }) async {
   // Aktuelle Streak holen für XP-Berechnung
   final currentStreak = await calculateStreak();
@@ -152,12 +163,18 @@ Future<ActionLog> createQuickLog({
   final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
 
   // Eintrag zusammenbauen und schreiben (ohne template_id und activity_name für jetzt)
-  final insert = {
+  final insert = <String, dynamic>{
     'user_id':      _db.auth.currentUser!.id,
     'duration_min': durationMin,
     'notes':        notes,
     'earned_xp':    earnedXp,
   };
+  
+  // Add image_url only if it's not null and the column exists
+  if (imageUrl != null) {
+    insert['image_url'] = imageUrl;
+  }
+  
   final out = await _db
       .from('action_logs')
       .insert(insert)
