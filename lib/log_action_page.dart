@@ -105,34 +105,23 @@ class _LogActionPageState extends State<LogActionPage> {
       Uint8List bytes;
 
       if (kIsWeb && _selectedImageUrl != null) {
-        // For web, we'll use a different approach
+        // For web, we need to handle blob URLs properly
         fileName = '${DateTime.now().millisecondsSinceEpoch}_web_image.jpg';
         
-        // For now, we'll use a base64 encoded image as a workaround
-        // This is a temporary solution until we can properly handle blob URLs
-        final base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=';
-        
-        // Convert base64 to bytes
-        final bytes = base64Decode(base64Image.split(',')[1]);
-        
         try {
-          // Upload the actual image bytes to Supabase Storage
-          final response2 = await Supabase.instance.client.storage
-              .from('activity-images')
-              .uploadBinary(
-                '${Supabase.instance.client.auth.currentUser!.id}/$fileName',
-                bytes,
-              );
+          // Convert blob URL to bytes using html.HttpRequest
+          final response = await html.HttpRequest.request(
+            _selectedImageUrl!,
+            responseType: 'arraybuffer',
+          );
           
-          // Get the public URL
-          final imageUrl = Supabase.instance.client.storage
-              .from('activity-images')
-              .getPublicUrl('${Supabase.instance.client.auth.currentUser!.id}/$fileName');
+          final arrayBuffer = response.response as dynamic;
+          bytes = Uint8List.fromList(arrayBuffer.asUint8List());
           
-          return imageUrl;
+          print('Web image size: ${bytes.length} bytes');
         } catch (e) {
-          print('Error uploading web image: $e');
-          // Fallback to placeholder if upload fails
+          print('Error converting web image: $e');
+          // Fallback to placeholder if conversion fails
           return 'https://via.placeholder.com/400x300/FF0000/FFFFFF?text=Upload+Failed';
         }
       } else if (_selectedImage != null) {

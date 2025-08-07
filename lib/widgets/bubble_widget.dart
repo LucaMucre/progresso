@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/life_areas_service.dart';
 import '../services/character_service.dart';
+import '../services/avatar_sync_service.dart';
 import '../profile_page.dart';
 
 // Separate Character Widget to prevent rebuilding on hover
@@ -16,12 +18,36 @@ class _CharacterWidgetState extends State<CharacterWidget> {
   Character? _character;
   bool _isLoading = true;
   String? _error;
+  String? _userAvatarUrl;
+  RealtimeChannel? _usersChannel;
+  int _cacheBust = 0;
 
   @override
   void initState() {
     super.initState();
     _loadCharacter();
+    _loadUserAvatar();
+    _subscribeToUserChanges();
+    // Lokaler Broadcast: sofort updaten, wenn Avatar-Version steigt
+    AvatarSyncService.avatarVersion.addListener(_loadUserAvatar);
+    // Automatische Aktualisierung beim Start
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadCharacter();
+        _loadUserAvatar();
+      }
+    });
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Lade die Daten neu, wenn die Abhängigkeiten sich ändern
+    _loadCharacter();
+    _loadUserAvatar();
+  }
+
+
 
   Future<void> _loadCharacter() async {
     try {
@@ -40,6 +66,62 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         });
       }
     }
+  }
+
+  Future<void> _loadUserAvatar() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        // Lade Avatar-URL direkt aus der users Tabelle
+        final res = await Supabase.instance.client
+            .from('users')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        
+        if (mounted) {
+          setState(() {
+            _userAvatarUrl = res['avatar_url'];
+            _cacheBust = DateTime.now().millisecondsSinceEpoch;
+          });
+          print('DEBUG: BubbleWidget - Loaded avatar_url: $_userAvatarUrl');
+        }
+      }
+    } catch (e) {
+      print('Fehler beim Laden des User-Avatars: $e');
+    }
+  }
+
+  void _subscribeToUserChanges() {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    _usersChannel?.unsubscribe();
+    final channel = client
+        .channel('public:users:id=eq.${user.id}:bubble')
+        .on(
+          RealtimeListenTypes.postgresChanges,
+          ChannelFilter(
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users',
+            filter: 'id=eq.${user.id}',
+          ),
+          (payload, [ref]) async {
+            await _loadUserAvatar();
+            if (mounted) setState(() {});
+          },
+        );
+    channel.subscribe();
+    _usersChannel = channel;
+  }
+
+  @override
+  void dispose() {
+    _usersChannel?.unsubscribe();
+    AvatarSyncService.avatarVersion.removeListener(_loadUserAvatar);
+    super.dispose();
   }
 
   @override
@@ -69,6 +151,11 @@ class _CharacterWidgetState extends State<CharacterWidget> {
     }
 
     final character = _character!;
+    // Verwende das User-Avatar, falls verfügbar, sonst das Character-Avatar
+    final rawAvatarUrl = _userAvatarUrl ?? character.avatarUrl;
+    final avatarUrl = rawAvatarUrl != null
+        ? '$rawAvatarUrl?cb=$_cacheBust'
+        : null;
     
     return Container(
       width: 80,
@@ -95,16 +182,27 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         children: [
           // Avatar or default icon
           Center(
-            child: character.avatarUrl != null
+            child: avatarUrl != null
                 ? ClipOval(
                     child: Image.network(
-                      character.avatarUrl!,
+                      avatarUrl,
+                      key: ValueKey(avatarUrl),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
+                        print('Avatar load error: $error');
                         return const Icon(
                           Icons.person,
                           size: 40,
                           color: Colors.white,
+                        );
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            strokeWidth: 2,
+                          ),
                         );
                       },
                     ),
@@ -177,16 +275,23 @@ class _BubblesGridState extends State<BubblesGrid> {
       return const SizedBox.shrink();
     }
 
+    // Responsive Canvas: skaliert nach Bildschirmgröße
+    final screenSize = MediaQuery.of(context).size;
+    double canvasSize = min(screenSize.width * 0.6, screenSize.height * 0.55);
+    canvasSize = canvasSize.clamp(320.0, 800.0);
+    const double baseCanvas = 300.0;
+    final double scale = canvasSize / baseCanvas;
+
     return Center(
       child: SizedBox(
-        height: 300,
-        width: 300,
+        height: canvasSize,
+        width: canvasSize,
         child: Stack(
           children: [
             // Character in the center - clickable to navigate to profile
             Positioned(
-              left: 110, // Center position (150 - 40)
-              top: 110,  // Center position (150 - 40)
+              left: (canvasSize / 2) - (80.0 * scale / 2),
+              top: (canvasSize / 2) - (80.0 * scale / 2),
               child: GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
@@ -195,7 +300,10 @@ class _BubblesGridState extends State<BubblesGrid> {
                 },
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
-                  child: const CharacterWidget(),
+                  child: Transform.scale(
+                    scale: scale,
+                    child: const CharacterWidget(),
+                  ),
                 ),
               ),
             ),
@@ -205,15 +313,15 @@ class _BubblesGridState extends State<BubblesGrid> {
               final index = entry.key;
               final area = entry.value;
               final angle = (2 * pi * index) / widget.areas.length;
-              final radius = 120.0; // Increased distance from center to avoid overlap
-              final centerX = 150.0; // Center X position
-              final centerY = 150.0; // Center Y position
+              final radius = canvasSize * 0.38; // Abstand vom Zentrum
+              final centerX = canvasSize / 2; // Center X position
+              final centerY = canvasSize / 2; // Center Y position
               
               final x = centerX + radius * cos(angle);
               final y = centerY + radius * sin(angle);
               final isHovered = _hoveredIndex == index;
-              final scale = isHovered ? 1.15 : 1.0;
-              final size = 50.0 * scale;
+              final hoverScale = isHovered ? 1.15 : 1.0;
+              final size = 50.0 * scale * hoverScale;
 
               return Positioned(
                 left: x - (size / 2),
@@ -261,7 +369,7 @@ class _BubblesGridState extends State<BubblesGrid> {
                       child: Icon(
                         _getIconData(area.icon),
                         color: Colors.white,
-                        size: 20 * scale,
+                        size: 20 * scale * hoverScale,
                       ),
                     ),
                   ),

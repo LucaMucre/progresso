@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
 import 'log_action_page.dart';
+import 'widgets/activity_details_dialog.dart';
 import 'dart:math';
 
 class LifeAreaDetailPage extends StatefulWidget {
@@ -124,96 +125,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Aktivitäts-Details'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Image display
-              if (log.imageUrl != null) ...[
-                Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                                          child: Image.network(
-                        log.imageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          // If the image fails to load, show a placeholder
-                          return Container(
-                            color: Colors.grey[200],
-                            child: const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.image,
-                                    color: Colors.grey,
-                                    size: 48,
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Bild nicht verfügbar',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            color: Colors.grey[200],
-                            child: const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  CircularProgressIndicator(),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Bild wird geladen...',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              
-              // Activity details
-              Text('Datum: ${_formatDate(log.occurredAt)}'),
-              const SizedBox(height: 8),
-              Text('XP verdient: ${log.earnedXp}'),
-              if (log.durationMin != null) ...[
-                const SizedBox(height: 8),
-                Text('Dauer: ${log.durationMin} Minuten'),
-              ],
-              if (log.notes != null && log.notes!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('Notizen: ${log.notes}'),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Schließen'),
-          ),
-        ],
+      builder: (context) => ActivityDetailsDialog(
+        log: log,
+        onUpdate: _loadData, // Reload data when log is updated
       ),
     );
   }

@@ -126,9 +126,44 @@ class CharacterService {
           .eq('user_id', user.id)
           .single();
 
-      return Character.fromJson(response);
+      // Lade das Profilbild aus der users Tabelle
+      String? avatarUrl;
+      try {
+        final userProfile = await _client
+            .from('users')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        avatarUrl = userProfile['avatar_url'];
+      } catch (e) {
+        // User Profil existiert noch nicht oder hat kein Avatar
+        print('Kein User-Profil oder Avatar gefunden: $e');
+      }
+
+      // Erstelle Character mit Avatar aus User-Profil
+      final characterData = Map<String, dynamic>.from(response);
+      if (avatarUrl != null) {
+        characterData['avatar_url'] = avatarUrl;
+      }
+
+      return Character.fromJson(characterData);
     } catch (e) {
       // Character existiert nicht, erstelle neuen
+      
+      // Lade das Profilbild aus der users Tabelle
+      String? avatarUrl;
+      try {
+        final userProfile = await _client
+            .from('users')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        avatarUrl = userProfile['avatar_url'];
+      } catch (e) {
+        // User Profil existiert noch nicht oder hat kein Avatar
+        print('Kein User-Profil oder Avatar gefunden: $e');
+      }
+
       final newCharacter = {
         'user_id': user.id,
         'name': user.email?.split('@')[0] ?? 'Hero',
@@ -142,6 +177,7 @@ class CharacterService {
           endurance: 1,
           agility: 1,
         ).toJson(),
+        'avatar_url': avatarUrl,
       };
 
       final response = await _client
@@ -226,5 +262,27 @@ class CharacterService {
           'updated_at': DateTime.now().toIso8601String(),
         })
         .eq('user_id', user.id);
+  }
+
+  // Avatar aus User-Profil synchronisieren
+  static Future<void> syncAvatarFromUserProfile() async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('User nicht angemeldet');
+
+    try {
+      // Lade das Profilbild aus der users Tabelle
+      final userProfile = await _client
+          .from('users')
+          .select('avatar_url')
+          .eq('id', user.id)
+          .single();
+      
+      final avatarUrl = userProfile['avatar_url'];
+      
+      // Aktualisiere das Character-Avatar (auch wenn null)
+      await updateAvatar(avatarUrl);
+    } catch (e) {
+      print('Fehler beim Synchronisieren des Avatars: $e');
+    }
   }
 } 

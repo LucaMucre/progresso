@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
+import 'services/avatar_sync_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -25,6 +27,9 @@ class _ProfilePageState extends State<ProfilePage> {
   int _currentStreak = 0;
   int _longestStreak = 0;
   int _totalXP = 0;
+  String? _avatarUrl;
+  int _cacheBust = 0;
+  RealtimeChannel? _usersChannel;
 
   final _supabase = Supabase.instance.client;
 
@@ -33,6 +38,9 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     _loadProfile();
     _loadStatistics();
+    _subscribeToUserChanges();
+    // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
+    AvatarSyncService.avatarVersion.addListener(_loadProfile);
   }
 
   Future<void> _loadProfile() async {
@@ -46,7 +54,10 @@ class _ProfilePageState extends State<ProfilePage> {
       if (res != null) {
         _nameCtrl.text = res['name'] ?? '';
         _bioCtrl.text = res['bio'] ?? '';
-        setState(() {});
+        setState(() {
+          _avatarUrl = res['avatar_url'];
+          _cacheBust = DateTime.now().millisecondsSinceEpoch;
+        });
       }
     } catch (e) {
       print('Fehler beim Laden des Profils: $e');
@@ -55,6 +66,29 @@ class _ProfilePageState extends State<ProfilePage> {
       _bioCtrl.text = 'Das ist meine Bio.';
       setState(() {});
     }
+  }
+
+  void _subscribeToUserChanges() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    _usersChannel?.unsubscribe();
+    final channel = _supabase
+        .channel('public:users:id=eq.${user.id}:profile-page')
+        .on(
+          RealtimeListenTypes.postgresChanges,
+          ChannelFilter(
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users',
+            filter: 'id=eq.${user.id}',
+          ),
+          (payload, [ref]) async {
+            await _loadProfile();
+            if (mounted) setState(() {});
+          },
+        );
+    channel.subscribe();
+    _usersChannel = channel;
   }
 
   Future<void> _loadStatistics() async {
@@ -162,12 +196,19 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       if (_avatarFile != null) {
         final ext = _avatarFile!.path.split('.').last;
-        final path = '${currentUser.id}/avatar.$ext';
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final path = '${currentUser.id}/avatar_${timestamp}.$ext';
         final bytes = await _avatarFile!.readAsBytes();
+        
+        print('DEBUG: Uploading avatar to path: $path');
+        print('DEBUG: File size: ${bytes.length} bytes');
+        
         await _supabase.storage
             .from('avatars')
             .uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
         avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
+        
+        print('DEBUG: Avatar URL: $avatarUrl');
       }
 
       final profile = {
@@ -177,9 +218,15 @@ class _ProfilePageState extends State<ProfilePage> {
         'bio': _bioCtrl.text.trim(),
         'avatar_url': avatarUrl,
       };
+      
+      print('DEBUG: Saving profile with avatar_url: $avatarUrl');
+      
       await _supabase
           .from('users')
           .upsert(profile, onConflict: 'id');
+
+      // Zentrale Synchronisierung und Broadcast
+      await AvatarSyncService.syncAvatar(avatarUrl);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -189,6 +236,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     } catch (err) {
+      print('DEBUG: Error saving profile: $err');
       setState(() {
         _error = err.toString();
       });
@@ -285,17 +333,53 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _buildLifeAreaChip(LifeArea area) {
+    final areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: areaColor.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: areaColor.withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: areaColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            area.name,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: areaColor.withOpacity(0.9),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final userId = _supabase.auth.currentUser?.id;
-    final publicUrl = userId != null
-        ? _supabase.storage.from('avatars').getPublicUrl('$userId/avatar.png')
-        : null;
-    final avatarProvider = _avatarFile != null
-        ? FileImage(_avatarFile!)
-        : (publicUrl != null
-            ? NetworkImage(publicUrl) as ImageProvider
-            : const AssetImage('assets/default_avatar.png'));
+    // Avatar-URL aus users Tabelle mit Cache-Busting
+    final avatarUrl = _avatarUrl != null ? '${_avatarUrl!}?cb=$_cacheBust' : null;
+    final avatarProvider = avatarUrl != null
+        ? NetworkImage(avatarUrl) as ImageProvider
+        : const AssetImage('assets/default_avatar.png');
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -352,8 +436,19 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       child: CircleAvatar(
                         radius: 40,
-                        backgroundImage: avatarProvider,
                         backgroundColor: Colors.white,
+                        child: ClipOval(
+                          child: avatarUrl != null
+                              ? Image.network(
+                                  avatarUrl,
+                                  key: ValueKey(avatarUrl),
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, color: Colors.grey),
+                                )
+                              : const Icon(Icons.person, color: Colors.grey),
+                        ),
                       ),
                     ),
                   ),
@@ -412,41 +507,65 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.15,
-              child: GridView.count(
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 2.5,
-                children: [
-                  _buildStatCard(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final crossAxisCount = width > 1000
+                    ? 4
+                    : width > 700
+                        ? 3
+                        : 2;
+                // Feste Höhe sorgt dafür, dass Inhalte der Karten nicht abgeschnitten werden
+                final tileHeight = width > 800 ? 120.0 : 140.0;
+
+                final stats = [
+                  (
                     'Aktionen',
                     '$_totalActions',
                     Icons.check_circle,
                     Colors.green,
                   ),
-                  _buildStatCard(
+                  (
                     'Aktueller Streak',
                     '$_currentStreak Tage',
                     Icons.local_fire_department,
                     Colors.orange,
                   ),
-                  _buildStatCard(
+                  (
                     'Längster Streak',
                     '$_longestStreak Tage',
                     Icons.emoji_events,
                     Colors.amber,
                   ),
-                  _buildStatCard(
+                  (
                     'Gesamt XP',
                     '$_totalXP',
                     Icons.star,
                     Colors.purple,
                   ),
-                ],
-              ),
+                ];
+
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: tileHeight,
+                  ),
+                  itemCount: stats.length,
+                  itemBuilder: (context, index) {
+                    final s = stats[index];
+                    return _buildStatCard(
+                      s.$1,
+                      s.$2,
+                      s.$3,
+                      s.$4,
+                    );
+                  },
+                );
+              },
             ),
             const SizedBox(height: 24),
 
@@ -459,34 +578,61 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.surface,
+                    Theme.of(context).colorScheme.surface.withOpacity(0.94),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withOpacity(0.3),
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Aktive Bereiche',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.category,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Aktive Bereiche',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           '${_lifeAreas.length}',
@@ -498,40 +644,16 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (_lifeAreas.isNotEmpty) ...[
-                    ..._lifeAreas.take(3).map((area) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: Color(int.parse(area.color.replaceAll('#', '0xFF'))),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              area.name,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )),
-                    if (_lifeAreas.length > 3)
-                      Text(
-                        '+${_lifeAreas.length - 3} weitere...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                  ] else ...[
+                  const SizedBox(height: 16),
+                  if (_lifeAreas.isNotEmpty)
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _lifeAreas
+                          .map((area) => _buildLifeAreaChip(area))
+                          .toList(),
+                    )
+                  else
                     Text(
                       'Noch keine Lebensbereiche erstellt',
                       style: TextStyle(
@@ -540,7 +662,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         fontStyle: FontStyle.italic,
                       ),
                     ),
-                  ],
                 ],
               ),
             ),
@@ -591,85 +712,17 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 24),
 
-            // Profile Settings
-            Text(
-              'Profil bearbeiten',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _bioCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Bio',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.edit),
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 20),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _saveProfile,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _loading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(
-                              'Profil speichern',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+            // Profile bearbeiten Bereich entfernt (wird an anderer Stelle bearbeitet)
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _usersChannel?.unsubscribe();
+    AvatarSyncService.avatarVersion.removeListener(_loadProfile);
+    super.dispose();
   }
 }

@@ -6,9 +6,12 @@ import 'history_page.dart';
 import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
 import 'profile_page.dart';
+import 'debug_avatar_page.dart';
 import 'services/db_service.dart';
 import 'services/life_areas_service.dart';
+import 'services/avatar_sync_service.dart';
 import 'widgets/bubble_widget.dart';
+import 'widgets/profile_header_widget.dart';
 import 'templates_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -21,6 +24,36 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   // Add a counter to force FutureBuilder rebuild
   int _refreshCounter = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Force rebuild wenn Abhängigkeiten sich ändern
+    setState(() {});
+    // Zusätzliche Aktualisierung nach kurzer Verzögerung
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatische Aktualisierung beim Start
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {});
+    });
+    // Zusätzliche Aktualisierung nach kurzer Verzögerung
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+
   
   Future<void> _signOut() async {
     try {
@@ -422,10 +455,33 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
                  actions: [
            IconButton(
+             icon: const Icon(Icons.refresh),
+             tooltip: 'Dashboard neu laden',
+             onPressed: () async {
+               // Force Avatar-Sync und Dashboard-Rebuild
+               await AvatarSyncService.forceSync();
+               setState(() {
+                 // Force rebuild des Dashboards
+               });
+               // Kurze Verzögerung für UI-Update
+               await Future.delayed(const Duration(milliseconds: 200));
+               setState(() {
+                 // Zweiter Force rebuild
+               });
+             },
+           ),
+           IconButton(
              icon: const Icon(Icons.history),
              tooltip: 'Meine Logs',
              onPressed: () => Navigator.of(context).push(
                MaterialPageRoute(builder: (_) => const HistoryPage()),
+             ),
+           ),
+           IconButton(
+             icon: const Icon(Icons.bug_report),
+             tooltip: 'Avatar Debug',
+             onPressed: () => Navigator.of(context).push(
+               MaterialPageRoute(builder: (_) => const DebugAvatarPage()),
              ),
            ),
            IconButton(
@@ -440,149 +496,120 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Begrüßung
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      Icons.person,
-                      size: 32,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Willkommen zurück!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user?.email ?? 'User',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+            // Header links, Streak rechts (bei großer Breite). Auf kleineren Screens untereinander.
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 900;
 
-            // Streak & Badge Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                final streakCard = Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: FutureBuilder<int>(
-                future: calculateStreak(),
-                builder: (ctx, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snap.hasError) {
-                    return Text('Fehler: ${snap.error}');
-                  }
-                  final streak = snap.data ?? 0;
-                  final badge = badgeLevel(streak);
-                  
-                  return Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.orange, Colors.deepOrange],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                  child: FutureBuilder<int>(
+                    future: calculateStreak(),
+                    builder: (ctx, snap) {
+                      if (snap.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snap.hasError) {
+                        return Text('Fehler: ${snap.error}');
+                      }
+                      final streak = snap.data ?? 0;
+                      final badge = badgeLevel(streak);
+
+                      return Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Colors.orange, Colors.deepOrange],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(
+                              Icons.local_fire_department,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Icon(
-                          Icons.local_fire_department,
-                          color: Colors.white,
-                          size: 28,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Dein Streak',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[600],
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '$streak Tage',
+                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                        color: Theme.of(context).colorScheme.primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                                if (streak > 0)
+                                  Text(
+                                    'Du bist auf einem guten Weg!',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Colors.grey[500],
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          _badgeIcon(badge),
+                        ],
+                      );
+                    },
+                  ),
+                );
+
+                if (isWide) {
+                  const double heroRowHeight = 150;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Expanded(
+                        child: SizedBox(
+                          height: heroRowHeight,
+                          child: ProfileHeaderWidget(),
                         ),
                       ),
                       const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Dein Streak',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$streak Tage',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (streak > 0)
-                              Text(
-                                'Du bist auf einem guten Weg!',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                          ],
-                        ),
+                      SizedBox(
+                        width: 360,
+                        height: heroRowHeight,
+                        child: streakCard,
                       ),
-                      _badgeIcon(badge),
                     ],
                   );
-                },
-              ),
+                }
+
+                return Column(
+                  children: [
+                    const ProfileHeaderWidget(),
+                    const SizedBox(height: 24),
+                    streakCard,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
 

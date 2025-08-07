@@ -60,48 +60,97 @@ FOR ALL
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
--- 8. Trigger für characters updated_at
-CREATE OR REPLACE FUNCTION update_characters_updated_at()
-RETURNS TRIGGER AS $$
+-- 8. image_url Feld zu action_logs hinzufügen (falls noch nicht vorhanden)
+DO $$ 
 BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'action_logs' AND column_name = 'image_url') THEN
+        ALTER TABLE public.action_logs ADD COLUMN image_url TEXT;
+    END IF;
+END $$;
 
-CREATE TRIGGER characters_updated_at
-    BEFORE UPDATE ON public.characters
-    FOR EACH ROW
-    EXECUTE FUNCTION update_characters_updated_at();
+-- 9. Storage Bucket für Avatare erstellen
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true)
+ON CONFLICT (id) DO NOTHING;
 
--- 9. Trigger für life_areas updated_at
-CREATE OR REPLACE FUNCTION update_life_areas_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- 10. Storage Bucket für Activity Images erstellen
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('activity-images', 'activity-images', true)
+ON CONFLICT (id) DO NOTHING;
 
-CREATE TRIGGER life_areas_updated_at
-    BEFORE UPDATE ON public.life_areas
-    FOR EACH ROW
-    EXECUTE FUNCTION update_life_areas_updated_at();
+-- 11. Storage Policies für Avatare
+CREATE POLICY "Users can upload own avatar"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'avatars' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
 
--- 10. Funktion für automatische Character-Erstellung
-CREATE OR REPLACE FUNCTION public.handle_new_user_character()
+CREATE POLICY "Users can view own avatar"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'avatars' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can update own avatar"
+  ON storage.objects FOR UPDATE
+  USING (
+    bucket_id = 'avatars' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can delete own avatar"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'avatars' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- 12. Storage Policies für Activity Images
+CREATE POLICY "Users can upload activity images"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'activity-images' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can view their own activity images"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'activity-images' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can update their own activity images"
+  ON storage.objects FOR UPDATE
+  USING (
+    bucket_id = 'activity-images' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can delete their own activity images"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'activity-images' 
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- 13. Funktion für automatische User-Profile-Erstellung
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-    INSERT INTO public.characters (user_id, name)
-    VALUES (new.id, COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)));
-    RETURN new;
+  INSERT INTO public.users (id, email, name)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'name');
+  RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 11. Trigger für automatische Character-Erstellung
-CREATE OR REPLACE TRIGGER on_auth_user_created_character
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user_character();
+-- 14. Trigger aktivieren
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- 12. Bestätigung
-SELECT 'Database Setup erfolgreich angewendet!' as status; 
+-- 15. Bestätigung
+SELECT 'Complete Database Setup erfolgreich angewendet!' as status; 

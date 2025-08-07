@@ -1,8 +1,88 @@
 import 'package:flutter/material.dart';
 import '../services/character_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/avatar_sync_service.dart';
 
-class CharacterWidget extends StatelessWidget {
+class CharacterWidget extends StatefulWidget {
   const CharacterWidget({Key? key}) : super(key: key);
+
+  @override
+  State<CharacterWidget> createState() => _CharacterWidgetState();
+}
+
+class _CharacterWidgetState extends State<CharacterWidget> {
+  String? _userAvatarUrl;
+  bool _isLoadingAvatar = true;
+  RealtimeChannel? _usersChannel;
+  int _cacheBust = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserAvatar();
+    _subscribeToUserChanges();
+    AvatarSyncService.avatarVersion.addListener(_loadUserAvatar);
+  }
+
+  Future<void> _loadUserAvatar() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final res = await Supabase.instance.client
+            .from('users')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        
+        if (mounted) {
+          setState(() {
+            _userAvatarUrl = res['avatar_url'];
+            _isLoadingAvatar = false;
+            _cacheBust = DateTime.now().millisecondsSinceEpoch;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingAvatar = false;
+        });
+      }
+      print('Fehler beim Laden des User-Avatars: $e');
+    }
+  }
+
+  void _subscribeToUserChanges() {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    _usersChannel?.unsubscribe();
+    final channel = client
+        .channel('public:users:id=eq.${user.id}:character-card')
+        .on(
+          RealtimeListenTypes.postgresChanges,
+          ChannelFilter(
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users',
+            filter: 'id=eq.${user.id}',
+          ),
+          (payload, [ref]) async {
+            await _loadUserAvatar();
+            if (mounted) setState(() {});
+          },
+        );
+    channel.subscribe();
+    _usersChannel = channel;
+  }
+
+  @override
+  void dispose() {
+    _usersChannel?.unsubscribe();
+    AvatarSyncService.avatarVersion.removeListener(_loadUserAvatar);
+    super.dispose();
+  }
 
   Widget _buildStatBar(String label, int value, int maxValue, Color color) {
     final percentage = value / maxValue;
@@ -79,6 +159,10 @@ class CharacterWidget extends StatelessWidget {
         final character = snapshot.data!;
         final stats = character.stats;
 
+        // Verwende das User-Avatar, falls verfügbar, sonst das Character-Avatar
+        final rawAvatarUrl = _userAvatarUrl ?? character.avatarUrl;
+        final avatarUrl = rawAvatarUrl != null ? '$rawAvatarUrl?cb=$_cacheBust' : null;
+
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -124,16 +208,26 @@ class CharacterWidget extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: character.avatarUrl != null
+                    child: avatarUrl != null
                         ? ClipOval(
                             child: Image.network(
-                              character.avatarUrl!,
+                              avatarUrl,
+                              key: ValueKey(avatarUrl),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
+                                print('Avatar load error: $error');
                                 return const Icon(
                                   Icons.person,
                                   size: 60,
                                   color: Colors.white,
+                                );
+                              },
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
                                 );
                               },
                             ),
