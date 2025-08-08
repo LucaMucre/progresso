@@ -4,6 +4,8 @@ import 'services/db_service.dart';
 import 'log_action_page.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'dart:math';
+import 'dart:convert';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 class LifeAreaDetailPage extends StatefulWidget {
   final LifeArea area;
@@ -48,13 +50,31 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       final filteredLogs = logs.where((log) {
         // For quick actions without templates, check if they were created for this specific area
         if (log.templateId == null && log.notes != null && log.notes!.isNotEmpty) {
-          final notes = log.notes!.toLowerCase();
           final areaName = widget.area.name.toLowerCase();
           final category = widget.area.category.toLowerCase();
-          
-          // Only show logs that explicitly mention this area name or category
-          // AND were created through the quick action for this area
-          return notes.contains(areaName) || notes.contains(category);
+          final raw = log.notes!;
+          try {
+            final parsed = jsonDecode(raw);
+            if (parsed is Map<String, dynamic>) {
+              final nArea = (parsed['area'] as String?)?.toLowerCase();
+              final nCat  = (parsed['category'] as String?)?.toLowerCase();
+              return nArea == areaName || nCat == category;
+            } else if (parsed is List) {
+              // Quill Delta ohne Wrapper -> in Plaintext umwandeln und prüfen
+              try {
+                final doc = quill.Document.fromJson(parsed);
+                final plain = doc.toPlainText().toLowerCase();
+                return plain.contains(areaName) || plain.contains(category);
+              } catch (_) {
+                // Fallback: keine Zuordnung möglich
+                return false;
+              }
+            }
+          } catch (_) {
+            final notes = raw.toLowerCase();
+            return notes.contains(areaName) || notes.contains(category);
+          }
+          return false;
         }
         
         // For template-based actions, check if the template belongs to this area
@@ -102,6 +122,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         builder: (context) => LogActionPage(
           selectedCategory: widget.area.category,
           selectedArea: widget.area.name,
+          areaColorHex: widget.area.color,
+          areaIcon: widget.area.icon,
         ),
       ),
     ).then((_) => _loadData()); // Reload data after returning
@@ -114,6 +136,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
           template: template,
           selectedCategory: widget.area.category,
           selectedArea: widget.area.name,
+          areaColorHex: widget.area.color,
+          areaIcon: widget.area.icon,
         ),
       ),
     ).then((_) => _loadData()); // Reload data after returning
@@ -208,28 +232,44 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   }
 
   String _getActivityName(ActionLog log) {
+    // Try to parse from notes (new or legacy)
     if (log.notes != null && log.notes!.isNotEmpty) {
-      final notes = log.notes!;
-      
-      // For quick actions, the notes contain "ActivityName (AreaName): notes"
-      if (log.templateId == null) {
-        // Extract activity name before the first parenthesis
-        final parenthesisIndex = notes.indexOf('(');
-        if (parenthesisIndex > 0) {
-          return notes.substring(0, parenthesisIndex).trim();
+      final raw = log.notes!;
+      try {
+        final parsed = jsonDecode(raw);
+        if (parsed is Map<String, dynamic>) {
+          final delta = parsed['delta'];
+          if (delta is List) {
+            try {
+              final doc = quill.Document.fromJson(delta);
+              final firstLine = doc.toPlainText().split('\n').firstWhere(
+                (l) => l.trim().isNotEmpty,
+                orElse: () => '',
+              );
+              if (firstLine.trim().isNotEmpty) return firstLine.trim();
+            } catch (_) {}
+          }
+          return 'Aktivität';
+        } else if (parsed is List) {
+          try {
+            final doc = quill.Document.fromJson(parsed);
+            final firstLine = doc.toPlainText().split('\n').firstWhere(
+              (l) => l.trim().isNotEmpty,
+              orElse: () => '',
+            );
+            if (firstLine.trim().isNotEmpty) return firstLine.trim();
+          } catch (_) {}
+          return 'Aktivität';
         }
-        // If no parenthesis, return the whole notes
-        return notes;
+      } catch (_) {}
+
+      final parenthesisIndex = raw.indexOf('(');
+      if (parenthesisIndex > 0) {
+        return raw.substring(0, parenthesisIndex).trim();
       }
-      
-      // For template-based actions, return the notes as is
-      return notes;
+      return raw;
     }
-    
-    // Fallback for logs without notes
-    if (log.templateId != null) {
-      return 'Template-Aktivität';
-    }
+
     return 'Aktivität';
   }
 
@@ -1022,8 +1062,30 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         final isSameDate = logDate.isAtSameMomentAs(date);
         
         // Check if the log is for this specific life area
-        // Notes format: "activityName (AreaName): notes" or "activityName (AreaName)"
-        final isForThisArea = log.notes?.toLowerCase().contains('(${widget.area.name.toLowerCase()})') ?? false;
+        bool isForThisArea = false;
+        if (log.notes != null && log.notes!.isNotEmpty) {
+          final raw = log.notes!;
+          try {
+            final parsed = jsonDecode(raw);
+            if (parsed is Map<String, dynamic>) {
+              final nArea = (parsed['area'] as String?)?.toLowerCase();
+              final nCat  = (parsed['category'] as String?)?.toLowerCase();
+              isForThisArea = nArea == widget.area.name.toLowerCase() || nCat == widget.area.category.toLowerCase();
+            } else if (parsed is List) {
+              // Legacy: Delta-Array → zu Plaintext und matchen
+              try {
+                final doc = quill.Document.fromJson(parsed);
+                final plain = doc.toPlainText().toLowerCase();
+                isForThisArea = plain.contains(widget.area.name.toLowerCase()) || plain.contains(widget.area.category.toLowerCase());
+              } catch (_) {}
+            }
+          } catch (_) {
+            final notes = raw.toLowerCase();
+            isForThisArea = notes.contains('(${widget.area.name.toLowerCase()})') ||
+                             notes.contains(widget.area.name.toLowerCase()) ||
+                             notes.contains(widget.area.category.toLowerCase());
+          }
+        }
         
         return isSameDate && isForThisArea;
       }).length;

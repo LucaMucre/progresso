@@ -7,6 +7,7 @@ import 'dart:html' as html;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/db_service.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 class ActivityDetailsDialog extends StatefulWidget {
   final ActionLog log;
@@ -39,6 +40,86 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     super.initState();
     _durationCtrl.text = widget.log.durationMin?.toString() ?? '';
     _notesCtrl.text = widget.log.notes ?? '';
+  }
+
+  Widget _buildNotesOrPlain(String value) {
+    // Try parse Quill Delta JSON; fallback to plain text
+    try {
+      final dynamic parsed = jsonDecode(value);
+      if (parsed is Map<String, dynamic>) {
+        final delta = parsed['delta'];
+        if (delta is List) {
+          final doc = quill.Document.fromJson(delta);
+          final controller = quill.QuillController(
+            document: doc,
+            selection: const TextSelection.collapsed(offset: 0),
+          );
+          return SizedBox(
+            height: 220,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: IgnorePointer(
+                ignoring: true,
+                child: quill.QuillEditor.basic(
+                  controller: controller,
+                  config: const quill.QuillEditorConfig(
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      } else if (parsed is List) {
+        final doc = quill.Document.fromJson(parsed);
+        final controller = quill.QuillController(
+          document: doc,
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+        return SizedBox(
+          height: 220,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: IgnorePointer(
+              ignoring: true,
+              child: quill.QuillEditor.basic(
+                controller: controller,
+                config: const quill.QuillEditorConfig(
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // not a json delta -> show as plain text
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Text(
+        value,
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+    );
   }
 
   @override
@@ -359,17 +440,37 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                       const SizedBox(height: 16),
                     ],
 
-                    // Activity details
-                    _buildDetailSection(
-                      title: 'Datum',
-                      value: _formatDate(widget.log.occurredAt),
-                      isEditable: false,
-                    ),
-                    
-                    _buildDetailSection(
-                      title: 'XP verdient',
-                      value: '${widget.log.earnedXp}',
-                      isEditable: false,
+                    // Activity details condensed row
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: _buildDetailChip(
+                              label: 'Datum',
+                              value: _formatDate(widget.log.occurredAt),
+                              icon: Icons.event,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDetailChip(
+                              label: 'XP',
+                              value: '${widget.log.earnedXp}',
+                              icon: Icons.star,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDetailChip(
+                              label: 'Dauer',
+                              value: widget.log.durationMin != null ? '${widget.log.durationMin} Min' : '-',
+                              icon: Icons.timer_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
 
                     if (_isEditing) ...[
@@ -389,12 +490,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                         maxLines: 3,
                       ),
                     ] else ...[
-                      if (widget.log.durationMin != null)
-                        _buildDetailSection(
-                          title: 'Dauer',
-                          value: '${widget.log.durationMin} Minuten',
-                          isEditable: false,
-                        ),
+                      // Dauer separat nicht mehr nötig (oben zusammengefasst)
                       
                       if (widget.log.notes != null && widget.log.notes!.isNotEmpty)
                         _buildDetailSection(
@@ -508,19 +604,35 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
               ),
             )
           else
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Text(
-                value,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+            _buildNotesOrPlain(value),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailChip({required String label, required String value, required IconData icon}) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey[600])),
+                const SizedBox(height: 2),
+                Text(value, style: theme.textTheme.bodyMedium),
+              ],
             ),
+          ),
         ],
       ),
     );

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'services/db_service.dart';
+import 'dart:convert';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({Key? key}) : super(key: key);
@@ -88,11 +90,13 @@ class HistoryPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                       ],
+                      // Optional: Bereich/Kategorie Chip wenn in Notes vorhanden
+                      ..._buildAreaCategoryChip(log.notes, context),
                       if (log.notes != null && log.notes!.isNotEmpty) ...[
-                        Text(
-                          log.notes!,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (log.notes != null && log.notes!.isNotEmpty) ...[
+                        _renderNotes(log.notes!, context),
                         const SizedBox(height: 12),
                       ],
                       if (log.imageUrl != null) ...[
@@ -133,5 +137,97 @@ class HistoryPage extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Widget _renderNotes(String value, BuildContext context) {
+    try {
+      final dynamic parsed = jsonDecode(value);
+      if (parsed is Map<String, dynamic>) {
+        final delta = parsed['delta'];
+        if (delta is List) {
+          final doc = quill.Document.fromJson(delta);
+          final controller = quill.QuillController(
+            document: doc,
+            selection: const TextSelection.collapsed(offset: 0),
+          );
+          return SizedBox(
+            height: 180,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: quill.QuillEditor.basic(
+                controller: controller,
+                config: const quill.QuillEditorConfig(
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          );
+        }
+      } else if (parsed is List) {
+        final doc = quill.Document.fromJson(parsed);
+        final controller = quill.QuillController(
+          document: doc,
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+        return SizedBox(
+          height: 180,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.withOpacity(0.3)),
+            ),
+            padding: const EdgeInsets.all(8),
+            child: quill.QuillEditor.basic(
+              controller: controller,
+              config: const quill.QuillEditorConfig(
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (_) {}
+    return Text(value, style: Theme.of(context).textTheme.bodyMedium);
+  }
+
+  List<Widget> _buildAreaCategoryChip(String? value, BuildContext context) {
+    if (value == null || value.isEmpty) return const [];
+    try {
+      final parsed = jsonDecode(value);
+      if (parsed is Map<String, dynamic>) {
+        final area = parsed['area'] as String?;
+        final category = parsed['category'] as String?;
+        if (area != null || category != null) {
+          final label = area != null && category != null
+              ? '$area – $category'
+              : (area ?? category!);
+          return [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.label, size: 14, color: Colors.blue),
+                  const SizedBox(width: 6),
+                  Text(label, style: const TextStyle(color: Colors.blue)),
+                ],
+              ),
+            )
+          ];
+        }
+      }
+    } catch (_) {}
+    return const [];
   }
 }

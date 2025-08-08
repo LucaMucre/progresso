@@ -162,7 +162,7 @@ Future<ActionLog> createQuickLog({
   // Client-seitige XP-Berechnung
   final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
 
-  // Eintrag zusammenbauen und schreiben (ohne template_id und activity_name für jetzt)
+  // Eintrag zusammenbauen und schreiben
   final insert = <String, dynamic>{
     'user_id':      _db.auth.currentUser!.id,
     'duration_min': durationMin,

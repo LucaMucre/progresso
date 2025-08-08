@@ -4,7 +4,8 @@ import '../profile_edit_page.dart';
 import '../services/avatar_sync_service.dart';
 
 class ProfileHeaderWidget extends StatefulWidget {
-  const ProfileHeaderWidget({Key? key}) : super(key: key);
+  final bool compact;
+  const ProfileHeaderWidget({Key? key, this.compact = false}) : super(key: key);
 
   @override
   State<ProfileHeaderWidget> createState() => _ProfileHeaderWidgetState();
@@ -135,8 +136,14 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
       );
     }
 
+    final double padding = widget.compact ? 16 : 24;
+    final double avatarSize = widget.compact ? 48 : 60;
+    final double titleFontSize = widget.compact ? 18 : 20;
+    final double nameFontSize = widget.compact ? 14 : 16;
+    final double bioFontSize = widget.compact ? 11 : 12;
+
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -159,8 +166,8 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
         children: [
           // Avatar
           Container(
-            width: 60,
-            height: 60,
+            width: avatarSize,
+            height: avatarSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 3),
@@ -232,7 +239,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                   'Willkommen zurück!',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: titleFontSize,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -241,7 +248,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                   _userName ?? 'User',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
-                    fontSize: 16,
+                    fontSize: nameFontSize,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -251,7 +258,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                     _userBio!,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
-                      fontSize: 12,
+                      fontSize: bioFontSize,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

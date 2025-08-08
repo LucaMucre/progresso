@@ -7,17 +7,22 @@ import 'dart:html' as html;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/db_service.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 class LogActionPage extends StatefulWidget {
   final ActionTemplate? template;
   final String? selectedCategory;
   final String? selectedArea;
+  final String? areaColorHex;
+  final String? areaIcon;
   
   const LogActionPage({
     Key? key, 
     this.template,
     this.selectedCategory,
     this.selectedArea,
+    this.areaColorHex,
+    this.areaIcon,
   }) : super(key: key);
 
   @override
@@ -27,6 +32,10 @@ class LogActionPage extends StatefulWidget {
 class _LogActionPageState extends State<LogActionPage> {
   final _durationCtrl = TextEditingController();
   final _notesCtrl    = TextEditingController();
+  final FocusNode _notesFocusNode = FocusNode();
+  final FocusNode _quillFocusNode = FocusNode();
+  final ScrollController _quillScrollController = ScrollController();
+  late final quill.QuillController _quillCtrl;
   final _activityNameCtrl = TextEditingController();
   final _imagePicker = ImagePicker();
   bool _loading       = false;
@@ -42,6 +51,7 @@ class _LogActionPageState extends State<LogActionPage> {
     if (widget.template != null) {
       _activityNameCtrl.text = widget.template!.name;
     }
+    _quillCtrl = quill.QuillController.basic();
   }
 
   Future<void> _pickImage() async {
@@ -192,26 +202,29 @@ class _LogActionPageState extends State<LogActionPage> {
         log = await createLog(
           templateId : widget.template!.id,
           durationMin: duration,
-          notes      : _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          notes      : _quillCtrl.document.toDelta().isEmpty
+              ? null
+              : jsonEncode(_quillCtrl.document.toDelta().toJson()),
           imageUrl   : imageUrl,
         );
       } else {
         // Create a quick log without template
         final activityName = _activityNameCtrl.text.trim();
-        final notes = _notesCtrl.text.trim();
         final areaName = widget.selectedArea ?? '';
         final category = widget.selectedCategory ?? 'Allgemein';
-        
-        // Combine activity name, area, and notes for better filtering
-        final combinedNotes = notes.isEmpty 
-          ? '$activityName ($areaName)' 
-          : '$activityName ($areaName): $notes';
+        // Immer den Wrapper speichern, auch wenn der Delta-Inhalt leer ist,
+        // damit die Zuordnung zum Lebensbereich sicher ist
+        final String notesDeltaJson = jsonEncode({
+          'area': areaName,
+          'category': category,
+          'delta': _quillCtrl.document.toDelta().toJson(),
+        });
         
         log = await createQuickLog(
           activityName: activityName,
           category: category,
           durationMin: duration,
-          notes: combinedNotes,
+          notes: notesDeltaJson,
           imageUrl: imageUrl,
         );
       }
@@ -233,15 +246,215 @@ class _LogActionPageState extends State<LogActionPage> {
   void dispose() {
     _durationCtrl.dispose();
     _notesCtrl.dispose();
+    _notesFocusNode.dispose();
+    _quillFocusNode.dispose();
+    _quillScrollController.dispose();
+    _quillCtrl.dispose();
     _activityNameCtrl.dispose();
     super.dispose();
+  }
+
+  void _wrapSelection({required String prefix, String? suffix}) {
+    final selection = _notesCtrl.selection;
+    final fullText = _notesCtrl.text;
+    if (!selection.isValid) return;
+
+    final start = selection.start;
+    final end = selection.end;
+
+    final String selected = fullText.substring(start, end);
+    final String effectiveSuffix = suffix ?? prefix;
+
+    // Toggle behavior: if already wrapped exactly, unwrap
+    final bool alreadyWrapped = selected.startsWith(prefix) && selected.endsWith(effectiveSuffix);
+    String replacement;
+    int deltaStart = 0;
+    int deltaEnd = 0;
+    if (alreadyWrapped) {
+      replacement = selected.substring(prefix.length, selected.length - effectiveSuffix.length);
+      deltaStart = 0;
+      deltaEnd = -(prefix.length + effectiveSuffix.length);
+    } else {
+      replacement = '$prefix$selected$effectiveSuffix';
+      deltaStart = 0;
+      deltaEnd = prefix.length + effectiveSuffix.length;
+    }
+
+    final newText = fullText.replaceRange(start, end, replacement);
+    _notesCtrl.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection(baseOffset: start, extentOffset: end + deltaEnd),
+    );
+  }
+
+  void _toggleLinePrefix(String prefix) {
+    final selection = _notesCtrl.selection;
+    final text = _notesCtrl.text;
+    if (!selection.isValid) return;
+
+    // Determine line range covering the selection
+    int lineStart = text.lastIndexOf('\n', selection.start - 1) + 1;
+    int lineEnd = text.indexOf('\n', selection.end);
+    if (lineEnd == -1) lineEnd = text.length;
+
+    final block = text.substring(lineStart, lineEnd);
+    final lines = block.split('\n');
+    bool allPrefixed = lines.isNotEmpty && lines.every((l) => l.startsWith(prefix));
+
+    final String transformed = lines
+        .map((l) => allPrefixed ? l.replaceFirst(prefix, '') : '$prefix$l')
+        .join('\n');
+
+    final newText = text.replaceRange(lineStart, lineEnd, transformed);
+    final int diff = transformed.length - block.length;
+    _notesCtrl.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection(baseOffset: selection.start, extentOffset: selection.end + diff),
+    );
+  }
+
+  // Consistent section container
+  Widget _sectionCard({
+    required Widget child,
+    String? title,
+    IconData? leadingIcon,
+    Color? accentColor,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(12),
+  }) {
+    final theme = Theme.of(context);
+    final Color stripeColor = (accentColor ?? theme.colorScheme.primary).withOpacity(0.55);
+    final Color bgColor = theme.colorScheme.surfaceVariant.withOpacity(0.12);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Accent stripe on the left
+          Positioned.fill(
+            left: 0,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: stripeColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: padding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title != null) ...[
+                  Row(
+                    children: [
+                      if (leadingIcon != null)
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: stripeColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(leadingIcon, size: 18, color: stripeColor),
+                        ),
+                      if (leadingIcon != null) const SizedBox(width: 8),
+                      Text(
+                        title,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                child,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Unified input decoration
+  InputDecoration _buildInputDecoration({required String hint, required IconData icon, Color? accentColor}) {
+    final theme = Theme.of(context);
+    final Color focusColor = accentColor ?? theme.colorScheme.primary;
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, color: focusColor.withOpacity(0.8)),
+      filled: true,
+      fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.25),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.3)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: focusColor.withOpacity(0.8), width: 1.6),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final tpl = widget.template;
     final title = tpl != null ? 'Log: ${tpl.name}' : 'Neue Aktion loggen';
+    final selectedArea = widget.selectedArea;
+    final selectedCategory = widget.selectedCategory;
+    final Color? areaColor = (widget.areaColorHex != null && widget.areaColorHex!.isNotEmpty)
+        ? Color(int.parse(widget.areaColorHex!.replaceAll('#', '0xFF')))
+        : null;
+    IconData? areaIcon;
+    if (widget.areaIcon != null && widget.areaIcon!.isNotEmpty) {
+      switch (widget.areaIcon) {
+        case 'fitness_center':
+          areaIcon = Icons.fitness_center; break;
+        case 'restaurant':
+          areaIcon = Icons.restaurant; break;
+        case 'school':
+          areaIcon = Icons.school; break;
+        case 'account_balance':
+          areaIcon = Icons.account_balance; break;
+        case 'palette':
+          areaIcon = Icons.palette; break;
+        case 'people':
+          areaIcon = Icons.people; break;
+        case 'self_improvement':
+          areaIcon = Icons.self_improvement; break;
+        case 'work':
+          areaIcon = Icons.work; break;
+        default:
+          areaIcon = Icons.category;
+      }
+    }
     
+    final Color accent = areaColor ?? Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -251,36 +464,152 @@ class _LogActionPageState extends State<LogActionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (selectedArea != null && selectedArea.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: (areaColor ?? Theme.of(context).colorScheme.primary).withOpacity(0.2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: (areaColor ?? Theme.of(context).colorScheme.primary).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        areaIcon ?? Icons.category,
+                        color: areaColor ?? Theme.of(context).colorScheme.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Lebensbereich',
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: (areaColor ?? Theme.of(context).colorScheme.onSurface).withOpacity(0.6),
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            selectedCategory != null && selectedCategory.isNotEmpty
+                                ? '$selectedArea • $selectedCategory'
+                                : selectedArea,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: areaColor ?? Theme.of(context).colorScheme.onSurface,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             // Activity name field (only show if no template)
             if (widget.template == null) ...[
-              Text('Aktivitätsname:', style: Theme.of(context).textTheme.bodyMedium),
-              TextField(
-                controller: _activityNameCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'z. B. Laufen, Lesen, Meditation...',
+              _sectionCard(
+                accentColor: accent,
+                title: 'Aktivitätsname',
+                leadingIcon: Icons.task_alt,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _activityNameCtrl,
+                      decoration: _buildInputDecoration(
+                        hint: 'z. B. Laufen, Lesen, Meditation...',
+                        icon: Icons.task_alt,
+                        accentColor: accent,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
             ],
             
-            Text('Dauer in Minuten (optional):', style: Theme.of(context).textTheme.bodyMedium),
-            TextField(
-              controller: _durationCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(hintText: 'z. B. 45'),
+            _sectionCard(
+              accentColor: accent,
+              title: 'Dauer in Minuten (optional)',
+              leadingIcon: Icons.timer_outlined,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _durationCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: _buildInputDecoration(hint: 'z. B. 45', icon: Icons.timer_outlined, accentColor: accent),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             
-            Text('Notiz (optional):', style: Theme.of(context).textTheme.bodyMedium),
-            TextField(
-              controller: _notesCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(hintText: 'Deine Gedanken…'),
+            _sectionCard(
+              accentColor: accent,
+              title: 'Notiz (optional)',
+              leadingIcon: Icons.notes,
+              child: Column(
+                children: [
+                  // Toolbar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: quill.QuillSimpleToolbar(
+                      controller: _quillCtrl,
+                      config: const quill.QuillSimpleToolbarConfig(
+                        multiRowsDisplay: false,
+                        showAlignmentButtons: false,
+                        showUnderLineButton: false,
+                        showStrikeThrough: false,
+                        showInlineCode: false,
+                        showCodeBlock: false,
+                        showSearchButton: false,
+                        showSubscript: false,
+                        showSuperscript: false,
+                        showQuote: false,
+                        showListCheck: false,
+                        showClipboardCut: false,
+                        showClipboardCopy: false,
+                        showClipboardPaste: false,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // Editor area (WYSIWYG)
+                  SizedBox(
+                    height: 260,
+                    child: quill.QuillEditor.basic(
+                      controller: _quillCtrl,
+                      config: const quill.QuillEditorConfig(
+                        placeholder: 'Deine Gedanken…',
+                        padding: EdgeInsets.all(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 
             // Image upload section
-            Text('Bild hinzufügen (optional):', style: Theme.of(context).textTheme.bodyMedium),
+            Text('Bild hinzufügen (optional):', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             
             // Selected image preview
@@ -290,7 +619,7 @@ class _LogActionPageState extends State<LogActionPage> {
                 width: double.infinity,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  border: Border.all(color: accent.withOpacity(0.3)),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
@@ -321,6 +650,10 @@ class _LogActionPageState extends State<LogActionPage> {
                       onPressed: _pickImage,
                       icon: const Icon(Icons.edit),
                       label: const Text('Bild ändern'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accent,
+                        side: BorderSide(color: accent.withOpacity(0.6)),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -332,31 +665,46 @@ class _LogActionPageState extends State<LogActionPage> {
                           _selectedImageUrl = null;
                         });
                       },
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      label: const Text('Entfernen', style: TextStyle(color: Colors.red)),
+                      icon: Icon(Icons.delete, color: accent),
+                      label: Text('Entfernen', style: TextStyle(color: accent)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accent,
+                        side: BorderSide(color: accent.withOpacity(0.6)),
+                      ),
                     ),
                   ),
                 ],
               ),
             ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Aus Galerie'),
+              _sectionCard(
+                accentColor: accent,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickImage,
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Aus Galerie'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: accent,
+                          side: BorderSide(color: accent.withOpacity(0.6)),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _takePhoto,
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text('Foto aufnehmen'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _takePhoto,
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Foto aufnehmen'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: accent,
+                          side: BorderSide(color: accent.withOpacity(0.6)),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
             
@@ -368,6 +716,12 @@ class _LogActionPageState extends State<LogActionPage> {
               ),
             ElevatedButton(
               onPressed: _loading ? null : _submitLog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
               child: _loading
                 ? const SizedBox(
                     height: 16, width: 16,
@@ -376,6 +730,96 @@ class _LogActionPageState extends State<LogActionPage> {
                 : const Text('Log speichern'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkdownPreview extends StatefulWidget {
+  final TextEditingController textStream;
+  const _MarkdownPreview({required this.textStream});
+
+  @override
+  State<_MarkdownPreview> createState() => _MarkdownPreviewState();
+}
+
+class _MarkdownPreviewState extends State<_MarkdownPreview> {
+  late String _text;
+
+  @override
+  void initState() {
+    super.initState();
+    _text = widget.textStream.text;
+    widget.textStream.addListener(_onChange);
+  }
+
+  void _onChange() {
+    if (!mounted) return;
+    setState(() {
+      _text = widget.textStream.text;
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.textStream.removeListener(_onChange);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Minimal markdown highlighting using RichText to avoid heavy deps
+    final spans = <TextSpan>[];
+    final lines = _text.split('\n');
+    final boldRegex = RegExp(r"\*\*(.*?)\*\*");
+    final italicRegex = RegExp(r"\*(.*?)\*");
+    for (final line in lines) {
+      TextStyle base = Theme.of(context).textTheme.bodyMedium!;
+      if (line.startsWith('# ')) {
+        spans.add(TextSpan(text: line.substring(2) + '\n', style: base.copyWith(fontSize: 18, fontWeight: FontWeight.w700)));
+        continue;
+      }
+      if (line.startsWith('- ')) {
+        spans.add(TextSpan(text: '• ' + line.substring(2) + '\n', style: base));
+        continue;
+      }
+      // Bold
+      String remaining = line;
+      while (true) {
+        final match = boldRegex.firstMatch(remaining);
+        if (match == null) break;
+        final pre = remaining.substring(0, match.start);
+        final content = match.group(1)!;
+        spans.add(TextSpan(text: pre, style: base));
+        spans.add(TextSpan(text: content, style: base.copyWith(fontWeight: FontWeight.bold)));
+        remaining = remaining.substring(match.end);
+      }
+      // Italic
+      String rem2 = remaining;
+      while (true) {
+        final match = italicRegex.firstMatch(rem2);
+        if (match == null) break;
+        final pre = rem2.substring(0, match.start);
+        final content = match.group(1)!;
+        spans.add(TextSpan(text: pre, style: base));
+        spans.add(TextSpan(text: content, style: base.copyWith(fontStyle: FontStyle.italic)));
+        rem2 = rem2.substring(match.end);
+      }
+      spans.add(TextSpan(text: rem2 + '\n', style: base));
+    }
+
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(left: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        ),
+        child: SingleChildScrollView(
+          child: RichText(text: TextSpan(children: spans)),
         ),
       ),
     );
