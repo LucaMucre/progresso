@@ -966,8 +966,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       return Row(
                         children: [
                           Container(
-                            width: 44,
-                            height: 44,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [Colors.orange, Colors.deepOrange],
@@ -980,7 +980,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               child: Icon(
                                 Icons.local_fire_department,
                                 color: Colors.white,
-                                size: 32,
+                                size: 30,
                               ),
                             ),
                           ),
@@ -988,6 +988,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
                                   '$streak Tage Streak!',
@@ -1007,7 +1008,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
 
                 if (isWide) {
-                  const double heroRowHeight = 96;
+                  const double heroRowHeight = 88;
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

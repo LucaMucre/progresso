@@ -136,8 +136,8 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
       );
     }
 
-    final double padding = widget.compact ? 10 : 24;
-    final double avatarSize = widget.compact ? 40 : 60;
+    final double padding = widget.compact ? 8 : 20;
+    final double avatarSize = widget.compact ? 36 : 56;
     final double titleFontSize = widget.compact ? 16 : 20;
 
     return Container(
@@ -232,6 +232,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   'Willkommen zurück, ${_userName ?? 'User'}!',
