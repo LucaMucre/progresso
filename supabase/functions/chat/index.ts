@@ -56,7 +56,7 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { query, top_k = 8, min_similarity = 0.0 } = await req.json();
+    const { query, top_k = 8, min_similarity = 0.0, private: privateMode = false } = await req.json();
     if (!query || typeof query !== "string") {
       return new Response(JSON.stringify({ error: "query required" }), {
         status: 400,
@@ -74,6 +74,42 @@ serve(async (req) => {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+
+    // Private Mode: keine externen LLM-Calls; nur strukturierte Antworten
+    if (privateMode) {
+      const lower = query.toLowerCase();
+      const isCount = /wie\s*viele|anzahl|wieviel/.test(lower);
+      const sinceMatch = lower.match(/letzten\s+(\d+)\s*tag/);
+      const days = sinceMatch ? Math.max(1, parseInt(sinceMatch[1], 10)) : 7;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+      if (isCount) {
+        const { count } = await supabase
+          .from("action_logs")
+          .select("id", { head: true, count: "exact" })
+          .gte("occurred_at", since);
+        const n = count ?? 0;
+        return new Response(JSON.stringify({
+          answer: `Du hast in den letzten ${days} Tagen ${n} Aktivität${n === 1 ? '' : 'en'} erfasst.`,
+          sources: [],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Fallback im Private Mode: kurze Liste letzter Aktivitäten (Titel+Datum) aus SQL
+      const { data: rows } = await supabase
+        .from("action_logs")
+        .select("id, occurred_at, notes")
+        .gte("occurred_at", since)
+        .order("occurred_at", { ascending: false })
+        .limit(10);
+      const lines = (rows ?? []).map((r: any) => `- ${new Date(r.occurred_at).toISOString().slice(0,10)}: ${quillToPlaintext(r.notes ?? "").split("\n")[0]}`);
+      const text = lines.length > 0
+        ? `Letzte Aktivitäten (ca. ${days} Tage):\n` + lines.join("\n")
+        : `Keine Daten im Zeitraum der letzten ${days} Tage gefunden.`;
+      return new Response(JSON.stringify({ answer: text, sources: [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const qEmb = await embedQuery(query);
     // Very light time-window parsing (German): "letzten X tag(e)" → filter client-side after match
