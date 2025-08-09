@@ -987,27 +987,12 @@ class _DashboardPageState extends State<DashboardPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Dein Streak',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey[600],
-                                      ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$streak Tage',
+                                  '$streak Tage Streak!',
                                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                         color: Theme.of(context).colorScheme.primary,
                                         fontWeight: FontWeight.bold,
                                       ),
                                 ),
-                                if (streak > 0)
-                                  Text(
-                                    'Du bist auf einem guten Weg!',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                          color: Colors.grey[500],
-                                        ),
-                                  ),
                               ],
                             ),
                           ),
