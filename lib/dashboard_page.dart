@@ -112,18 +112,21 @@ class _DashboardPageState extends State<DashboardPage> {
     final user = client.auth.currentUser;
     if (user == null) return;
 
-    // Fetch data in parallel
-    final results = await Future.wait([
-      _fetchLogsForDay(day),
-      client.from('action_templates').select('id,name').eq('user_id', user.id),
-      client.from('life_areas').select('name,category,color').eq('user_id', user.id),
-    ]);
+    // Fetch data (sequential for compatibility)
+    final logs = await _fetchLogsForDay(day);
+    final templatesRes = await client
+        .from('action_templates')
+        .select('id,name')
+        .eq('user_id', user.id);
+    final lifeAreasRes = await client
+        .from('life_areas')
+        .select('name,category,color')
+        .eq('user_id', user.id);
 
-    final logs = results[0] as List<ActionLog>;
     final templateMap = {
-      for (final t in (results[1] as List)) (t['id'] as String): (t['name'] as String)
+      for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
     };
-    final List<_AreaTag> areaTags = (results[2] as List).map((m) => _AreaTag(
+    final List<_AreaTag> areaTags = (lifeAreasRes as List).map((m) => _AreaTag(
       name: (m['name'] as String).trim(),
       category: (m['category'] as String).trim(),
       color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
@@ -1398,10 +1401,11 @@ class _CalendarDayCell extends StatelessWidget {
       return <_DayEntry>[entries.first, _DayEntry(title: '+${entries.length - 1}')];
     }();
 
-    final cell = InkWell(
-      onTap: onTap,
-      margin: const EdgeInsets.all(4),
-      child: Container(
+    final cell = Padding(
+      padding: const EdgeInsets.all(4),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
@@ -1438,8 +1442,9 @@ class _CalendarDayCell extends StatelessWidget {
                   ),
                 ),
               )),
-        ],
-      ),
+            ],
+          ),
+        ),
       ),
     );
 
