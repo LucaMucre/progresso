@@ -232,7 +232,19 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   }
 
   String _getActivityName(ActionLog log) {
-    // Try to parse from notes (new or legacy)
+    // 1) Prefer explicit user-defined name if available
+    final explicit = log.activityName;
+    if (explicit != null && explicit.trim().isNotEmpty) {
+      return explicit.trim();
+    }
+
+    // 2) Try to read title from notes wrapper (added for compatibility)
+    final fromWrapper = extractTitleFromNotes(log.notes);
+    if (fromWrapper != null && fromWrapper.trim().isNotEmpty) {
+      return fromWrapper.trim();
+    }
+
+    // 3) Fallback: parse from notes content (new or legacy)
     if (log.notes != null && log.notes!.isNotEmpty) {
       final raw = log.notes!;
       try {
