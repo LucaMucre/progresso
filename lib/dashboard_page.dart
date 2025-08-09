@@ -31,6 +31,8 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isCalendarView = false;
   // Current month displayed in the calendar view
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  // Optional filter: show only activities for this life area name
+  String? _selectedAreaFilterName;
 
   @override
   void didChangeDependencies() {
@@ -250,7 +252,10 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Future<Map<DateTime, List<_DayEntry>>> _loadCalendarLogsForMonth(DateTime month) async {
+  Future<Map<DateTime, List<_DayEntry>>> _loadCalendarLogsForMonth(
+    DateTime month, {
+    String? areaFilterName,
+  }) async {
     final client = Supabase.instance.client;
     final user = client.auth.currentUser;
     if (user == null) return {};
@@ -319,6 +324,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Aktivität') : 'Aktivität');
       Color? tagColor;
+      _AreaTag? matched;
       if (notes != null && notes.isNotEmpty) {
         try {
           final obj = jsonDecode(notes);
@@ -330,11 +336,18 @@ class _DashboardPageState extends State<DashboardPage> {
             final areaName = obj['area'];
             final category = obj['category'];
             if (areaName is String || category is String) {
-              final match = _matchAreaTag(areaTags, areaName as String?, category as String?);
-              if (match != null) tagColor = match.color;
+              matched = _matchAreaTag(areaTags, areaName as String?, category as String?);
+              if (matched != null) tagColor = matched!.color;
             }
           }
         } catch (_) {}
+      }
+
+      // Apply filter: skip if a filter is set and this log doesn't match
+      if (areaFilterName != null) {
+        if (matched == null || matched!.name.toLowerCase() != areaFilterName.toLowerCase()) {
+          continue;
+        }
       }
 
       dayToTitles.putIfAbsent(dayKey, () => <_DayEntry>[]).add(_DayEntry(title: title, color: tagColor));
@@ -362,27 +375,52 @@ class _DashboardPageState extends State<DashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: _goToPreviousMonth,
-                    tooltip: 'Vorheriger Monat',
-                  ),
-                  Text(
-                    monthLabel,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: _goToNextMonth,
-                    tooltip: 'Nächster Monat',
-                  ),
-                ],
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: _goToPreviousMonth,
+                tooltip: 'Vorheriger Monat',
+              ),
+              Text(
+                monthLabel,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: _goToNextMonth,
+                tooltip: 'Nächster Monat',
+              ),
+              const Spacer(),
+              FutureBuilder<List<LifeArea>>(
+                future: _loadLifeAreas(),
+                builder: (context, snap) {
+                  final areas = snap.data ?? const <LifeArea>[];
+                  final items = <DropdownMenuItem<String?>>[
+                    const DropdownMenuItem(value: null, child: Text('Alle Bereiche')),
+                    ...areas.map((a) => DropdownMenuItem<String?>(value: a.name, child: Text(a.name))).toList(),
+                  ];
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.2)),
+                    ),
+                    child: DropdownButton<String?>
+                    (
+                      value: _selectedAreaFilterName,
+                      items: items,
+                      underline: const SizedBox.shrink(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedAreaFilterName = v;
+                        });
+                      },
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -401,7 +439,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 8),
           FutureBuilder<Map<DateTime, List<_DayEntry>>>(
-            future: _loadCalendarLogsForMonth(_calendarMonth),
+            future: _loadCalendarLogsForMonth(_calendarMonth, areaFilterName: _selectedAreaFilterName),
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Padding(
