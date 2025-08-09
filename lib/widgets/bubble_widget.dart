@@ -290,8 +290,8 @@ class _BubblesGridState extends State<BubblesGrid> {
           children: [
             // Character in the center - clickable to navigate to profile
             Positioned(
-              left: (canvasSize / 2) - (80.0 * scale / 2),
-              top: (canvasSize / 2) - (80.0 * scale / 2),
+              left: (canvasSize - (80.0 * scale)) / 2,
+              top: (canvasSize - (80.0 * scale)) / 2,
               child: GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
