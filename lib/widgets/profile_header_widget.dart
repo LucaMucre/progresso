@@ -136,9 +136,9 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
       );
     }
 
-    final double padding = widget.compact ? 16 : 24;
-    final double avatarSize = widget.compact ? 48 : 60;
-    final double titleFontSize = widget.compact ? 18 : 20;
+    final double padding = widget.compact ? 10 : 24;
+    final double avatarSize = widget.compact ? 40 : 60;
+    final double titleFontSize = widget.compact ? 16 : 20;
 
     return Container(
       padding: EdgeInsets.all(padding),

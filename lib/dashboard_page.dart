@@ -1019,7 +1019,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
 
                 if (isWide) {
-                  const double heroRowHeight = 150;
+                  const double heroRowHeight = 120;
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
