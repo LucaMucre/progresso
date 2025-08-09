@@ -14,6 +14,14 @@ const OPENAI_EMBED_MODEL = Deno.env.get("OPENAI_EMBED_MODEL") ?? "text-embedding
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+// Basic CORS headers for browser calls
+const corsHeaders: HeadersInit = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 function quillToPlaintext(notes?: string | null): string {
   if (!notes) return "";
   try {
@@ -68,6 +76,10 @@ async function embedBatch(inputs: string[]): Promise<number[][]> {
 }
 
 serve(async (req) => {
+  // Preflight support
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
@@ -118,13 +130,13 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ logs: logs?.length ?? 0, chunks: totalChunks }), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({ logs: logs?.length ?? 0, chunks: totalChunks }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+    );
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
   }

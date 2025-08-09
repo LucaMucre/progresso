@@ -10,6 +10,14 @@ const OPENAI_CHAT_MODEL = Deno.env.get("OPENAI_CHAT_MODEL") ?? "gpt-4o-mini";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+// Basic CORS headers for browser calls
+const corsHeaders: HeadersInit = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 async function embedQuery(q: string): Promise<number[]> {
   const res = await fetch(`${OPENAI_BASE_URL}/embeddings`, {
     method: "POST",
@@ -25,10 +33,17 @@ async function embedQuery(q: string): Promise<number[]> {
 }
 
 serve(async (req) => {
+  // Preflight support
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   try {
     const { query, top_k = 8, min_similarity = 0.0 } = await req.json();
     if (!query || typeof query !== "string") {
-      return new Response(JSON.stringify({ error: "query required" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "query required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -36,7 +51,11 @@ serve(async (req) => {
     });
     const { data: user } = await supabase.auth.getUser();
     const userId = user.user?.id;
-    if (!userId) return new Response("Unauthorized", { status: 401 });
+    if (!userId)
+      return new Response("Unauthorized", {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
 
     const qEmb = await embedQuery(query);
     const { data: matches, error } = await supabase.rpc("match_user_documents", {
@@ -70,13 +89,20 @@ serve(async (req) => {
     const data = await resp.json();
     const answer = data.choices?.[0]?.message?.content ?? "";
 
-    return new Response(JSON.stringify({
-      answer,
-      sources: (matches ?? []).map((m: any) => ({ id: m.id, title: m.title, occurred_at: m.occurred_at })),
-    }), { headers: { "Content-Type": "application/json" }, status: 200 });
+    return new Response(
+      JSON.stringify({
+        answer,
+        sources: (matches ?? []).map((m: any) => ({
+          id: m.id,
+          title: m.title,
+          occurred_at: m.occurred_at,
+        })),
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+    );
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
   }
