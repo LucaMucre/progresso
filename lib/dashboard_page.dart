@@ -401,6 +401,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     const DropdownMenuItem(value: null, child: Text('Alle Bereiche')),
                     ...areas.map((a) => DropdownMenuItem<String?>(value: a.name, child: Text(a.name))).toList(),
                   ];
+                  final availableNames = areas.map((a) => a.name).toSet();
+                  final dropdownValue = (availableNames.contains(_selectedAreaFilterName))
+                      ? _selectedAreaFilterName
+                      : null;
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
@@ -410,7 +414,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                     child: DropdownButton<String?>
                     (
-                      value: _selectedAreaFilterName,
+                      value: dropdownValue,
                       items: items,
                       underline: const SizedBox.shrink(),
                       onChanged: (v) {
