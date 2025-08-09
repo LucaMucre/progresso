@@ -1401,17 +1401,14 @@ class _CalendarDayCell extends StatelessWidget {
       return <_DayEntry>[entries.first, _DayEntry(title: '+${entries.length - 1}')];
     }();
 
-    final cell = Padding(
-      padding: const EdgeInsets.all(4),
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
-        ),
-        child: Column(
+    // Base content
+    final content = Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -1442,15 +1439,19 @@ class _CalendarDayCell extends StatelessWidget {
                   ),
                 ),
               )),
-            ],
-          ),
-        ),
+        ],
       ),
     );
 
-    if (entries.isEmpty) return cell;
-    final tooltipText = entries.map((e) => e.title).join('\n');
-    return Tooltip(message: tooltipText, child: cell);
+    final padded = Padding(padding: const EdgeInsets.all(4), child: content);
+    final withTooltip = entries.isEmpty
+        ? padded
+        : Tooltip(message: entries.map((e) => e.title).join('\n'), child: padded);
+
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(onTap: onTap, child: withTooltip),
+    );
   }
 }
 
