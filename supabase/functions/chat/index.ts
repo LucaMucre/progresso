@@ -120,6 +120,7 @@ serve(async (req) => {
       "heute", "gestern"
     ];
     const isDataQuestion = DATA_KEYWORDS.some((k) => lowerQ2.includes(k));
+    const isCountQuestion = /wie\s*viele|anzahl|wieviel/.test(lowerQ2);
     let useDataMode = isDataQuestion && hadContext;
 
     // Fallback: if Daten-Frage aber kein Kontext → hole letzte N Tage direkt aus action_logs
@@ -143,6 +144,26 @@ serve(async (req) => {
           .map((m: any, i: number) => `# Log ${i + 1} (${m.occurred_at})\n${m.content}`)
           .join("\n\n");
         useDataMode = true; // Wir haben jetzt Kontext aus den Roh-Logs
+      }
+    }
+
+    // If it's a counting question, answer deterministisch via SQL count
+    if (isCountQuestion) {
+      const days = m ? Math.max(1, parseInt(m[1], 10)) : 7;
+      const since = (sinceIso ?? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
+      const { count, error: cErr } = await supabase
+        .from("action_logs")
+        .select("id", { head: true, count: "exact" })
+        .gte("occurred_at", since);
+      if (!cErr) {
+        const n = count ?? 0;
+        return new Response(
+          JSON.stringify({
+            answer: `Du hast in den letzten ${days} Tagen ${n} Aktivität${n === 1 ? '' : 'en'} erfasst.`,
+            sources: [],
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
       }
     }
 
