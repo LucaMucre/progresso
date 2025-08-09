@@ -288,10 +288,9 @@ class _BubblesGridState extends State<BubblesGrid> {
         width: canvasSize,
         child: Stack(
           children: [
-            // Character in the center - clickable to navigate to profile
-            Positioned(
-              left: (canvasSize - (80.0 * scale)) / 2,
-              top: (canvasSize - (80.0 * scale)) / 2,
+            // Character in the absolute center – robust against badge overflow
+            Align(
+              alignment: Alignment.center,
               child: GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
