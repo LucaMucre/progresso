@@ -139,8 +139,6 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
     final double padding = widget.compact ? 16 : 24;
     final double avatarSize = widget.compact ? 48 : 60;
     final double titleFontSize = widget.compact ? 18 : 20;
-    final double nameFontSize = widget.compact ? 14 : 16;
-    final double bioFontSize = widget.compact ? 11 : 12;
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -236,34 +234,13 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Willkommen zurück!',
+                  'Willkommen zurück, ${_userName ?? 'User'}!',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: titleFontSize,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _userName ?? 'User',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: nameFontSize,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (_userBio != null && _userBio!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    _userBio!,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: bioFontSize,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
               ],
             ),
           ),
