@@ -79,16 +79,35 @@ serve(async (req) => {
     if (privateMode) {
       const lower = query.toLowerCase();
       const isCount = /wie\s*viele|anzahl|wieviel/.test(lower);
-      const sinceMatch = lower.match(/letzten\s+(\d+)\s*tag/);
-      const days = sinceMatch ? Math.max(1, parseInt(sinceMatch[1], 10)) : 7;
+      // Zeitraum-Erkennung (Tag(e)/Tagen, Woche(n), Monat/Monaten)
+      let days = 7;
+      const mDays = lower.match(/letzten\s+(\d+)\s*tag(e|en)?/);
+      const mWeeks = lower.match(/letzten\s+(\d+)\s*woche(n)?/);
+      const mMonths = lower.match(/letzten\s+(\d+)\s*monat(en)?/);
+      if (mDays) days = Math.max(1, parseInt(mDays[1], 10));
+      else if (mWeeks) days = Math.max(1, parseInt(mWeeks[1], 10)) * 7;
+      else if (mMonths) days = Math.max(1, parseInt(mMonths[1], 10)) * 30;
+      if (/heute/.test(lower)) days = 1;
+      if (/gestern/.test(lower)) days = 2; // gestern + heute minimal sicher
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
       if (isCount) {
-        const { count } = await supabase
+        let { count } = await supabase
           .from("action_logs")
           .select("id", { head: true, count: "exact" })
           .gte("occurred_at", since);
         const n = count ?? 0;
+        if (n === 0) {
+          // Fallback: Gesamtzahl ermitteln
+          const totalRes = await supabase
+            .from("action_logs")
+            .select("id", { head: true, count: "exact" });
+          const total = totalRes.count ?? 0;
+          return new Response(JSON.stringify({
+            answer: `Im gewünschten Zeitraum (≈${days} Tage) keine Aktivitäten. Insgesamt hast du ${total} Aktivitäten erfasst.`,
+            sources: [],
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
         return new Response(JSON.stringify({
           answer: `Du hast in den letzten ${days} Tagen ${n} Aktivität${n === 1 ? '' : 'en'} erfasst.`,
           sources: [],
@@ -96,12 +115,24 @@ serve(async (req) => {
       }
 
       // Fallback im Private Mode: kurze Liste letzter Aktivitäten (Titel+Datum) aus SQL
-      const { data: rows } = await supabase
+      let { data: rows } = await supabase
         .from("action_logs")
         .select("id, occurred_at, notes")
         .gte("occurred_at", since)
         .order("occurred_at", { ascending: false })
         .limit(10);
+      if (!rows || rows.length === 0) {
+        // Wenn leer, auf 30 Tage erweitern
+        const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const res30 = await supabase
+          .from("action_logs")
+          .select("id, occurred_at, notes")
+          .gte("occurred_at", since30)
+          .order("occurred_at", { ascending: false })
+          .limit(10);
+        rows = res30.data ?? [];
+        days = Math.max(days, 30);
+      }
       const lines = (rows ?? []).map((r: any) => `- ${new Date(r.occurred_at).toISOString().slice(0,10)}: ${quillToPlaintext(r.notes ?? "").split("\n")[0]}`);
       const text = lines.length > 0
         ? `Letzte Aktivitäten (ca. ${days} Tage):\n` + lines.join("\n")
