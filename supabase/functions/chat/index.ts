@@ -87,7 +87,9 @@ serve(async (req) => {
       .map((m: any, i: number) => `# Doc ${i + 1}\n${m.content}`)
       .join("\n\n");
 
-    const prompt = `Beantworte präzise auf Basis des Kontextes. Wenn keine Info vorhanden ist, sage: \"Keine Daten vorhanden.\"\n\nKontext:\n${context}\n\nFrage: ${query}`;
+    const hadContext = context.trim().length > 0;
+    const dataPrompt = `Beantworte präzise auf Basis des Kontextes. Wenn keine Info vorhanden ist, sage: \"Keine Daten vorhanden.\"\n\nKontext:\n${context}\n\nFrage: ${query}`;
+    const smalltalkPrompt = query; // direkte Nutzerfrage ohne Kontext
 
     const resp = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: "POST",
@@ -97,11 +99,16 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: OPENAI_CHAT_MODEL,
-        messages: [
-          { role: "system", content: "Du bist ein strukturierter Assistent für persönliche Aktivitätsdaten. Antworte kurz, präzise, auf Deutsch, mit klaren Aufzählungen. Wenn die Datenlage unsicher ist, sag es explizit. Zähle wenn möglich konkrete Werte (Anzahl, Summen)." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.1,
+        messages: hadContext
+          ? [
+              { role: "system", content: "Du bist ein strukturierter Assistent für persönliche Aktivitätsdaten. Antworte kurz, präzise, auf Deutsch, mit klaren Aufzählungen. Wenn die Datenlage unsicher ist, sag es explizit. Zähle wenn möglich konkrete Werte (Anzahl, Summen)." },
+              { role: "user", content: dataPrompt },
+            ]
+          : [
+              { role: "system", content: "Du bist ein freundlicher Assistent innerhalb einer Produktivitäts-App. Antworte kurz und hilfreich auf Deutsch. Wenn der Nutzer nach seinen Daten fragt, erkläre, dass du auf seine Einträge zugreifen kannst und er z. B. nach \"Fasse meine letzten 7 Tage\" fragen kann." },
+              { role: "user", content: smalltalkPrompt },
+            ],
+        temperature: hadContext ? 0.1 : 0.5,
       }),
     });
     if (!resp.ok) throw new Error(await resp.text());
@@ -111,11 +118,11 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         answer,
-        sources: (filtered ?? []).map((m: any) => ({
+        sources: hadContext ? (filtered ?? []).map((m: any) => ({
           id: m.id,
           title: m.title,
           occurred_at: m.occurred_at,
-        })),
+        })) : [],
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
