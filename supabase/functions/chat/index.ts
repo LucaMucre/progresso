@@ -95,13 +95,15 @@ serve(async (req) => {
         let { count } = await supabase
           .from("action_logs")
           .select("id", { head: true, count: "exact" })
+          .eq("user_id", userId)
           .gte("occurred_at", since);
         const n = count ?? 0;
         if (n === 0) {
           // Fallback: Gesamtzahl ermitteln
           const totalRes = await supabase
             .from("action_logs")
-            .select("id", { head: true, count: "exact" });
+            .select("id", { head: true, count: "exact" })
+            .eq("user_id", userId);
           const total = totalRes.count ?? 0;
           return new Response(JSON.stringify({
             answer: `Im gewünschten Zeitraum (≈${days} Tage) keine Aktivitäten. Insgesamt hast du ${total} Aktivitäten erfasst.`,
@@ -118,6 +120,7 @@ serve(async (req) => {
       let { data: rows } = await supabase
         .from("action_logs")
         .select("id, occurred_at, notes")
+        .eq("user_id", userId)
         .gte("occurred_at", since)
         .order("occurred_at", { ascending: false })
         .limit(10);
@@ -127,6 +130,7 @@ serve(async (req) => {
         const res30 = await supabase
           .from("action_logs")
           .select("id, occurred_at, notes")
+          .eq("user_id", userId)
           .gte("occurred_at", since30)
           .order("occurred_at", { ascending: false })
           .limit(10);
