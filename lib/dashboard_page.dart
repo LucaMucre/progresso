@@ -1450,7 +1450,14 @@ class _CalendarDayCell extends StatelessWidget {
 
     return MouseRegion(
       cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(onTap: onTap, child: withTooltip),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          debugPrint('Calendar day tapped: $day');
+          if (onTap != null) onTap!();
+        },
+        child: withTooltip,
+      ),
     );
   }
 }
