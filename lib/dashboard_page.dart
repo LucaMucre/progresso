@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_page.dart';
 import 'dashboard_page.dart';
@@ -86,7 +87,7 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
-  Future<Map<DateTime, List<String>>> _loadCalendarLogsForMonth(DateTime month) async {
+  Future<Map<DateTime, List<_DayEntry>>> _loadCalendarLogsForMonth(DateTime month) async {
     final client = Supabase.instance.client;
     final user = client.auth.currentUser;
     if (user == null) return {};
@@ -110,7 +111,7 @@ class _DashboardPageState extends State<DashboardPage> {
       // Preferred selection including activity_name (if the column exists)
       logsRes = await client
           .from('action_logs')
-          .select('occurred_at, template_id, activity_name')
+          .select('occurred_at, template_id, activity_name, notes')
           .eq('user_id', user.id)
           .gte('occurred_at', startOfMonth.toIso8601String())
           .lt('occurred_at', startOfNextMonth.toIso8601String())
@@ -120,7 +121,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if ((e.message ?? '').contains('activity_name')) {
         logsRes = await client
             .from('action_logs')
-            .select('occurred_at, template_id')
+            .select('occurred_at, template_id, notes')
             .eq('user_id', user.id)
             .gte('occurred_at', startOfMonth.toIso8601String())
             .lt('occurred_at', startOfNextMonth.toIso8601String())
@@ -133,16 +134,47 @@ class _DashboardPageState extends State<DashboardPage> {
       return {};
     }
 
-    final Map<DateTime, List<String>> dayToTitles = {};
+    // Load life areas for color tagging
+    final lifeAreasRes = await client
+        .from('life_areas')
+        .select('name,category,color')
+        .eq('user_id', user.id);
+    final List<_AreaTag> areaTags = (lifeAreasRes as List).map((m) => _AreaTag(
+      name: (m['name'] as String).trim(),
+      category: (m['category'] as String).trim(),
+      color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
+    )).toList();
+
+    final Map<DateTime, List<_DayEntry>> dayToTitles = {};
 
     for (final row in logsRes) {
       final occurredAt = DateTime.parse(row['occurred_at'] as String).toLocal();
       final dayKey = DateTime(occurredAt.year, occurredAt.month, occurredAt.day);
       final String? activityName = row['activity_name'] as String?; // may be null if not selected
       final String? templateId = row['template_id'] as String?;
-      final String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Aktivität') : 'Aktivität');
+      final String? notes = row['notes'] as String?;
 
-      dayToTitles.putIfAbsent(dayKey, () => <String>[]).add(title);
+      String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Aktivität') : 'Aktivität');
+      Color? tagColor;
+      if (notes != null && notes.isNotEmpty) {
+        try {
+          final obj = jsonDecode(notes);
+          if (obj is Map<String, dynamic>) {
+            final t = obj['title'];
+            if (t is String && t.trim().isNotEmpty) {
+              title = t.trim();
+            }
+            final areaName = obj['area'];
+            final category = obj['category'];
+            if (areaName is String || category is String) {
+              final match = _matchAreaTag(areaTags, areaName as String?, category as String?);
+              if (match != null) tagColor = match.color;
+            }
+          }
+        } catch (_) {}
+      }
+
+      dayToTitles.putIfAbsent(dayKey, () => <_DayEntry>[]).add(_DayEntry(title: title, color: tagColor));
     }
 
     return dayToTitles;
@@ -205,7 +237,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
           ),
           const SizedBox(height: 8),
-          FutureBuilder<Map<DateTime, List<String>>>(
+          FutureBuilder<Map<DateTime, List<_DayEntry>>>(
             future: _loadCalendarLogsForMonth(_calendarMonth),
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
@@ -232,8 +264,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     cells.add(Container(height: 84));
                   } else {
                     final dayDate = DateTime(_calendarMonth.year, _calendarMonth.month, dayCounter);
-                    final titles = data[dayDate] ?? const <String>[];
-                    cells.add(_CalendarDayCell(day: dayCounter, titles: titles));
+                    final entries = data[dayDate] ?? const <_DayEntry>[];
+                    cells.add(_CalendarDayCell(day: dayCounter, entries: entries));
                     dayCounter++;
                   }
                 }
@@ -1196,22 +1228,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
 class _CalendarDayCell extends StatelessWidget {
   final int day;
-  final List<String> titles;
+  final List<_DayEntry> entries;
 
   const _CalendarDayCell({
     Key? key,
     required this.day,
-    required this.titles,
+    required this.entries,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"
-    final List<String> shown = () {
-      if (titles.isEmpty) return const <String>[];
-      if (titles.length == 1) return <String>[titles.first];
-      return <String>[titles.first, '+${titles.length - 1}'];
+    final List<_DayEntry> shown = () {
+      if (entries.isEmpty) return const <_DayEntry>[];
+      if (entries.length == 1) return <_DayEntry>[entries.first];
+      return <_DayEntry>[entries.first, _DayEntry(title: '+${entries.length - 1}')];
     }();
 
     final cell = Container(
@@ -1232,25 +1264,63 @@ class _CalendarDayCell extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 4),
-          ...shown.map((t) => Padding(
+          ...shown.map((e) => Padding(
                 padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  t,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontSize: 12,
-                        height: 1.1,
-                        color: colorScheme.onSurface.withOpacity(0.75),
-                      ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (e.color ?? colorScheme.primary).withOpacity(e.title.startsWith('+') ? 0.0 : 0.10),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    e.title,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 12,
+                          height: 1.1,
+                          color: colorScheme.onSurface.withOpacity(0.8),
+                        ),
+                  ),
                 ),
               )),
         ],
       ),
     );
 
-    if (titles.isEmpty) return cell;
-    final tooltipText = titles.join('\n');
+    if (entries.isEmpty) return cell;
+    final tooltipText = entries.map((e) => e.title).join('\n');
     return Tooltip(message: tooltipText, child: cell);
   }
+}
+
+class _DayEntry {
+  final String title;
+  final Color? color;
+  const _DayEntry({required this.title, this.color});
+}
+
+class _AreaTag {
+  final String name;
+  final String category;
+  final Color color;
+  const _AreaTag({required this.name, required this.category, required this.color});
+}
+
+Color _parseHexColor(String hex) {
+  try {
+    return Color(int.parse(hex.replaceAll('#', '0xFF')));
+  } catch (_) {
+    return Colors.blue;
+  }
+}
+
+_AreaTag? _matchAreaTag(List<_AreaTag> tags, String? areaName, String? category) {
+  final an = areaName?.toLowerCase();
+  final cat = category?.toLowerCase();
+  for (final t in tags) {
+    if (an != null && an.isNotEmpty && t.name.toLowerCase() == an) return t;
+    if (cat != null && cat.isNotEmpty && t.category.toLowerCase() == cat) return t;
+  }
+  return null;
 }

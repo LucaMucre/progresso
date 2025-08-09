@@ -199,12 +199,17 @@ class _LogActionPageState extends State<LogActionPage> {
       
       if (widget.template != null) {
         // Use existing template
+        // Ensure we also persist context (area, category, title) in notes wrapper for later display
+        final String wrappedNotes = jsonEncode({
+          'area': widget.selectedArea ?? '',
+          'category': widget.selectedCategory ?? 'Allgemein',
+          'title': widget.template!.name,
+          'delta': _quillCtrl.document.toDelta().toJson(),
+        });
         log = await createLog(
           templateId : widget.template!.id,
           durationMin: duration,
-          notes      : _quillCtrl.document.toDelta().isEmpty
-              ? null
-              : jsonEncode(_quillCtrl.document.toDelta().toJson()),
+          notes      : wrappedNotes,
           imageUrl   : imageUrl,
         );
       } else {
