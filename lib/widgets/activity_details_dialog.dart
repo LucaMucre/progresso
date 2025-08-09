@@ -35,6 +35,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
   String? _selectedImageUrl;
   String? _uploadedImageUrl;
   String _activityTitle = 'Aktivität';
+  Color? _areaColor;
 
   @override
   void initState() {
@@ -42,6 +43,40 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     _durationCtrl.text = widget.log.durationMin?.toString() ?? '';
     _notesCtrl.text = widget.log.notes ?? '';
     _initTitle();
+    _initAreaColor();
+  }
+
+  void _initAreaColor() {
+    final notes = widget.log.notes;
+    if (notes == null || notes.isEmpty) return;
+    try {
+      final obj = jsonDecode(notes);
+      if (obj is Map<String, dynamic>) {
+        final areaName = obj['area'] as String?;
+        final category = obj['category'] as String?;
+        if (areaName != null || category != null) {
+          // Try to resolve color from life_areas
+          Supabase.instance.client
+              .from('life_areas')
+              .select('name,category,color')
+              .eq('user_id', Supabase.instance.client.auth.currentUser?.id)
+              .then((res) {
+            if (!mounted) return;
+            for (final m in (res as List)) {
+              final name = (m['name'] as String?)?.toLowerCase();
+              final cat = (m['category'] as String?)?.toLowerCase();
+              if ((areaName != null && name == areaName.toLowerCase()) ||
+                  (category != null && cat == category.toLowerCase())) {
+                setState(() {
+                  _areaColor = Color(int.parse((m['color'] as String).replaceAll('#', '0xFF')));
+                });
+                break;
+              }
+            }
+          }).catchError((_) {});
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _initTitle() async {
@@ -374,7 +409,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                color: (_areaColor ?? Theme.of(context).primaryColor).withOpacity(0.12),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(12),
                   topRight: Radius.circular(12),
