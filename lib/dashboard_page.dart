@@ -15,6 +15,7 @@ import 'services/avatar_sync_service.dart';
 import 'widgets/bubble_widget.dart';
 import 'widgets/profile_header_widget.dart';
 import 'templates_page.dart';
+import 'widgets/activity_details_dialog.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -85,6 +86,151 @@ class _DashboardPageState extends State<DashboardPage> {
         _calendarMonth.month + 1,
       );
     });
+  }
+
+  Future<List<ActionLog>> _fetchLogsForDay(DateTime day) async {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return [];
+
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+
+    final res = await client
+        .from('action_logs')
+        .select('id, occurred_at, duration_min, notes, earned_xp, template_id, activity_name, image_url')
+        .eq('user_id', user.id)
+        .gte('occurred_at', start.toIso8601String())
+        .lt('occurred_at', end.toIso8601String())
+        .order('occurred_at');
+
+    return (res as List).map((m) => ActionLog.fromMap(m as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> _openDayDetails(DateTime day) async {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    // Fetch data in parallel
+    final results = await Future.wait([
+      _fetchLogsForDay(day),
+      client.from('action_templates').select('id,name').eq('user_id', user.id),
+      client.from('life_areas').select('name,category,color').eq('user_id', user.id),
+    ]);
+
+    final logs = results[0] as List<ActionLog>;
+    final templateMap = {
+      for (final t in (results[1] as List)) (t['id'] as String): (t['name'] as String)
+    };
+    final List<_AreaTag> areaTags = (results[2] as List).map((m) => _AreaTag(
+      name: (m['name'] as String).trim(),
+      category: (m['category'] as String).trim(),
+      color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
+    )).toList();
+
+    String titleForLog(ActionLog log) {
+      if (log.activityName != null && log.activityName!.trim().isNotEmpty) {
+        return log.activityName!.trim();
+      }
+      final fromNotes = extractTitleFromNotes(log.notes);
+      if (fromNotes != null && fromNotes.trim().isNotEmpty) return fromNotes.trim();
+      if (log.templateId != null && templateMap[log.templateId!] != null) {
+        return templateMap[log.templateId!]!;
+      }
+      return 'Aktivität';
+    }
+
+    Color? tagColorForLog(ActionLog log) {
+      try {
+        if (log.notes == null || log.notes!.isEmpty) return null;
+        final obj = jsonDecode(log.notes!);
+        if (obj is Map<String, dynamic>) {
+          final areaName = obj['area'] as String?;
+          final category = obj['category'] as String?;
+          final match = _matchAreaTag(areaTags, areaName, category);
+          return match?.color;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final dayLabel = DateFormat.yMMMMd('de_DE').format(day);
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            width: 560,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        dayLabel,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (logs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text('Keine Aktivitäten an diesem Tag', style: Theme.of(context).textTheme.bodyMedium),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: logs.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final log = logs[i];
+                        final t = titleForLog(log);
+                        final c = tagColorForLog(log) ?? Theme.of(context).colorScheme.primary;
+                        return ListTile(
+                          dense: true,
+                          leading: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                          ),
+                          title: Text(t, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Row(
+                            children: [
+                              if (log.durationMin != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 12),
+                                  child: Row(children: [const Icon(Icons.timer, size: 12), const SizedBox(width: 4), Text('${log.durationMin} Min')]),
+                                ),
+                              Row(children: [const Icon(Icons.star, size: 12), const SizedBox(width: 4), Text('+${log.earnedXp}')]),
+                            ],
+                          ),
+                          onTap: () => showDialog(
+                            context: context,
+                            builder: (_) => ActivityDetailsDialog(log: log),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<Map<DateTime, List<_DayEntry>>> _loadCalendarLogsForMonth(DateTime month) async {
@@ -265,7 +411,11 @@ class _DashboardPageState extends State<DashboardPage> {
                   } else {
                     final dayDate = DateTime(_calendarMonth.year, _calendarMonth.month, dayCounter);
                     final entries = data[dayDate] ?? const <_DayEntry>[];
-                    cells.add(_CalendarDayCell(day: dayCounter, entries: entries));
+                    cells.add(_CalendarDayCell(
+                      day: dayCounter,
+                      entries: entries,
+                      onTap: () => _openDayDetails(dayDate),
+                    ));
                     dayCounter++;
                   }
                 }
@@ -1229,11 +1379,13 @@ class _DashboardPageState extends State<DashboardPage> {
 class _CalendarDayCell extends StatelessWidget {
   final int day;
   final List<_DayEntry> entries;
+  final VoidCallback? onTap;
 
   const _CalendarDayCell({
     Key? key,
     required this.day,
     required this.entries,
+    this.onTap,
   }) : super(key: key);
 
   @override
@@ -1246,14 +1398,16 @@ class _CalendarDayCell extends StatelessWidget {
       return <_DayEntry>[entries.first, _DayEntry(title: '+${entries.length - 1}')];
     }();
 
-    final cell = Container(
+    final cell = InkWell(
+      onTap: onTap,
       margin: const EdgeInsets.all(4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
-      ),
-      child: Column(
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -1285,6 +1439,7 @@ class _CalendarDayCell extends StatelessWidget {
                 ),
               )),
         ],
+      ),
       ),
     );
 
