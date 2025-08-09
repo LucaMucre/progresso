@@ -71,13 +71,17 @@ serve(async (req) => {
     const { data: matches, error } = await supabase.rpc("match_user_documents", {
       query_embedding: qEmb as unknown as any,
       match_count: Math.max(12, top_k),
-      min_similarity: Math.max(0.05, min_similarity),
+      min_similarity: Math.max(0.2, min_similarity),
       uid: userId,
     });
     if (error) throw error;
 
+    // Similarity guard: require decent similarity, else treat as smalltalk
+    const SIM_THRESHOLD = 0.2;
+    const bySim = (matches ?? []).filter((d: any) => (typeof d?.similarity === "number" ? d.similarity : 0) >= SIM_THRESHOLD);
+
     // Optional time filter client-side using occurred_at
-    const filtered = (matches ?? []).filter((d: any) => {
+    const filtered = bySim.filter((d: any) => {
       if (!sinceIso) return true;
       if (!d?.occurred_at) return false;
       try { return new Date(d.occurred_at).toISOString() >= sinceIso; } catch { return false; }
@@ -87,7 +91,7 @@ serve(async (req) => {
       .map((m: any, i: number) => `# Doc ${i + 1}\n${m.content}`)
       .join("\n\n");
 
-    const hadContext = context.trim().length > 0;
+    const hadContext = filtered.length > 0 && context.trim().length > 0;
     const dataPrompt = `Beantworte präzise auf Basis des Kontextes. Wenn keine Info vorhanden ist, sage: \"Keine Daten vorhanden.\"\n\nKontext:\n${context}\n\nFrage: ${query}`;
     const smalltalkPrompt = query; // direkte Nutzerfrage ohne Kontext
 
