@@ -96,15 +96,29 @@ class _DashboardPageState extends State<DashboardPage> {
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
 
-    final res = await client
-        .from('action_logs')
-        .select('id, occurred_at, duration_min, notes, earned_xp, template_id, activity_name, image_url')
-        .eq('user_id', user.id)
-        .gte('occurred_at', start.toIso8601String())
-        .lt('occurred_at', end.toIso8601String())
-        .order('occurred_at');
-
-    return (res as List).map((m) => ActionLog.fromMap(m as Map<String, dynamic>)).toList();
+    try {
+      final res = await client
+          .from('action_logs')
+          .select('id, occurred_at, duration_min, notes, earned_xp, template_id, activity_name, image_url')
+          .eq('user_id', user.id)
+          .gte('occurred_at', start.toIso8601String())
+          .lt('occurred_at', end.toIso8601String())
+          .order('occurred_at');
+      return (res as List).map((m) => ActionLog.fromMap(m as Map<String, dynamic>)).toList();
+    } on PostgrestException catch (e) {
+      // Fallback when activity_name column doesn't exist
+      if ((e.message ?? '').contains('activity_name')) {
+        final res = await client
+            .from('action_logs')
+            .select('id, occurred_at, duration_min, notes, earned_xp, template_id, image_url')
+            .eq('user_id', user.id)
+            .gte('occurred_at', start.toIso8601String())
+            .lt('occurred_at', end.toIso8601String())
+            .order('occurred_at');
+        return (res as List).map((m) => ActionLog.fromMap(m as Map<String, dynamic>)).toList();
+      }
+      rethrow;
+    }
   }
 
   Future<void> _openDayDetails(DateTime day) async {
