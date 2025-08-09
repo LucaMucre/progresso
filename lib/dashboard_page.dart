@@ -939,7 +939,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 final isWide = constraints.maxWidth > 900;
 
                 final streakCard = Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
@@ -966,19 +966,22 @@ class _DashboardPageState extends State<DashboardPage> {
                       return Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            width: 44,
+                            height: 44,
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [Colors.orange, Colors.deepOrange],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(
-                              Icons.local_fire_department,
-                              color: Colors.white,
-                              size: 28,
+                            child: const Center(
+                              child: Icon(
+                                Icons.local_fire_department,
+                                color: Colors.white,
+                                size: 32,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -1004,7 +1007,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
 
                 if (isWide) {
-                  const double heroRowHeight = 120;
+                  const double heroRowHeight = 96;
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
