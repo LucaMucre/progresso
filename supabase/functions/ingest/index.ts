@@ -22,27 +22,48 @@ const corsHeaders: HeadersInit = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function quillToPlaintext(notes?: string | null): string {
+function quillToPlaintext(notes?: string | null, occurredAtIso?: string | null): string {
   if (!notes) return "";
   try {
     const obj = JSON.parse(notes);
+    let metaTitle = "";
+    let metaArea = "";
+    let metaCategory = "";
+    // Optional metadata wrapper we store in notes
+    if (typeof obj === "object" && obj && !Array.isArray(obj)) {
+      const maybeTitle = (obj as any).title ?? (obj as any).name;
+      const maybeArea = (obj as any).area;
+      const maybeCategory = (obj as any).category;
+      metaTitle = typeof maybeTitle === "string" ? maybeTitle : "";
+      metaArea = typeof maybeArea === "string" ? maybeArea : "";
+      metaCategory = typeof maybeCategory === "string" ? maybeCategory : "";
+    }
+
+    const header: string[] = [];
+    if (metaTitle) header.push(`Titel: ${metaTitle}`);
+    if (metaArea || metaCategory) header.push(`Bereich: ${metaArea}${metaCategory ? `/${metaCategory}` : ""}`);
+    if (occurredAtIso) header.push(`Datum: ${occurredAtIso}`);
+
     // Legacy array of ops
     if (Array.isArray(obj)) {
-      return (obj as unknown[])
+      const body = (obj as unknown[])
         .map((op: any) => (typeof op?.insert === "string" ? op.insert : ""))
         .join("");
+      return [...header, body].filter(Boolean).join("\n");
     }
     // Wrapped: { delta: [...] }
     if (typeof obj === "object" && obj && "delta" in obj) {
       const ops = (obj as any).delta as unknown[];
-      return ops
+      const body = ops
         .map((op: any) => (typeof op?.insert === "string" ? op.insert : ""))
         .join("");
+      return [...header, body].filter(Boolean).join("\n");
     }
   } catch (_) {
     // plain text fallback
   }
-  return notes;
+  // Fallback: prepend date line if available
+  return [occurredAtIso ? `Datum: ${occurredAtIso}` : "", notes].filter(Boolean).join("\n");
 }
 
 function chunkText(text: string, maxLen = 2000, overlap = 200): string[] {
@@ -103,7 +124,7 @@ serve(async (req) => {
     let totalChunks = 0;
 
     for (const log of logs ?? []) {
-      const text = quillToPlaintext(log.notes ?? "");
+      const text = quillToPlaintext(log.notes ?? "", log.occurred_at ?? null);
       const chunks = chunkText(text);
       if (chunks.length === 0) continue;
 

@@ -58,15 +58,34 @@ serve(async (req) => {
       });
 
     const qEmb = await embedQuery(query);
+    // Very light time-window parsing (German): "letzten X tag(e)" → filter client-side after match
+    const lowerQ = query.toLowerCase();
+    let sinceIso: string | null = null;
+    const m = lowerQ.match(/letzten\s+(\d+)\s*tag/);
+    if (m) {
+      const days = Math.max(1, parseInt(m[1], 10));
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      sinceIso = since.toISOString();
+    }
+
     const { data: matches, error } = await supabase.rpc("match_user_documents", {
       query_embedding: qEmb as unknown as any,
-      match_count: top_k,
-      min_similarity,
+      match_count: Math.max(12, top_k),
+      min_similarity: Math.max(0.05, min_similarity),
       uid: userId,
     });
     if (error) throw error;
 
-    const context = (matches ?? []).map((m: any, i: number) => `# Doc ${i + 1}\n${m.content}`).join("\n\n");
+    // Optional time filter client-side using occurred_at
+    const filtered = (matches ?? []).filter((d: any) => {
+      if (!sinceIso) return true;
+      if (!d?.occurred_at) return false;
+      try { return new Date(d.occurred_at).toISOString() >= sinceIso; } catch { return false; }
+    });
+
+    const context = filtered
+      .map((m: any, i: number) => `# Doc ${i + 1}\n${m.content}`)
+      .join("\n\n");
 
     const prompt = `Beantworte präzise auf Basis des Kontextes. Wenn keine Info vorhanden ist, sage: \"Keine Daten vorhanden.\"\n\nKontext:\n${context}\n\nFrage: ${query}`;
 
@@ -79,10 +98,10 @@ serve(async (req) => {
       body: JSON.stringify({
         model: OPENAI_CHAT_MODEL,
         messages: [
-          { role: "system", content: "Du beantwortest Fragen zu den Daten des Nutzers." },
+          { role: "system", content: "Du bist ein strukturierter Assistent für persönliche Aktivitätsdaten. Antworte kurz, präzise, auf Deutsch, mit klaren Aufzählungen. Wenn die Datenlage unsicher ist, sag es explizit. Zähle wenn möglich konkrete Werte (Anzahl, Summen)." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.2,
+        temperature: 0.1,
       }),
     });
     if (!resp.ok) throw new Error(await resp.text());
@@ -92,7 +111,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         answer,
-        sources: (matches ?? []).map((m: any) => ({
+        sources: (filtered ?? []).map((m: any) => ({
           id: m.id,
           title: m.title,
           occurred_at: m.occurred_at,
