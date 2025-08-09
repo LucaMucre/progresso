@@ -32,6 +32,24 @@ async function embedQuery(q: string): Promise<number[]> {
   return data.data[0].embedding as number[];
 }
 
+// Minimal plaintext extractor to reuse notes content if needed
+function quillToPlaintext(notes?: string | null): string {
+  if (!notes) return "";
+  try {
+    const obj = JSON.parse(notes);
+    if (Array.isArray(obj)) {
+      return (obj as unknown[])
+        .map((op: any) => (typeof op?.insert === "string" ? op.insert : ""))
+        .join("");
+    }
+    if (typeof obj === "object" && obj && "delta" in obj) {
+      const ops = (obj as any).delta as unknown[];
+      return ops.map((op: any) => (typeof op?.insert === "string" ? op.insert : "")).join("");
+    }
+  } catch (_) {}
+  return notes;
+}
+
 serve(async (req) => {
   // Preflight support
   if (req.method === "OPTIONS") {
@@ -87,7 +105,8 @@ serve(async (req) => {
       try { return new Date(d.occurred_at).toISOString() >= sinceIso; } catch { return false; }
     });
 
-    const context = filtered
+    let docsForContext: any[] = [...filtered];
+    let context = docsForContext
       .map((m: any, i: number) => `# Doc ${i + 1}\n${m.content}`)
       .join("\n\n");
 
@@ -101,7 +120,31 @@ serve(async (req) => {
       "heute", "gestern"
     ];
     const isDataQuestion = DATA_KEYWORDS.some((k) => lowerQ2.includes(k));
-    const useDataMode = isDataQuestion && hadContext;
+    let useDataMode = isDataQuestion && hadContext;
+
+    // Fallback: if Daten-Frage aber kein Kontext → hole letzte N Tage direkt aus action_logs
+    if (isDataQuestion && !hadContext) {
+      const days = m ? Math.max(1, parseInt(m[1], 10)) : 7;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data: rawLogs, error: logsErr } = await supabase
+        .from("action_logs")
+        .select("id, occurred_at, notes, template_id")
+        .gte("occurred_at", since)
+        .order("occurred_at", { ascending: false });
+      if (!logsErr && (rawLogs?.length ?? 0) > 0) {
+        const fallbackDocs = (rawLogs ?? []).slice(0, 20).map((r: any, i: number) => ({
+          id: r.id,
+          title: "Log",
+          occurred_at: r.occurred_at,
+          content: quillToPlaintext(r.notes ?? ""),
+        }));
+        docsForContext = fallbackDocs;
+        context = fallbackDocs
+          .map((m: any, i: number) => `# Log ${i + 1} (${m.occurred_at})\n${m.content}`)
+          .join("\n\n");
+        useDataMode = true; // Wir haben jetzt Kontext aus den Roh-Logs
+      }
+    }
 
     const dataPrompt = `Beantworte präzise auf Basis des Kontextes. Wenn keine Info vorhanden ist, sage: \"Keine Daten vorhanden.\"\n\nKontext:\n${context}\n\nFrage: ${query}`;
     const smalltalkPrompt = query; // direkte Nutzerfrage ohne Kontext
@@ -133,7 +176,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         answer,
-        sources: useDataMode ? (filtered ?? []).map((m: any) => ({
+        sources: useDataMode ? (docsForContext ?? []).map((m: any) => ({
           id: m.id,
           title: m.title,
           occurred_at: m.occurred_at,
