@@ -1443,21 +1443,25 @@ class _CalendarDayCell extends StatelessWidget {
       ),
     );
 
-    final padded = Padding(padding: const EdgeInsets.all(4), child: content);
+    final tappable = Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () {
+          debugPrint('Calendar day tapped: $day');
+          if (onTap != null) onTap!();
+        },
+        child: content,
+      ),
+    );
+
+    final padded = Padding(padding: const EdgeInsets.all(4), child: tappable);
     final withTooltip = entries.isEmpty
         ? padded
         : Tooltip(message: entries.map((e) => e.title).join('\n'), child: padded);
 
     return MouseRegion(
       cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          debugPrint('Calendar day tapped: $day');
-          if (onTap != null) onTap!();
-        },
-        child: withTooltip,
-      ),
+      child: withTooltip,
     );
   }
 }
