@@ -217,6 +217,7 @@ class _LogActionPageState extends State<LogActionPage> {
         final String notesDeltaJson = jsonEncode({
           'area': areaName,
           'category': category,
+          'title': activityName,
           'delta': _quillCtrl.document.toDelta().toJson(),
         });
         

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_page.dart';
 import 'dashboard_page.dart';
@@ -24,6 +25,10 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   // Add a counter to force FutureBuilder rebuild
   int _refreshCounter = 0;
+  // Toggle between bubbles view and calendar view for life areas container
+  bool _isCalendarView = false;
+  // Current month displayed in the calendar view
+  DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override
   void didChangeDependencies() {
@@ -61,6 +66,197 @@ class _DashboardPageState extends State<DashboardPage> {
     } catch (e) {
       print('SignOut Fehler: $e');
     }
+  }
+
+  void _goToPreviousMonth() {
+    setState(() {
+      _calendarMonth = DateTime(
+        _calendarMonth.year,
+        _calendarMonth.month - 1,
+      );
+    });
+  }
+
+  void _goToNextMonth() {
+    setState(() {
+      _calendarMonth = DateTime(
+        _calendarMonth.year,
+        _calendarMonth.month + 1,
+      );
+    });
+  }
+
+  Future<Map<DateTime, List<String>>> _loadCalendarLogsForMonth(DateTime month) async {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return {};
+
+    // Build range for the month [start, nextMonthStart)
+    final startOfMonth = DateTime(month.year, month.month, 1);
+    final startOfNextMonth = DateTime(month.year, month.month + 1, 1);
+
+    // Fetch templates once to resolve template_id to names
+    final templatesRes = await client
+        .from('action_templates')
+        .select('id,name')
+        .eq('user_id', user.id);
+
+    final Map<String, String> templateIdToName = {
+      for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
+    };
+
+    List logsRes;
+    try {
+      // Preferred selection including activity_name (if the column exists)
+      logsRes = await client
+          .from('action_logs')
+          .select('occurred_at, template_id, activity_name')
+          .eq('user_id', user.id)
+          .gte('occurred_at', startOfMonth.toIso8601String())
+          .lt('occurred_at', startOfNextMonth.toIso8601String())
+          .order('occurred_at') as List;
+    } on PostgrestException catch (e) {
+      // Fallback for schemas without activity_name
+      if ((e.message ?? '').contains('activity_name')) {
+        logsRes = await client
+            .from('action_logs')
+            .select('occurred_at, template_id')
+            .eq('user_id', user.id)
+            .gte('occurred_at', startOfMonth.toIso8601String())
+            .lt('occurred_at', startOfNextMonth.toIso8601String())
+            .order('occurred_at') as List;
+      } else {
+        rethrow;
+      }
+    } catch (e) {
+      print('Fehler beim Laden der Kalenderdaten: $e');
+      return {};
+    }
+
+    final Map<DateTime, List<String>> dayToTitles = {};
+
+    for (final row in logsRes) {
+      final occurredAt = DateTime.parse(row['occurred_at'] as String).toLocal();
+      final dayKey = DateTime(occurredAt.year, occurredAt.month, occurredAt.day);
+      final String? activityName = row['activity_name'] as String?; // may be null if not selected
+      final String? templateId = row['template_id'] as String?;
+      final String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Aktivität') : 'Aktivität');
+
+      dayToTitles.putIfAbsent(dayKey, () => <String>[]).add(title);
+    }
+
+    return dayToTitles;
+  }
+
+  Widget _buildCalendarContainer(BuildContext context) {
+    final monthLabel = DateFormat.yMMMM('de_DE').format(_calendarMonth);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: _goToPreviousMonth,
+                    tooltip: 'Vorheriger Monat',
+                  ),
+                  Text(
+                    monthLabel,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: _goToNextMonth,
+                    tooltip: 'Nächster Monat',
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Expanded(child: Center(child: Text('Mo'))),
+              Expanded(child: Center(child: Text('Di'))),
+              Expanded(child: Center(child: Text('Mi'))),
+              Expanded(child: Center(child: Text('Do'))),
+              Expanded(child: Center(child: Text('Fr'))),
+              Expanded(child: Center(child: Text('Sa'))),
+              Expanded(child: Center(child: Text('So'))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FutureBuilder<Map<DateTime, List<String>>>(
+            future: _loadCalendarLogsForMonth(_calendarMonth),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final data = snapshot.data ?? {};
+
+              final firstDayOfMonth = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
+              final daysInMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0).day;
+              final leadingEmpty = (firstDayOfMonth.weekday + 6) % 7; // 0 for Monday, ... 6 for Sunday
+
+              final totalCells = leadingEmpty + daysInMonth;
+              final rows = <TableRow>[];
+              int dayCounter = 1;
+
+              for (int r = 0; r < (totalCells / 7.0).ceil(); r++) {
+                final cells = <Widget>[];
+                for (int c = 0; c < 7; c++) {
+                  final cellIndex = r * 7 + c;
+                  if (cellIndex < leadingEmpty || dayCounter > daysInMonth) {
+                    cells.add(Container(height: 84));
+                  } else {
+                    final dayDate = DateTime(_calendarMonth.year, _calendarMonth.month, dayCounter);
+                    final titles = data[dayDate] ?? const <String>[];
+                    cells.add(_CalendarDayCell(day: dayCounter, titles: titles));
+                    dayCounter++;
+                  }
+                }
+                rows.add(TableRow(children: cells));
+              }
+
+              return Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(),
+                  1: FlexColumnWidth(),
+                  2: FlexColumnWidth(),
+                  3: FlexColumnWidth(),
+                  4: FlexColumnWidth(),
+                  5: FlexColumnWidth(),
+                  6: FlexColumnWidth(),
+                },
+                children: rows,
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _badgeIcon(int badge) {
@@ -634,126 +830,165 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ],
                 ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.add, color: Colors.white),
-                    onPressed: () {
-                      _showAddLifeAreaDialog(context);
-                    },
-                    tooltip: 'Neuen Bereich hinzufügen',
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Theme.of(context).colorScheme.surface,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                        ),
+                      ),
+                      child: ToggleButtons(
+                        isSelected: [!_isCalendarView, _isCalendarView],
+                        onPressed: (index) {
+                          setState(() {
+                            _isCalendarView = index == 1;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        selectedColor: Theme.of(context).colorScheme.onPrimary,
+                        fillColor: Theme.of(context).colorScheme.primary,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
+                        children: const [
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(Icons.bubble_chart),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(Icons.calendar_today),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        onPressed: () {
+                          _showAddLifeAreaDialog(context);
+                        },
+                        tooltip: 'Neuen Bereich hinzufügen',
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            // Bubbles Grid
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-                             child: FutureBuilder<List<LifeArea>>(
-                 key: ValueKey(_refreshCounter), // Force rebuild when counter changes
-                 future: _loadLifeAreas(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: Column(
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Lade Lebensbereiche...'),
-                        ],
-                      ),
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        children: [
-                          Icon(Icons.error, color: Colors.red, size: 48),
-                          const SizedBox(height: 8),
-                          Text('Fehler beim Laden der Lebensbereiche'),
-                          const SizedBox(height: 8),
-                                                     ElevatedButton(
-                             onPressed: () {
-                               // Force rebuild
-                               setState(() {
-                                 _refreshCounter++;
-                               });
-                             },
-                             child: const Text('Erneut versuchen'),
-                           ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final areas = snapshot.data ?? [];
-                  
-                  if (areas.isEmpty) {
-                    return Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.add_circle_outline,
-                            size: 48,
-                            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Noch keine Lebensbereiche',
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            // Life Areas content (Bubbles or Calendar)
+            _isCalendarView
+                ? _buildCalendarContainer(context)
+                : Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                                   child: FutureBuilder<List<LifeArea>>(
+                       key: ValueKey(_refreshCounter), // Force rebuild when counter changes
+                       future: _loadLifeAreas(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: Column(
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text('Lade Lebensbereiche...'),
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton(
-                                                         onPressed: () async {
-                               try {
-                                 await LifeAreasService.createDefaultLifeAreas();
-                                 // Force rebuild
-                                 setState(() {
-                                   _refreshCounter++;
-                                 });
-                               } catch (e) {
-                                 print('Fehler beim Erstellen der Standard-Bereiche: $e');
-                               }
-                             },
-                            child: const Text('Standard-Bereiche erstellen'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
+                          );
+                        }
 
-                                     return BubblesGrid(
-                     areas: areas,
-                     onBubbleTap: (area) => _onBubbleTap(context, area),
-                     onDelete: (area) {
-                       // Force rebuild when a life area is deleted
-                       setState(() {
-                         _refreshCounter++;
-                       });
-                     },
-                   );
-                },
-              ),
-            ),
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Column(
+                              children: [
+                                Icon(Icons.error, color: Colors.red, size: 48),
+                                const SizedBox(height: 8),
+                                Text('Fehler beim Laden der Lebensbereiche'),
+                                const SizedBox(height: 8),
+                                                           ElevatedButton(
+                                   onPressed: () {
+                                     // Force rebuild
+                                     setState(() {
+                                       _refreshCounter++;
+                                     });
+                                   },
+                                   child: const Text('Erneut versuchen'),
+                                 ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        final areas = snapshot.data ?? [];
+                        
+                        if (areas.isEmpty) {
+                          return Center(
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.add_circle_outline,
+                                  size: 48,
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Noch keine Lebensbereiche',
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton(
+                                                           onPressed: () async {
+                                     try {
+                                       await LifeAreasService.createDefaultLifeAreas();
+                                       // Force rebuild
+                                       setState(() {
+                                         _refreshCounter++;
+                                       });
+                                     } catch (e) {
+                                       print('Fehler beim Erstellen der Standard-Bereiche: $e');
+                                     }
+                                   },
+                                  child: const Text('Standard-Bereiche erstellen'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                                           return BubblesGrid(
+                           areas: areas,
+                           onBubbleTap: (area) => _onBubbleTap(context, area),
+                           onDelete: (area) {
+                             // Force rebuild when a life area is deleted
+                             setState(() {
+                               _refreshCounter++;
+                             });
+                           },
+                         );
+                      },
+                    ),
+                  ),
 
             const SizedBox(height: 24),
 
@@ -956,5 +1191,66 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Color _parseColor(String hex) {
     return Color(int.parse(hex.replaceAll('#', '0xFF')));
+  }
+}
+
+class _CalendarDayCell extends StatelessWidget {
+  final int day;
+  final List<String> titles;
+
+  const _CalendarDayCell({
+    Key? key,
+    required this.day,
+    required this.titles,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"
+    final List<String> shown = () {
+      if (titles.isEmpty) return const <String>[];
+      if (titles.length == 1) return <String>[titles.first];
+      return <String>[titles.first, '+${titles.length - 1}'];
+    }();
+
+    final cell = Container(
+      margin: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$day',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.8),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 4),
+          ...shown.map((t) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  t,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 12,
+                        height: 1.1,
+                        color: colorScheme.onSurface.withOpacity(0.75),
+                      ),
+                ),
+              )),
+        ],
+      ),
+    );
+
+    if (titles.isEmpty) return cell;
+    final tooltipText = titles.join('\n');
+    return Tooltip(message: tooltipText, child: cell);
   }
 }

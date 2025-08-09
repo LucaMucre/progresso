@@ -34,12 +34,54 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
   File? _selectedImage;
   String? _selectedImageUrl;
   String? _uploadedImageUrl;
+  String _activityTitle = 'Aktivität';
 
   @override
   void initState() {
     super.initState();
     _durationCtrl.text = widget.log.durationMin?.toString() ?? '';
     _notesCtrl.text = widget.log.notes ?? '';
+    _initTitle();
+  }
+
+  Future<void> _initTitle() async {
+    // Prefer the user-defined activity name if present (also try notes JSON fallback)
+    final existing = widget.log.activityName;
+    if (existing != null && existing.trim().isNotEmpty) {
+      setState(() {
+        _activityTitle = existing.trim();
+      });
+      return;
+    }
+
+    // Fallback to template name if available
+    final templateId = widget.log.templateId;
+    if (templateId != null) {
+      try {
+        final res = await Supabase.instance.client
+            .from('action_templates')
+            .select('name')
+            .eq('id', templateId)
+            .single();
+        final name = (res['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _activityTitle = name;
+            });
+          }
+          return;
+        }
+      } catch (e) {
+        // ignore and keep default title
+      }
+    }
+    // Default
+    if (mounted) {
+      setState(() {
+        _activityTitle = 'Aktivität';
+      });
+    }
   }
 
   Widget _buildNotesOrPlain(String value) {
@@ -341,11 +383,23 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'Aktivitäts-Details',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _activityTitle,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Aktivitäts-Details',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: Colors.black.withOpacity(0.6),
+                              ),
+                        ),
+                      ],
                     ),
                   ),
                   if (!_isEditing) ...[

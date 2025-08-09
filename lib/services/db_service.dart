@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final _db = Supabase.instance.client;
@@ -58,9 +59,24 @@ class ActionLog {
         notes:       m['notes']           as String?,
         earnedXp:    m['earned_xp']       as int,
         templateId:  m['template_id']     as String?,
-        activityName: m['activity_name']   as String?,
+        // Support both top-level and nested (in notes JSON) titles
+        activityName: (m['activity_name'] as String?) ?? extractTitleFromNotes(m['notes']),
         imageUrl:    m['image_url']       as String?,
       );
+}
+
+// Try to extract a 'title' from notes JSON wrapper (top-level helper)
+String? extractTitleFromNotes(dynamic notesValue) {
+  try {
+    if (notesValue is String && notesValue.trim().isNotEmpty) {
+      final obj = jsonDecode(notesValue);
+      if (obj is Map<String, dynamic>) {
+        final t = obj['title'];
+        if (t is String && t.trim().isNotEmpty) return t.trim();
+      }
+    }
+  } catch (_) {}
+  return null;
 }
 
 /// Templates laden
@@ -162,8 +178,8 @@ Future<ActionLog> createQuickLog({
   // Client-seitige XP-Berechnung
   final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
 
-  // Eintrag zusammenbauen und schreiben
-  final insert = <String, dynamic>{
+  // Eintrag zusammenbauen
+  final insertBase = <String, dynamic>{
     'user_id':      _db.auth.currentUser!.id,
     'duration_min': durationMin,
     'notes':        notes,
@@ -172,14 +188,27 @@ Future<ActionLog> createQuickLog({
   
   // Add image_url only if it's not null and the column exists
   if (imageUrl != null) {
-    insert['image_url'] = imageUrl;
+    insertBase['image_url'] = imageUrl;
   }
   
-  final out = await _db
-      .from('action_logs')
-      .insert(insert)
-      .select()
-      .single() as Map<String, dynamic>;
+  Map<String, dynamic> out;
+  try {
+    // Versuche mit activity_name (falls Spalte existiert)
+    final insertWithTitle = Map<String, dynamic>.from(insertBase)
+      ..['activity_name'] = activityName;
+    out = await _db
+        .from('action_logs')
+        .insert(insertWithTitle)
+        .select()
+        .single() as Map<String, dynamic>;
+  } catch (e) {
+    // Fallback ohne activity_name, wenn Spalte nicht existiert
+    out = await _db
+        .from('action_logs')
+        .insert(insertBase)
+        .select()
+        .single() as Map<String, dynamic>;
+  }
 
   return ActionLog.fromMap(out);
 }
