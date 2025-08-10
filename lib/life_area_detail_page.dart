@@ -48,65 +48,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                template.name.toLowerCase().contains(widget.area.name.toLowerCase());
       }).toList();
       
-      bool isLogForArea(ActionLog log) {
-        final areaName = widget.area.name.toLowerCase();
-        final category = widget.area.category.toLowerCase();
-        final isSub = widget.area.parentId != null;
-
-        if (log.notes != null && log.notes!.isNotEmpty) {
-          final raw = log.notes!;
-          try {
-            final parsed = jsonDecode(raw);
-            if (parsed is Map<String, dynamic>) {
-              final nArea = (parsed['area'] as String?)?.toLowerCase();
-              final nSub = (parsed['subarea'] as String?)?.toLowerCase();
-              final nCat  = (parsed['category'] as String?)?.toLowerCase();
-              if (isSub) {
-                // Subbereich: nur exakte Zuordnung über area/subarea Namen
-                return nArea == areaName || nSub == areaName;
-              } else {
-                // Oberbereich: Name oder Kategorie
-                return nArea == areaName || nCat == category;
-              }
-            } else if (parsed is List) {
-              try {
-                final doc = quill.Document.fromJson(parsed);
-                final plain = doc.toPlainText().toLowerCase();
-                if (isSub) {
-                  return plain.contains(areaName);
-                } else {
-                  return plain.contains(areaName) || plain.contains(category);
-                }
-              } catch (_) {
-                return false;
-              }
-            }
-          } catch (_) {
-            final text = raw.toLowerCase();
-            if (isSub) return text.contains(areaName);
-            return text.contains(areaName) || text.contains(category);
-          }
-        }
-
-        if (log.templateId != null) {
-          final template = templates.firstWhere(
-            (t) => t.id == log.templateId,
-            orElse: () => ActionTemplate(
-              id: '', name: '', category: '', baseXp: 0, attrStrength: 0, attrEndurance: 0, attrKnowledge: 0
-            ),
-          );
-          if (widget.area.parentId != null) {
-            // Subbereich: match über Template‑Name enthält Subbereichsnamen
-            return template.name.toLowerCase().contains(areaName);
-          }
-          return template.category.toLowerCase() == category ||
-                 template.name.toLowerCase().contains(areaName);
-        }
-        return false;
-      }
-
       // Filter logs for this specific area
-      final filteredLogs = logs.where(isLogForArea).toList();
+      final filteredLogs = logs.where((l) => _isLogForArea(l, templatesOverride: templates)).toList();
       
       // Calculate statistics
       final totalXp = filteredLogs.fold<int>(0, (sum, log) => sum + log.earnedXp);
@@ -131,6 +74,61 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       });
       print('Fehler beim Laden der Daten: $e');
     }
+  }
+
+  bool _isLogForArea(ActionLog log, {List<ActionTemplate>? templatesOverride}) {
+    final areaName = widget.area.name.toLowerCase();
+    final category = widget.area.category.toLowerCase();
+    final isSub = widget.area.parentId != null;
+    final templatesRef = templatesOverride ?? _templates;
+
+    if (log.notes != null && log.notes!.isNotEmpty) {
+      final raw = log.notes!;
+      try {
+        final parsed = jsonDecode(raw);
+        if (parsed is Map<String, dynamic>) {
+          final nArea = (parsed['area'] as String?)?.toLowerCase();
+          final nSub = (parsed['subarea'] as String?)?.toLowerCase();
+          final nCat  = (parsed['category'] as String?)?.toLowerCase();
+          if (isSub) {
+            return nArea == areaName || nSub == areaName;
+          } else {
+            return nArea == areaName || nCat == category;
+          }
+        } else if (parsed is List) {
+          try {
+            final doc = quill.Document.fromJson(parsed);
+            final plain = doc.toPlainText().toLowerCase();
+            if (isSub) {
+              return plain.contains(areaName);
+            } else {
+              return plain.contains(areaName) || plain.contains(category);
+            }
+          } catch (_) {
+            return false;
+          }
+        }
+      } catch (_) {
+        final text = raw.toLowerCase();
+        if (isSub) return text.contains(areaName);
+        return text.contains(areaName) || text.contains(category);
+      }
+    }
+
+    if (log.templateId != null) {
+      final template = templatesRef.firstWhere(
+        (t) => t.id == log.templateId,
+        orElse: () => ActionTemplate(
+          id: '', name: '', category: '', baseXp: 0, attrStrength: 0, attrEndurance: 0, attrKnowledge: 0
+        ),
+      );
+      if (isSub) {
+        return template.name.toLowerCase().contains(areaName);
+      }
+      return template.category.toLowerCase() == category ||
+             template.name.toLowerCase().contains(areaName);
+    }
+    return false;
   }
 
   void _logQuickAction() {
@@ -1387,7 +1385,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             logDate.day == targetDate.day;
 
         // Use same area matching as in list
-        return isSameDate && isLogForArea(log);
+        return isSameDate && _isLogForArea(log);
       }).length;
     }).toList();
 
