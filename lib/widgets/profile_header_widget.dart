@@ -180,9 +180,10 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                 child: _userAvatarUrl != null
                     ? FadeInImage.assetNetwork(
                         placeholder: 'assets/default_avatar.png',
-                        '${_userAvatarUrl!}?cb=$_cacheBust',
+                        image: '${_userAvatarUrl!}?cb=$_cacheBust',
                         key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
                         fit: BoxFit.cover,
+                        placeholderFit: BoxFit.cover,
                       )
                     : const Icon(Icons.person, color: Colors.white, size: 22),
               ),
