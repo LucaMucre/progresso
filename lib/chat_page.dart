@@ -16,7 +16,6 @@ class _ChatPageState extends State<ChatPage> {
 
   final List<_ChatMessage> _messages = [];
   bool _sending = false;
-  bool _privateMode = true;
 
   @override
   void dispose() {
@@ -37,7 +36,7 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final res = await Supabase.instance.client.functions.invoke(
         'chat',
-        body: {'query': text, 'private': _privateMode},
+        body: {'query': text},
       );
       // The Functions client returns dynamic; we expect a Map
       final data = (res.data is Map)
@@ -113,15 +112,6 @@ class _ChatPageState extends State<ChatPage> {
       appBar: AppBar(
         title: const Text('Chat'),
         actions: [
-          Row(children: [
-            const Text('Privat', style: TextStyle(fontSize: 12)),
-            Switch(
-              value: _privateMode,
-              onChanged: _sending
-                  ? null
-                  : (v) => setState(() => _privateMode = v),
-            ),
-          ]),
           IconButton(
             tooltip: 'Index neu aufbauen',
             icon: const Icon(Icons.refresh),

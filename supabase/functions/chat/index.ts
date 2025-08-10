@@ -56,7 +56,7 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { query, top_k = 8, min_similarity = 0.0, private: privateMode = true } = await req.json();
+    const { query, top_k = 8, min_similarity = 0.0, private: privateMode = false } = await req.json();
     if (!query || typeof query !== "string") {
       return new Response(JSON.stringify({ error: "query required" }), {
         status: 400,
