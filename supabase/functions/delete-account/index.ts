@@ -26,22 +26,9 @@ serve(async (req) => {
     // Use service-role client for destructive operations
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // delete user-owned rows (adjust table list as needed)
-    const tables = [
-      "action_logs",
-      "action_templates",
-      "life_areas",
-      "user_documents",
-      // users table handled separately (id column)
-    ];
-    for (const t of tables) {
-      const { error } = await admin.from(t).delete().eq("user_id", userId);
-      if (error) throw error;
-    }
-
-    // delete from users table by id
+    // Atomar in der DB löschen (idempotent)
     {
-      const { error } = await admin.from("users").delete().eq("id", userId);
+      const { error } = await admin.rpc('delete_user_fully', { p_uid: userId });
       if (error) throw error;
     }
 
