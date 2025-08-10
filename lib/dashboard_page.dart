@@ -15,7 +15,9 @@ import 'services/avatar_sync_service.dart';
 import 'widgets/bubble_widget.dart';
 import 'widgets/profile_header_widget.dart';
 import 'templates_page.dart';
+import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
+import 'settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -914,6 +916,20 @@ class _DashboardPageState extends State<DashboardPage> {
                MaterialPageRoute(builder: (_) => const HistoryPage()),
              ),
            ),
+            IconButton(
+              icon: const Icon(Icons.chat),
+              tooltip: 'Chat (Beta)',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ChatPage()),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Einstellungen',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
+              ),
+            ),
            IconButton(
              icon: const Icon(Icons.bug_report),
              tooltip: 'Avatar Debug',

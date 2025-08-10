@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -34,9 +35,12 @@ class _ChatPageState extends State<ChatPage> {
     _inputCtrl.clear();
 
     try {
+      // Read opt-in flag (assist OFF by default)
+      final prefs = await SharedPreferences.getInstance();
+      final assist = prefs.getBool('assist_opt_in') ?? false;
       final res = await Supabase.instance.client.functions.invoke(
         'chat',
-        body: {'query': text},
+        body: {'query': text, 'private': !assist},
       );
       // The Functions client returns dynamic; we expect a Map
       final data = (res.data is Map)

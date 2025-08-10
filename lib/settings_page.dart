@@ -1,0 +1,134 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'legal/privacy_page.dart';
+import 'legal/terms_page.dart';
+
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  bool _assistOptIn = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _assistOptIn = prefs.getBool('assist_opt_in') ?? false; // default: OFF (privat)
+      _loading = false;
+    });
+  }
+
+  Future<void> _toggleAssist(bool enable) async {
+    if (enable) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('KI‑Assistenz aktivieren?'),
+          content: const Text(
+              'Wenn du den KI‑Assistenz‑Modus aktivierst, können Anfragen mit zusammengefassten Inhalten an einen externen KI‑Dienst gesendet werden. Deine Daten werden weiterhin durch RLS auf deinen Account beschränkt. Du kannst den Modus jederzeit wieder deaktivieren.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Aktivieren')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('assist_opt_in', enable);
+    setState(() => _assistOptIn = enable);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('KI‑Assistenz ist nun ${enable ? 'aktiv' : 'deaktiviert'}')),
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konto wirklich löschen?'),
+        content: const Text(
+            'Dies löscht deinen Account und alle zugehörigen Daten dauerhaft. Dieser Vorgang kann nicht rückgängig gemacht werden.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Endgültig löschen')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'delete-account',
+        body: {},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Konto gelöscht: ${res.data ?? 'ok'}')),
+      );
+      await Supabase.instance.client.auth.signOut();
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler beim Löschen: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Einstellungen')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                SwitchListTile(
+                  title: const Text('KI‑Assistenz (opt‑in)'),
+                  subtitle: const Text('Externen KI‑Dienst für Antworten verwenden'),
+                  value: _assistOptIn,
+                  onChanged: _toggleAssist,
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('Datenschutz'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PrivacyPage()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('Nutzungsbedingungen'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TermsPage()),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('Konto löschen'),
+                  textColor: Colors.red,
+                  iconColor: Colors.red,
+                  onTap: _deleteAccount,
+                ),
+              ],
+            ),
+    );
+  }
+}
+
