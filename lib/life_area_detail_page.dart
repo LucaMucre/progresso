@@ -365,8 +365,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               // Activity Canvas Section with View Toggle
               if (!_isLoading) _buildActivityCanvasWithToggle(),
               const SizedBox(height: 24),
-              if (_subAreas.isNotEmpty) _buildSubAreasSection(),
-              if (_subAreas.isNotEmpty) const SizedBox(height: 24),
+              _buildSubAreasSection(),
+              const SizedBox(height: 24),
 
               // Progress Visualization Section
               if (!_isLoading) _buildProgressSection(),
@@ -574,7 +574,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         const SizedBox(height: 16),
         
         // Canvas Content
-        _isBubbleView ? _buildBubbleCanvas() : _buildTableCanvas(),
+        _isBubbleView
+            ? (_subAreas.isNotEmpty ? _buildSubAreaBubbleCanvas() : _buildBubbleCanvas())
+            : _buildTableCanvas(),
       ],
     );
   }
@@ -636,6 +638,87 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     );
   }
 
+  Widget _buildSubAreaBubbleCanvas() {
+    return Container(
+      height: 350,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          const height = 300.0;
+          final rand = Random();
+          final placed = <Rect>[];
+
+          List<Widget> bubbles = [];
+          for (final area in _subAreas) {
+            final size = 80.0 + rand.nextDouble() * 40.0;
+            Rect? rect;
+            int tries = 0;
+            while (rect == null && tries < 50) {
+              final x = rand.nextDouble() * (width - size);
+              final y = rand.nextDouble() * (height - size);
+              final r = Rect.fromLTWH(x, y, size, size);
+              if (!placed.any((p) => p.overlaps(r))) {
+                rect = r;
+                placed.add(r);
+              }
+              tries++;
+            }
+            rect ??= Rect.fromLTWH(rand.nextDouble() * (width - size), rand.nextDouble() * (height - size), size, size);
+
+            final c = _parseColor(area.color);
+            bubbles.add(Positioned(
+              left: rect.left,
+              top: rect.top,
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area)),
+                  );
+                },
+                child: Container(
+                  width: rect.width,
+                  height: rect.height,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c,
+                    boxShadow: [
+                      BoxShadow(color: c.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        area.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ));
+          }
+
+          return Stack(children: bubbles);
+        },
+      ),
+    );
+  }
+
   Widget _buildSubAreasSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,37 +738,43 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
           ],
         ),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: _subAreas.map((a) {
-            final c = _parseColor(a.color);
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: a)),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: c.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: c.withOpacity(0.3)),
+        if (_subAreas.isEmpty)
+          Text(
+            'Noch keine Unterkategorien. Lege die erste an.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+          )
+        else
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _subAreas.map((a) {
+              final c = _parseColor(a.color);
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: a)),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: c.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: c.withOpacity(0.3)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(_getIconData(a.icon), color: c, size: 16),
+                      const SizedBox(width: 8),
+                      Text(a.name, style: TextStyle(color: c, fontWeight: FontWeight.w600)),
+                    ]),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(_getIconData(a.icon), color: c, size: 16),
-                    const SizedBox(width: 8),
-                    Text(a.name, style: TextStyle(color: c, fontWeight: FontWeight.w600)),
-                  ]),
                 ),
-              ),
-            );
-          }).toList(),
-        )
+              );
+            }).toList(),
+          )
       ],
     );
   }
