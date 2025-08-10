@@ -228,10 +228,10 @@ serve(async (req) => {
     }
 
     const qEmb = await embedQuery(query);
-    // Very light time-window parsing (German): "letzten X tag(e)" → filter client-side after match
+    // Zeitfenster-Erkennung (robust): "letzten X Tag(e|en)"
     const lowerQ = query.toLowerCase();
     let sinceIso: string | null = null;
-    const m = lowerQ.match(/letzten\s+(\d+)\s*tag/);
+    const m = lowerQ.match(/letzten\s+(\d+)\s*tag(e|en)?/);
     if (m) {
       const days = Math.max(1, parseInt(m[1], 10));
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -282,6 +282,7 @@ serve(async (req) => {
       const { data: rawLogs, error: logsErr } = await supabase
         .from("action_logs")
         .select("id, occurred_at, notes, template_id")
+        .eq("user_id", userId)
         .gte("occurred_at", since)
         .order("occurred_at", { ascending: false });
       if (!logsErr && (rawLogs?.length ?? 0) > 0) {
@@ -322,6 +323,7 @@ serve(async (req) => {
       const { count, error: cErr } = await supabase
         .from("action_logs")
         .select("id", { head: true, count: "exact" })
+        .eq("user_id", userId)
         .gte("occurred_at", since);
       if (!cErr) {
         const n = count ?? 0;
