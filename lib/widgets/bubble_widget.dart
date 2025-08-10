@@ -335,7 +335,10 @@ class _BubblesGridState extends State<BubblesGrid> {
                       _lastMousePosition = details.globalPosition;
                       _showContextMenu(context, area);
                     },
-                    child: AnimatedContainer(
+                    child: Tooltip(
+                      message: area.name,
+                      waitDuration: const Duration(milliseconds: 400),
+                      child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeInOut,
                       width: size,
@@ -369,6 +372,7 @@ class _BubblesGridState extends State<BubblesGrid> {
                         _getIconData(area.icon),
                         color: Colors.white,
                         size: 20 * scale * hoverScale,
+                      ),
                       ),
                     ),
                   ),

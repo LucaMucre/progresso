@@ -32,6 +32,18 @@ serve(async (req) => {
       if (error) throw error;
     }
 
+    // Storage aufräumen (Ordner pro User)
+    async function removeFolder(bucketName: string, folder: string) {
+      const bucket = admin.storage.from(bucketName);
+      const { data: files, error } = await bucket.list(folder, { limit: 1000 });
+      if (error) return; // still proceed
+      if (!files || files.length === 0) return;
+      const paths = files.map((f: any) => `${folder}/${f.name}`);
+      await bucket.remove(paths);
+    }
+    await removeFolder('avatars', userId);
+    await removeFolder('activity-images', userId);
+
     // delete auth user (requires service role)
     {
       const { error } = await (admin as any).auth.admin.deleteUser(userId);

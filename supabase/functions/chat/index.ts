@@ -57,6 +57,12 @@ serve(async (req) => {
   }
   try {
     const { query, top_k = 8, min_similarity = 0.0, private: privateMode = true } = await req.json();
+    if (typeof query === 'string' && query.length > 2000) {
+      return new Response(JSON.stringify({ error: 'Query too long' }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     if (!query || typeof query !== "string") {
       return new Response(JSON.stringify({ error: "query required" }), {
         status: 400,
