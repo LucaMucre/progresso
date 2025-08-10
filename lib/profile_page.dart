@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -104,17 +105,50 @@ class _ProfilePageState extends State<ProfilePage> {
       if (user != null) {
         final actionResponse = await _supabase
             .from('action_logs')
-            .select('occurred_at')
+            .select('occurred_at, notes')
             .eq('user_id', user.id);
         
-        final dates = (actionResponse as List)
-            .map((log) => DateTime.parse(log['occurred_at']))
-            .toList();
+        final logs = (actionResponse as List);
+        final dates = logs.map((log) => DateTime.parse(log['occurred_at'])).toList();
         
         _totalActions = dates.length;
         _currentStreak = _calculateCurrentStreak(dates);
         _longestStreak = _calculateLongestStreak(dates);
         _totalXP = character.totalXp;
+
+        // Rank life areas by activity count (desc)
+        int countForArea(Map<String, dynamic> log, LifeArea area) {
+          final raw = log['notes'];
+          if (raw == null) return 0;
+          try {
+            final obj = jsonDecode(raw);
+            if (obj is Map<String, dynamic>) {
+              final a = (obj['area'] as String?)?.toLowerCase();
+              final c = (obj['category'] as String?)?.toLowerCase();
+              if (a == area.name.toLowerCase() || c == area.category.toLowerCase()) return 1;
+            } else if (obj is List) {
+              // quill delta → plaintext contains name/category
+              final text = obj.map((op) => (op is Map && op['insert'] is String) ? op['insert'] as String : '').join().toLowerCase();
+              if (text.contains(area.name.toLowerCase()) || text.contains(area.category.toLowerCase())) return 1;
+            }
+          } catch (_) {
+            final text = raw.toString().toLowerCase();
+            if (text.contains(area.name.toLowerCase()) || text.contains(area.category.toLowerCase())) return 1;
+          }
+          return 0;
+        }
+
+        final areaToCount = <String, int>{};
+        for (final area in areas) {
+          final n = logs.fold<int>(0, (sum, log) => sum + countForArea(log as Map<String, dynamic>, area));
+          areaToCount[area.id] = n;
+        }
+        areas.sort((a, b) {
+          final cb = areaToCount[b.id] ?? 0;
+          final ca = areaToCount[a.id] ?? 0;
+          if (cb != ca) return cb.compareTo(ca);
+          return a.orderIndex.compareTo(b.orderIndex);
+        });
       }
       
       setState(() {
