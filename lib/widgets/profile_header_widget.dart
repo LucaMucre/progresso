@@ -136,9 +136,9 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
       );
     }
 
-    final double padding = widget.compact ? 8 : 20;
-    final double avatarSize = widget.compact ? 36 : 56;
-    final double titleFontSize = widget.compact ? 16 : 20;
+    final double padding = widget.compact ? 6 : 14; // reduce height
+    final double avatarSize = widget.compact ? 32 : 44; // smaller avatar
+    final double titleFontSize = widget.compact ? 15 : 18;
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -163,67 +163,24 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
       child: Row(
         children: [
           // Avatar
-          Container(
+          SizedBox(
             width: avatarSize,
             height: avatarSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(avatarSize / 2), // perfect circle
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
                 ),
-              ],
+                child: _userAvatarUrl != null
+                    ? Image.network(
+                        '${_userAvatarUrl!}?cb=$_cacheBust',
+                        key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
+                        fit: BoxFit.cover,
+                      )
+                    : const Icon(Icons.person, color: Colors.white, size: 22),
+              ),
             ),
-            child: _userAvatarUrl != null
-                ? ClipOval(
-                    child: Image.network(
-                      '${_userAvatarUrl!}?cb=$_cacheBust',
-                      key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.person,
-                            size: 30,
-                            color: Colors.white,
-                          ),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              strokeWidth: 2,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 30,
-                      color: Colors.white,
-                    ),
-                  ),
           ),
           
           const SizedBox(width: 16),
@@ -249,8 +206,8 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           // Edit Button
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: IconButton(
               onPressed: () async {
@@ -270,11 +227,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                   }
                 }
               },
-              icon: const Icon(
-                Icons.edit,
-                color: Colors.white,
-                size: 20,
-              ),
+              icon: const Icon(Icons.edit, color: Colors.white, size: 18),
               tooltip: 'Profil bearbeiten',
             ),
           ),

@@ -1017,7 +1017,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
 
                 if (isWide) {
-                  const double heroRowHeight = 88;
+                  const double heroRowHeight = 74;
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1028,11 +1028,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      SizedBox(
-                        width: 360,
-                        height: heroRowHeight,
-                        child: streakCard,
-                      ),
+                      SizedBox(width: 320, height: heroRowHeight, child: streakCard),
                     ],
                   );
                 }
