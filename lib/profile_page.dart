@@ -494,6 +494,63 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      tooltip: 'Profil bearbeiten',
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      onPressed: () async {
+                        // Öffne Bearbeitungsdialog: Name/Bio ändern und speichern
+                        await showDialog(
+                          context: context,
+                          builder: (ctx) {
+                            final nameCtrl = TextEditingController(text: _nameCtrl.text);
+                            final bioCtrl = TextEditingController(text: _bioCtrl.text);
+                            return AlertDialog(
+                              title: const Text('Profil bearbeiten'),
+                              content: SizedBox(
+                                width: 420,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextField(
+                                      controller: nameCtrl,
+                                      decoration: const InputDecoration(labelText: 'Name'),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      controller: bioCtrl,
+                                      decoration: const InputDecoration(labelText: 'Bio (optional)'),
+                                      maxLines: 3,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('Abbrechen'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    _nameCtrl.text = nameCtrl.text.trim();
+                                    _bioCtrl.text = bioCtrl.text.trim();
+                                    await _saveProfile();
+                                    if (mounted) Navigator.of(ctx).pop(true);
+                                  },
+                                  child: const Text('Speichern'),
+                                )
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
