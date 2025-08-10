@@ -574,9 +574,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         const SizedBox(height: 16),
         
         // Canvas Content
-        _isBubbleView
-            ? (_subAreas.isNotEmpty ? _buildSubAreaBubbleCanvas() : _buildBubbleCanvas())
-            : _buildTableCanvas(),
+        _isBubbleView ? _buildCombinedBubbleCanvas() : _buildTableCanvas(),
       ],
     );
   }
@@ -711,6 +709,116 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 ),
               ),
             ));
+          }
+
+          return Stack(children: bubbles);
+        },
+      ),
+    );
+  }
+
+  Widget _buildCombinedBubbleCanvas() {
+    return Container(
+      height: 350,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          const height = 300.0;
+          final rand = Random();
+          final placed = <Rect>[];
+
+          List<Widget> bubbles = [];
+
+          void addBubble(Rect rect, Color c, Widget child, VoidCallback onTap) {
+            bubbles.add(Positioned(
+              left: rect.left,
+              top: rect.top,
+              child: GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  width: rect.width,
+                  height: rect.height,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: c, boxShadow: [
+                    BoxShadow(color: c.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
+                  ]),
+                  child: Center(child: child),
+                ),
+              ),
+            ));
+          }
+
+          Rect place(double size) {
+            Rect? rect;
+            int tries = 0;
+            while (rect == null && tries < 60) {
+              final x = rand.nextDouble() * (width - size);
+              final y = rand.nextDouble() * (height - size);
+              final r = Rect.fromLTWH(x, y, size, size);
+              if (!placed.any((p) => p.overlaps(r))) {
+                rect = r;
+                placed.add(r);
+              }
+              tries++;
+            }
+            rect ??= Rect.fromLTWH(rand.nextDouble() * (width - size), rand.nextDouble() * (height - size), size, size);
+            return rect!;
+          }
+
+          // 1) Activities
+          for (final log in _logs) {
+            final size = 70.0 + rand.nextDouble() * 40.0;
+            final rect = place(size);
+            final base = _parseColor(widget.area.color);
+            final hsl = HSLColor.fromColor(base);
+            final c = hsl.withLightness((hsl.lightness + 0.15).clamp(0.3, 0.8)).toColor();
+            addBubble(
+              rect,
+              c,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  _getActivityName(log),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+              () => _showActivityDetails(log),
+            );
+          }
+
+          // 2) Subareas (slightly larger hue)
+          for (final area in _subAreas) {
+            final size = 90.0 + rand.nextDouble() * 50.0;
+            final rect = place(size);
+            final c = _parseColor(area.color);
+            addBubble(
+              rect,
+              c,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  area.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+              () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area)),
+                );
+              },
+            );
           }
 
           return Stack(children: bubbles);
