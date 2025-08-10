@@ -92,6 +92,21 @@ class LifeAreasService {
     return (response as List).map((json) => LifeArea.fromJson(json)).toList();
   }
 
+  // Unterbereiche zu einem Life Area laden
+  static Future<List<LifeArea>> getChildAreas(String parentId) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('User nicht angemeldet');
+
+    final response = await _client
+        .from('life_areas')
+        .select()
+        .eq('user_id', user.id)
+        .eq('parent_id', parentId)
+        .order('order_index');
+
+    return (response as List).map((json) => LifeArea.fromJson(json)).toList();
+  }
+
   // Life Area erstellen
   static Future<LifeArea> createLifeArea({
     required String name,

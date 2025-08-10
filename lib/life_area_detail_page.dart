@@ -28,6 +28,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   double _averageDuration = 0;
   final Random _random = Random();
   bool _isBubbleView = true; // Toggle between bubble and table view
+  List<LifeArea> _subAreas = [];
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     try {
       final templates = await fetchTemplates();
       final logs = await fetchLogs();
+      final subs = await LifeAreasService.getChildAreas(widget.area.id);
       
       // Filter templates for this area
       final filteredTemplates = templates.where((template) {
@@ -103,6 +105,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       setState(() {
         _templates = filteredTemplates;
         _logs = filteredLogs;
+        _subAreas = subs;
         _totalXp = totalXp;
         _activityCount = activityCount;
         _averageDuration = averageDuration;
@@ -362,6 +365,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               // Activity Canvas Section with View Toggle
               if (!_isLoading) _buildActivityCanvasWithToggle(),
               const SizedBox(height: 24),
+              if (_subAreas.isNotEmpty) _buildSubAreasSection(),
+              if (_subAreas.isNotEmpty) const SizedBox(height: 24),
 
               // Progress Visualization Section
               if (!_isLoading) _buildProgressSection(),
@@ -629,6 +634,99 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         children: _generateBubblePositions(),
       ),
     );
+  }
+
+  Widget _buildSubAreasSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Unterkategorien',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            OutlinedButton.icon(
+              onPressed: _createSubAreaDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Unterkategorie'),
+            )
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: _subAreas.map((a) {
+            final c = _parseColor(a.color);
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: a)),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: c.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: c.withOpacity(0.3)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(_getIconData(a.icon), color: c, size: 16),
+                    const SizedBox(width: 8),
+                    Text(a.name, style: TextStyle(color: c, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            );
+          }).toList(),
+        )
+      ],
+    );
+  }
+
+  Future<void> _createSubAreaDialog() async {
+    final nameCtrl = TextEditingController();
+    final catCtrl = TextEditingController(text: widget.area.category);
+    String color = widget.area.color;
+    String icon = widget.area.icon;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unterkategorie erstellen'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')), 
+              const SizedBox(height: 8),
+              TextField(controller: catCtrl, decoration: const InputDecoration(labelText: 'Kategorie')), 
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Erstellen')),
+        ],
+      ),
+    );
+    if (ok == true && nameCtrl.text.trim().isNotEmpty) {
+      await LifeAreasService.createLifeArea(
+        name: nameCtrl.text.trim(),
+        category: catCtrl.text.trim().isEmpty ? widget.area.category : catCtrl.text.trim(),
+        parentId: widget.area.id,
+        color: color,
+        icon: icon,
+        orderIndex: _subAreas.length,
+      );
+      await _loadData();
+    }
   }
 
   Widget _buildTableCanvas() {
