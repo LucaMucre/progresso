@@ -8,7 +8,6 @@ import 'history_page.dart';
 import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
 import 'profile_page.dart';
-import 'debug_avatar_page.dart';
 import 'services/db_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/avatar_sync_service.dart';
@@ -930,13 +929,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 MaterialPageRoute(builder: (_) => const SettingsPage()),
               ),
             ),
-           IconButton(
-             icon: const Icon(Icons.bug_report),
-             tooltip: 'Avatar Debug',
-             onPressed: () => Navigator.of(context).push(
-               MaterialPageRoute(builder: (_) => const DebugAvatarPage()),
-             ),
-           ),
+           // Avatar Debug entfernt
            IconButton(
              icon: const Icon(Icons.exit_to_app),
              tooltip: 'Abmelden',
