@@ -31,6 +31,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _avatarUrl;
   int _cacheBust = 0;
   RealtimeChannel? _usersChannel;
+  Map<String, int> _areaActivityCounts = {};
 
   final _supabase = Supabase.instance.client;
 
@@ -149,6 +150,7 @@ class _ProfilePageState extends State<ProfilePage> {
           if (cb != ca) return cb.compareTo(ca);
           return a.orderIndex.compareTo(b.orderIndex);
         });
+        _areaActivityCounts = areaToCount;
       }
       
       setState(() {
@@ -369,6 +371,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildLifeAreaChip(LifeArea area) {
     final areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
+    final count = _areaActivityCounts[area.id] ?? 0;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -400,6 +403,23 @@ class _ProfilePageState extends State<ProfilePage> {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: areaColor.withOpacity(0.9),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: areaColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: areaColor.withOpacity(0.3)),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: areaColor.withOpacity(0.9),
+              ),
             ),
           ),
         ],
