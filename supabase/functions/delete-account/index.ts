@@ -9,16 +9,22 @@ const corsHeaders: HeadersInit = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // needs service role to delete auth user
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    // Use anon client to read the current user from the JWT
+    const supabaseUser = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     });
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user, error: userErr } = await supabaseUser.auth.getUser();
+    if (userErr) throw userErr;
     const userId = user.user?.id;
     if (!userId) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+
+    // Use service-role client for destructive operations
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     // delete user-owned rows (adjust table list as needed)
     const tables = [
@@ -26,17 +32,26 @@ serve(async (req) => {
       "action_templates",
       "life_areas",
       "user_documents",
-      "users",
+      // users table handled separately (id column)
     ];
     for (const t of tables) {
-      await supabase.from(t).delete().eq("user_id", userId);
+      const { error } = await admin.from(t).delete().eq("user_id", userId);
+      if (error) throw error;
+    }
+
+    // delete from users table by id
+    {
+      const { error } = await admin.from("users").delete().eq("id", userId);
+      if (error) throw error;
     }
 
     // delete auth user (requires service role)
-    const admin = (supabase as any).auth.admin;
-    await admin.deleteUser(userId);
+    {
+      const { error } = await (admin as any).auth.admin.deleteUser(userId);
+      if (error) throw error;
+    }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, id: userId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
