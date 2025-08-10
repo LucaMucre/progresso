@@ -244,14 +244,17 @@ class LifeAreasService {
       },
     ];
 
-    for (final area in defaultAreas) {
-      await createLifeArea(
-        name: area['name'] as String,
-        category: area['category'] as String,
-        color: area['color'] as String,
-        icon: area['icon'] as String,
-        orderIndex: area['order_index'] as int,
-      );
-    }
+    // Bulk-Insert statt sequenziell, um race conditions zu vermeiden
+    final rows = defaultAreas.map((area) => {
+          'user_id': user.id,
+          'name': area['name'],
+          'category': area['category'],
+          'parent_id': null,
+          'color': area['color'],
+          'icon': area['icon'],
+          'order_index': area['order_index'],
+        }).toList();
+
+    await _client.from('life_areas').insert(rows);
   }
 } 
