@@ -69,6 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (ok != true) return;
 
+    // 1) Serverseitig löschen
     try {
       final res = await Supabase.instance.client.functions.invoke(
         'delete-account',
@@ -78,14 +79,18 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Konto gelöscht: ${res.data ?? 'ok'}')),
       );
-      await Supabase.instance.client.auth.signOut();
-      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Fehler beim Löschen: $e')),
       );
+      // trotzdem lokal abmelden versuchen
     }
+    // 2) Lokale Session beenden; 403 nach Server-Delete ignorieren
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
