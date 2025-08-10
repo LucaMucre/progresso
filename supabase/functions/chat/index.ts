@@ -90,7 +90,19 @@ serve(async (req) => {
 
     // Deterministische Pfade vorab: Zählung und einfache Zusammenfassung per SQL (beide Modi)
     const isCountEarly = /wie\s*viele|anzahl|wieviel/.test(lower);
+    const isTotal = /\binsgesamt\b/.test(lower);
     if (isCountEarly) {
+      if (isTotal) {
+        const { count: total } = await supabase
+          .from("action_logs")
+          .select("id", { head: true, count: "exact" })
+          .eq("user_id", userId);
+        const nTotal = total ?? 0;
+        return new Response(JSON.stringify({
+          answer: `Insgesamt hast du ${nTotal} Aktivität${nTotal === 1 ? '' : 'en'} erfasst.`,
+          sources: [],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
       let { count } = await supabase
         .from("action_logs")
         .select("id", { head: true, count: "exact" })
@@ -150,6 +162,17 @@ serve(async (req) => {
       const since = sinceDet;
 
       if (isCount) {
+        if (isTotal) {
+          const { count: total } = await supabase
+            .from("action_logs")
+            .select("id", { head: true, count: "exact" })
+            .eq("user_id", userId);
+          const nTotal = total ?? 0;
+          return new Response(JSON.stringify({
+            answer: `Insgesamt hast du ${nTotal} Aktivität${nTotal === 1 ? '' : 'en'} erfasst.`,
+            sources: [],
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
         let { count } = await supabase
           .from("action_logs")
           .select("id", { head: true, count: "exact" })
@@ -278,6 +301,22 @@ serve(async (req) => {
 
     // If it's a counting question, answer deterministisch via SQL count
     if (isCountQuestion) {
+      if (isTotal) {
+        const { count: total, error: tErr } = await supabase
+          .from("action_logs")
+          .select("id", { head: true, count: "exact" })
+          .eq("user_id", userId);
+        if (!tErr) {
+          const nTotal = total ?? 0;
+          return new Response(
+            JSON.stringify({
+              answer: `Insgesamt hast du ${nTotal} Aktivität${nTotal === 1 ? '' : 'en'} erfasst.`,
+              sources: [],
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+          );
+        }
+      }
       const days = m ? Math.max(1, parseInt(m[1], 10)) : 7;
       const since = (sinceIso ?? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
       const { count, error: cErr } = await supabase
