@@ -48,38 +48,46 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                template.name.toLowerCase().contains(widget.area.name.toLowerCase());
       }).toList();
       
-      // Filter logs for this specific area - ONLY show logs that were created for this area
-      final filteredLogs = logs.where((log) {
-        // For quick actions without templates, check if they were created for this specific area
-        if (log.templateId == null && log.notes != null && log.notes!.isNotEmpty) {
-          final areaName = widget.area.name.toLowerCase();
-          final category = widget.area.category.toLowerCase();
+      bool isLogForArea(ActionLog log) {
+        final areaName = widget.area.name.toLowerCase();
+        final category = widget.area.category.toLowerCase();
+        final isSub = widget.area.parentId != null;
+
+        if (log.notes != null && log.notes!.isNotEmpty) {
           final raw = log.notes!;
           try {
             final parsed = jsonDecode(raw);
             if (parsed is Map<String, dynamic>) {
               final nArea = (parsed['area'] as String?)?.toLowerCase();
+              final nSub = (parsed['subarea'] as String?)?.toLowerCase();
               final nCat  = (parsed['category'] as String?)?.toLowerCase();
-              return nArea == areaName || nCat == category;
+              if (isSub) {
+                // Subbereich: nur exakte Zuordnung über area/subarea Namen
+                return nArea == areaName || nSub == areaName;
+              } else {
+                // Oberbereich: Name oder Kategorie
+                return nArea == areaName || nCat == category;
+              }
             } else if (parsed is List) {
-              // Quill Delta ohne Wrapper -> in Plaintext umwandeln und prüfen
               try {
                 final doc = quill.Document.fromJson(parsed);
                 final plain = doc.toPlainText().toLowerCase();
-                return plain.contains(areaName) || plain.contains(category);
+                if (isSub) {
+                  return plain.contains(areaName);
+                } else {
+                  return plain.contains(areaName) || plain.contains(category);
+                }
               } catch (_) {
-                // Fallback: keine Zuordnung möglich
                 return false;
               }
             }
           } catch (_) {
-            final notes = raw.toLowerCase();
-            return notes.contains(areaName) || notes.contains(category);
+            final text = raw.toLowerCase();
+            if (isSub) return text.contains(areaName);
+            return text.contains(areaName) || text.contains(category);
           }
-          return false;
         }
-        
-        // For template-based actions, check if the template belongs to this area
+
         if (log.templateId != null) {
           final template = templates.firstWhere(
             (t) => t.id == log.templateId,
@@ -87,12 +95,18 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               id: '', name: '', category: '', baseXp: 0, attrStrength: 0, attrEndurance: 0, attrKnowledge: 0
             ),
           );
-          return template.category.toLowerCase() == widget.area.category.toLowerCase() ||
-                 template.name.toLowerCase().contains(widget.area.name.toLowerCase());
+          if (widget.area.parentId != null) {
+            // Subbereich: match über Template‑Name enthält Subbereichsnamen
+            return template.name.toLowerCase().contains(areaName);
+          }
+          return template.category.toLowerCase() == category ||
+                 template.name.toLowerCase().contains(areaName);
         }
-        
         return false;
-      }).toList();
+      }
+
+      // Filter logs for this specific area
+      final filteredLogs = logs.where(isLogForArea).toList();
       
       // Calculate statistics
       final totalXp = filteredLogs.fold<int>(0, (sum, log) => sum + log.earnedXp);
@@ -1372,35 +1386,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             logDate.month == targetDate.month &&
             logDate.day == targetDate.day;
 
-        // Check if the log is for this specific life area
-        bool isForThisArea = false;
-        if (log.notes != null && log.notes!.isNotEmpty) {
-          final raw = log.notes!;
-          try {
-            final parsed = jsonDecode(raw);
-            if (parsed is Map<String, dynamic>) {
-              final nArea = (parsed['area'] as String?)?.toLowerCase();
-              final nCat = (parsed['category'] as String?)?.toLowerCase();
-              isForThisArea = nArea == widget.area.name.toLowerCase() ||
-                  nCat == widget.area.category.toLowerCase();
-            } else if (parsed is List) {
-              // Legacy: Delta-Array → zu Plaintext und matchen
-              try {
-                final doc = quill.Document.fromJson(parsed);
-                final plain = doc.toPlainText().toLowerCase();
-                isForThisArea = plain.contains(widget.area.name.toLowerCase()) ||
-                    plain.contains(widget.area.category.toLowerCase());
-              } catch (_) {}
-            }
-          } catch (_) {
-            final notes = raw.toLowerCase();
-            isForThisArea = notes.contains('(${widget.area.name.toLowerCase()})') ||
-                notes.contains(widget.area.name.toLowerCase()) ||
-                notes.contains(widget.area.category.toLowerCase());
-          }
-        }
-
-        return isSameDate && isForThisArea;
+        // Use same area matching as in list
+        return isSameDate && isLogForArea(log);
       }).length;
     }).toList();
 
