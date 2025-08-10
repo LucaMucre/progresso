@@ -73,6 +73,7 @@ class LifeAreasService {
         .from('life_areas')
         .select()
         .eq('user_id', user.id)
+        .isFilter('parent_id', null)
         .order('order_index');
 
     return (response as List).map((json) => LifeArea.fromJson(json)).toList();
