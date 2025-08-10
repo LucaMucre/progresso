@@ -1067,12 +1067,16 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       return DateTime(now.year, now.month, now.day - index);
     }).reversed.toList();
     
-    // Count activities per day for THIS specific life area only
+    // Count activities per day for THIS specific life area only (timezone safe)
     final activityCounts = last7Days.map((date) {
+      final targetDate = DateTime(date.year, date.month, date.day);
       return _logs.where((log) {
-        final logDate = DateTime(log.occurredAt.year, log.occurredAt.month, log.occurredAt.day);
-        final isSameDate = logDate.isAtSameMomentAs(date);
-        
+        final local = log.occurredAt.toLocal();
+        final logDate = DateTime(local.year, local.month, local.day);
+        final isSameDate = logDate.year == targetDate.year &&
+            logDate.month == targetDate.month &&
+            logDate.day == targetDate.day;
+
         // Check if the log is for this specific life area
         bool isForThisArea = false;
         if (log.notes != null && log.notes!.isNotEmpty) {
@@ -1081,30 +1085,44 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             final parsed = jsonDecode(raw);
             if (parsed is Map<String, dynamic>) {
               final nArea = (parsed['area'] as String?)?.toLowerCase();
-              final nCat  = (parsed['category'] as String?)?.toLowerCase();
-              isForThisArea = nArea == widget.area.name.toLowerCase() || nCat == widget.area.category.toLowerCase();
+              final nCat = (parsed['category'] as String?)?.toLowerCase();
+              isForThisArea = nArea == widget.area.name.toLowerCase() ||
+                  nCat == widget.area.category.toLowerCase();
             } else if (parsed is List) {
               // Legacy: Delta-Array → zu Plaintext und matchen
               try {
                 final doc = quill.Document.fromJson(parsed);
                 final plain = doc.toPlainText().toLowerCase();
-                isForThisArea = plain.contains(widget.area.name.toLowerCase()) || plain.contains(widget.area.category.toLowerCase());
+                isForThisArea = plain.contains(widget.area.name.toLowerCase()) ||
+                    plain.contains(widget.area.category.toLowerCase());
               } catch (_) {}
             }
           } catch (_) {
             final notes = raw.toLowerCase();
             isForThisArea = notes.contains('(${widget.area.name.toLowerCase()})') ||
-                             notes.contains(widget.area.name.toLowerCase()) ||
-                             notes.contains(widget.area.category.toLowerCase());
+                notes.contains(widget.area.name.toLowerCase()) ||
+                notes.contains(widget.area.category.toLowerCase());
           }
         }
-        
+
         return isSameDate && isForThisArea;
       }).length;
     }).toList();
-    
-    final maxCount = activityCounts.isEmpty ? 1 : activityCounts.reduce(max);
-    final actualMaxCount = maxCount > 0 ? maxCount : 1;
+
+    // Dynamic Y max (nice rounding)
+    final int maxCount = activityCounts.isEmpty ? 1 : activityCounts.reduce(max);
+    int yMax;
+    if (maxCount <= 4) {
+      yMax = 4;
+    } else if (maxCount <= 6) {
+      yMax = 6;
+    } else if (maxCount <= 8) {
+      yMax = 8;
+    } else if (maxCount <= 10) {
+      yMax = 10;
+    } else {
+      yMax = ((maxCount + 4) / 5).ceil() * 5; // round up to multiple of 5
+    }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1126,7 +1144,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(5, (i) {
-                    final value = i;
+                    final value = ((yMax / 4) * i).round();
                     return Text(
                       '$value',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1138,81 +1156,94 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 ),
               ),
               
-              // Chart area
+              // Chart area (uses exact constraints for consistent geometry)
               Expanded(
-                child: Stack(
-                  children: [
-                    // Grid lines
-                    ...List.generate(4, (i) {
-                      final y = (i + 1) * 24.0;
-                      return Positioned(
-                        top: y,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          height: 1,
-                          color: Colors.grey.withOpacity(0.2),
-                        ),
-                      );
-                    }),
-                    
-                    // Line chart
-                    CustomPaint(
-                      size: Size(MediaQuery.of(context).size.width - 70, 120),
-                      painter: LineChartPainter(
-                        data: activityCounts,
-                        maxValue: 4.0,
-                        color: _parseColor(widget.area.color),
-                      ),
-                    ),
-                    
-                    // Data points
-                    ...last7Days.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final date = entry.value;
-                      final count = activityCounts[index];
-                      final y = 120 - (count / 4.0) * 96;
-                      final chartWidth = MediaQuery.of(context).size.width - 70;
-                      final x = (index / 6.0) * chartWidth;
-                      
-                      return Positioned(
-                        left: x - 4,
-                        top: y - 4,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: _parseColor(widget.area.color),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 2,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final chartWidth = constraints.maxWidth;
+                    const chartHeight = 120.0;
+                    const topPad = 6.0;
+                    const bottomPad = 20.0;
+                    final usableHeight = chartHeight - topPad - bottomPad;
+
+                    double yFor(int value) {
+                      if (yMax <= 0) return chartHeight - bottomPad;
+                      final ratio = (value / yMax).clamp(0.0, 1.0);
+                      return topPad + (1 - ratio) * usableHeight;
+                    }
+
+                    double xFor(int index) {
+                      if (activityCounts.length == 1) return 0;
+                      return (index / (activityCounts.length - 1)) * chartWidth;
+                    }
+
+                    return Stack(
+                      children: [
+                        // Grid lines
+                        ...List.generate(4, (i) {
+                          final y = topPad + ((i + 1) / 4.0) * usableHeight;
+                          return Positioned(
+                            top: y,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 1,
+                              color: Colors.grey.withOpacity(0.2),
                             ),
+                          );
+                        }),
+
+                        // Line chart
+                        CustomPaint(
+                          size: Size(chartWidth, chartHeight),
+                          painter: LineChartPainter(
+                            data: activityCounts,
+                            maxValue: yMax.toDouble(),
+                            color: _parseColor(widget.area.color),
                           ),
                         ),
-                      );
-                    }),
-                    
-                    // Date labels
-                    ...last7Days.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final date = entry.value;
-                      final chartWidth = MediaQuery.of(context).size.width - 70;
-                      final x = (index / 6.0) * chartWidth;
-                      
-                      return Positioned(
-                        bottom: 0,
-                        left: x - 10,
-                        child: Text(
-                          '${date.day}/${date.month}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontSize: 10,
-                            color: Colors.grey.withOpacity(0.7),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
+
+                        // Data points
+                        ...last7Days.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final count = activityCounts[index];
+                          final x = xFor(index);
+                          final y = yFor(count);
+                          return Positioned(
+                            left: x - 4,
+                            top: y - 4,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: _parseColor(widget.area.color),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+
+                        // Date labels
+                        ...last7Days.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final date = entry.value;
+                          final x = xFor(index);
+                          return Positioned(
+                            bottom: 0,
+                            left: x - 12,
+                            child: Text(
+                              '${date.day}/${date.month}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontSize: 10,
+                                    color: Colors.grey.withOpacity(0.7),
+                                  ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -1297,11 +1328,12 @@ class LineChartPainter extends CustomPainter {
 
     final path = Path();
     final width = size.width;
-    final height = size.height - 20; // Leave space for labels
+    final height = size.height - 26; // leave more space for x labels
 
     for (int i = 0; i < data.length; i++) {
-      final x = (i / 6.0) * width;
-      final y = height - (data[i] / maxValue) * (height - 20);
+      final x = data.length == 1 ? 0.0 : (i / (data.length - 1)) * width;
+      final ratio = maxValue <= 0 ? 0.0 : (data[i] / maxValue).clamp(0.0, 1.0);
+      final y = (1 - ratio) * (height - 6) + 6; // keep some top padding
 
       if (i == 0) {
         path.moveTo(x, y);
