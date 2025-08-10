@@ -301,14 +301,18 @@ Future<List<DateTime>> fetchLoggedDates(int days) async {
   }
 }
 
-/// Berechnet die aktuelle Streak basierend auf fetchLoggedDates
+/// Berechnet die aktuelle Streak basierend auf zusammenhängenden Tagen,
+/// ausgehend vom zuletzt geloggten Tag (nicht zwingend heute).
 Future<int> calculateStreak() async {
   print('=== CALCULATE STREAK DEBUG ===');
   try {
-    final dates = await fetchLoggedDates(30);
+    final dates = await fetchLoggedDates(30); // bereits Tag-genormt und absteigend sortiert
     if (dates.isEmpty) return 0;
+
+    // Starte beim letzten geloggten Tag (heute ODER gestern etc.)
+    final DateTime start = dates.reduce((a, b) => a.isAfter(b) ? a : b);
     int streak = 0;
-    DateTime cursor = DateTime.now();
+    DateTime cursor = start;
     while (true) {
       final day = DateTime(cursor.year, cursor.month, cursor.day);
       if (dates.contains(day)) {
