@@ -8,6 +8,7 @@ import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
 import 'services/avatar_sync_service.dart';
+import 'life_area_detail_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -372,57 +373,68 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildLifeAreaChip(LifeArea area) {
     final areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
     final count = _areaActivityCounts[area.id] ?? 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: areaColor.withOpacity(0.08),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: areaColor.withOpacity(0.4)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: areaColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            area.name,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: areaColor.withOpacity(0.9),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: areaColor.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: areaColor.withOpacity(0.3)),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: areaColor.withOpacity(0.9),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area)),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: areaColor.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: areaColor.withOpacity(0.4)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-            ),
+            ],
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: areaColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                area.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: areaColor.withOpacity(0.9),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: areaColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: areaColor.withOpacity(0.3)),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: areaColor.withOpacity(0.9),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
