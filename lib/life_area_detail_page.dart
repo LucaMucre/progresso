@@ -1209,8 +1209,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                           final count = activityCounts[index];
                           final x = xFor(index);
                           final y = yFor(count);
+                          // clamp to avoid clipping at edges
+                          final cx = x.clamp(4.0, chartWidth - 4.0);
                           return Positioned(
-                            left: x - 4,
+                            left: cx - 4,
                             top: y - 4,
                             child: Container(
                               width: 8,
@@ -1229,15 +1231,22 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                           final index = entry.key;
                           final date = entry.value;
                           final x = xFor(index);
+                          final isFirst = index == 0;
+                          final isLast = index == last7Days.length - 1;
                           return Positioned(
                             bottom: 0,
-                            left: x - 12,
-                            child: Text(
-                              '${date.day}/${date.month}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontSize: 10,
-                                    color: Colors.grey.withOpacity(0.7),
-                                  ),
+                            left: isFirst ? 0 : (isLast ? null : (x - 12)),
+                            right: isLast ? 0 : null,
+                            child: SizedBox(
+                              width: 24,
+                              child: Text(
+                                '${date.day}/${date.month}',
+                                textAlign: isFirst ? TextAlign.left : (isLast ? TextAlign.right : TextAlign.center),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontSize: 10,
+                                      color: Colors.grey.withOpacity(0.7),
+                                    ),
+                              ),
                             ),
                           );
                         }).toList(),
