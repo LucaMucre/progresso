@@ -1193,7 +1193,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                           );
                         }),
 
-                        // Line chart
+                        // Line chart (paint first, then overlay points computed with same mapping)
                         CustomPaint(
                           size: Size(chartWidth, chartHeight),
                           painter: LineChartPainter(
@@ -1333,16 +1333,20 @@ class LineChartPainter extends CustomPainter {
       ..color = color
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
     final path = Path();
     final width = size.width;
-    final height = size.height - 26; // leave more space for x labels
+    // Use the same paddings as in the layout (must stay in sync)
+    const double topPad = 6.0;
+    const double bottomPad = 20.0;
+    final double usableHeight = size.height - topPad - bottomPad;
 
     for (int i = 0; i < data.length; i++) {
       final x = data.length == 1 ? 0.0 : (i / (data.length - 1)) * width;
       final ratio = maxValue <= 0 ? 0.0 : (data[i] / maxValue).clamp(0.0, 1.0);
-      final y = (1 - ratio) * (height - 6) + 6; // keep some top padding
+      final y = topPad + (1 - ratio) * usableHeight;
 
       if (i == 0) {
         path.moveTo(x, y);
