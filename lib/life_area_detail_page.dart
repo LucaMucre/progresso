@@ -49,7 +49,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       }).toList();
       
       // Filter logs for this specific area
-      final filteredLogs = logs.where((l) => _isLogForArea(l, templatesOverride: templates)).toList();
+      final filteredLogs = logs
+          .where((l) => _isLogForArea(l, templatesOverride: templates, subAreasOverride: subs))
+          .toList();
       
       // Calculate statistics
       final totalXp = filteredLogs.fold<int>(0, (sum, log) => sum + log.earnedXp);
@@ -76,11 +78,12 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     }
   }
 
-  bool _isLogForArea(ActionLog log, {List<ActionTemplate>? templatesOverride}) {
+  bool _isLogForArea(ActionLog log, {List<ActionTemplate>? templatesOverride, List<LifeArea>? subAreasOverride}) {
     final areaName = widget.area.name.toLowerCase();
     final category = widget.area.category.toLowerCase();
     final isSub = widget.area.parentId != null;
     final templatesRef = templatesOverride ?? _templates;
+    final subNames = (subAreasOverride ?? _subAreas).map((a) => a.name.toLowerCase()).toList();
 
     if (log.notes != null && log.notes!.isNotEmpty) {
       final raw = log.notes!;
@@ -93,7 +96,11 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
           if (isSub) {
             return nArea == areaName || nSub == areaName;
           } else {
-            return nArea == areaName || nCat == category;
+            // parent: match own area/category OR any subarea name
+            if (nArea == areaName || nCat == category) return true;
+            if (nArea != null && subNames.contains(nArea)) return true;
+            if (nSub != null && subNames.contains(nSub)) return true;
+            return false;
           }
         } else if (parsed is List) {
           try {
@@ -102,7 +109,11 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             if (isSub) {
               return plain.contains(areaName);
             } else {
-              return plain.contains(areaName) || plain.contains(category);
+              if (plain.contains(areaName) || plain.contains(category)) return true;
+              for (final s in subNames) {
+                if (plain.contains(s)) return true;
+              }
+              return false;
             }
           } catch (_) {
             return false;
@@ -111,7 +122,11 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       } catch (_) {
         final text = raw.toLowerCase();
         if (isSub) return text.contains(areaName);
-        return text.contains(areaName) || text.contains(category);
+        if (text.contains(areaName) || text.contains(category)) return true;
+        for (final s in subNames) {
+          if (text.contains(s)) return true;
+        }
+        return false;
       }
     }
 
@@ -125,8 +140,12 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       if (isSub) {
         return template.name.toLowerCase().contains(areaName);
       }
-      return template.category.toLowerCase() == category ||
-             template.name.toLowerCase().contains(areaName);
+      if (template.category.toLowerCase() == category ||
+          template.name.toLowerCase().contains(areaName)) return true;
+      for (final s in subNames) {
+        if (template.name.toLowerCase().contains(s)) return true;
+      }
+      return false;
     }
     return false;
   }
