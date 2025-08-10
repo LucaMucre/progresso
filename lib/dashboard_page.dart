@@ -1413,9 +1413,10 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final areas = await LifeAreasService.getLifeAreas();
       if (areas.isEmpty) {
-        // Erstelle Standard-Bereiche wenn keine vorhanden
+        // Standardbereiche anlegen und erst danach rendern
         await LifeAreasService.createDefaultLifeAreas();
-        return await LifeAreasService.getLifeAreas();
+        final all = await LifeAreasService.getLifeAreas();
+        return all;
       }
       return areas;
     } catch (e) {
