@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'achievement_service.dart';
+import 'life_areas_service.dart';
 
 final _db = Supabase.instance.client;
 
@@ -100,21 +102,70 @@ Future<List<ActionTemplate>> fetchTemplates() async {
   }
 }
 
+/// Grobe Textlänge aus dem Notes-Feld bestimmen (robust gegen JSON/Delta)
+int _estimatePlainTextLength(String? notes) {
+  if (notes == null || notes.trim().isEmpty) return 0;
+  try {
+    final obj = jsonDecode(notes);
+    if (obj is Map<String, dynamic>) {
+      int len = 0;
+      final title = obj['title'];
+      if (title is String) len += title.trim().length;
+      final content = obj['content'];
+      if (content is String) len += content.trim().length;
+      // Quill Delta eventuell als 'ops'
+      final ops = obj['ops'];
+      if (ops is List) {
+        for (final o in ops) {
+          if (o is Map && o['insert'] is String) {
+            len += (o['insert'] as String).length;
+          }
+        }
+      }
+      if (len > 0) return len;
+      // Fallback: stringify und filtern
+      return obj.toString().replaceAll(RegExp(r'[{}\[\]",:]+'), ' ').trim().length;
+    }
+    if (obj is List) {
+      // Mögliche Quill Delta
+      int len = 0;
+      for (final e in obj) {
+        if (e is Map && e['insert'] is String) {
+          len += (e['insert'] as String).length;
+        }
+      }
+      if (len > 0) return len;
+    }
+  } catch (_) {
+    // ignore and fall back
+  }
+  return notes.replaceAll(RegExp(r"\s+"), ' ').trim().length;
+}
+
 /// Client-seitige XP-Berechnung (spiegelt Edge Function)
-int calculateEarnedXp(int baseXp, int? durationMin, int streak) {
-  int earnedXp = baseXp;
-  
-  // Duration bonus (every 10 minutes = +1 XP)
-  if (durationMin != null) {
-    earnedXp += durationMin ~/ 10;
+int calculateEarnedXp({int? durationMin, String? notes, String? imageUrl}) {
+  // Grundidee: hauptsächlich Zeit, plus Textlänge, plus +10% bei Bild
+  final timeMinutes = durationMin ?? 0;
+  // 1 XP je 5 Minuten
+  int xp = timeMinutes ~/ 5;
+  // Textbonus: 1 XP je 100 Zeichen
+  final textLen = _estimatePlainTextLength(notes);
+  xp += textLen ~/ 100;
+  // Bildbonus: +10%
+  final hasImage = imageUrl != null && imageUrl.trim().isNotEmpty;
+  if (hasImage) {
+    xp = (xp * 1.1).round();
   }
+  // Sicherheitsnetz: mindestens 1 XP, wenn überhaupt etwas geloggt wurde
+  if (xp <= 0 && (timeMinutes > 0 || textLen > 0 || hasImage)) xp = 1;
   
-  // Streak bonus (if user has a streak >= 7 days)
-  if (streak >= 7) {
-    earnedXp += 2;
-  }
+  print('=== XP CALCULATION DEBUG ===');
+  print('Duration: $timeMinutes min -> ${timeMinutes ~/ 5} XP');
+  print('Notes: "$notes" -> $textLen chars -> ${textLen ~/ 100} XP');
+  print('Has Image: $hasImage -> ${hasImage ? "+10%" : "no bonus"}');
+  print('Final XP: $xp');
   
-  return earnedXp;
+  return xp;
 }
 
 /// Log anlegen mit client-seitiger XP-Berechnung
@@ -132,11 +183,12 @@ Future<ActionLog> createLog({
       .single() as Map<String, dynamic>;
   final baseXp = tplMap['base_xp'] as int;
 
-  // Aktuelle Streak holen für XP-Berechnung
-  final currentStreak = await calculateStreak();
-  
-  // Client-seitige XP-Berechnung
-  final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
+  // Neue, vereinheitlichte XP-Berechnung (unabhängig von Kategorie/BaseXP)
+  final earnedXp = calculateEarnedXp(
+    durationMin: durationMin,
+    notes: notes,
+    imageUrl: imageUrl,
+  );
 
   // Eintrag zusammenbauen und schreiben
   final insert = <String, dynamic>{
@@ -158,6 +210,9 @@ Future<ActionLog> createLog({
       .select()
       .single() as Map<String, dynamic>;
 
+  // Achievements nach erfolgreichem Insert prüfen
+  _checkAchievementsAfterLogInsert();
+
   return ActionLog.fromMap(out);
 }
 
@@ -169,14 +224,12 @@ Future<ActionLog> createQuickLog({
   String? notes,
   String? imageUrl,
 }) async {
-  // Aktuelle Streak holen für XP-Berechnung
-  final currentStreak = await calculateStreak();
-  
-  // Standard-XP für Quick-Logs (25 XP)
-  final baseXp = 25;
-  
-  // Client-seitige XP-Berechnung
-  final earnedXp = calculateEarnedXp(baseXp, durationMin, currentStreak);
+  // Neue, vereinheitlichte XP-Berechnung (Quick-Log ohne Template)
+  final earnedXp = calculateEarnedXp(
+    durationMin: durationMin,
+    notes: notes,
+    imageUrl: imageUrl,
+  );
 
   // Eintrag zusammenbauen
   final insertBase = <String, dynamic>{
@@ -210,7 +263,67 @@ Future<ActionLog> createQuickLog({
         .single() as Map<String, dynamic>;
   }
 
+  // Achievements nach erfolgreichem Insert prüfen
+  _checkAchievementsAfterLogInsert();
+
   return ActionLog.fromMap(out);
+}
+
+Future<void> _checkAchievementsAfterLogInsert() async {
+  try {
+    // Gesamt-XP (über alle Logs)
+    final totalXp = await fetchTotalXp();
+
+    // Gesamtzahl Aktivitäten
+    final logs = await fetchLogs();
+    final totalActions = logs.length;
+
+    // Streak serverseitig berechnen (bestehende Funktion)
+    final currentStreak = await calculateStreak();
+
+    // Anzahl aktiver Lebensbereiche: Bereiche, in denen mindestens eine Aktivität existiert
+    int lifeAreaCount = 0;
+    try {
+      final logsByArea = <String>{};
+      for (final l in logs) {
+        try {
+          if (l.notes == null) continue;
+          final obj = jsonDecode(l.notes!);
+          if (obj is Map<String, dynamic>) {
+            final name = (obj['area'] as String?)?.trim();
+            final category = (obj['category'] as String?)?.trim();
+            if (name != null && name.isNotEmpty) {
+              logsByArea.add('n:$name');
+            } else if (category != null && category.isNotEmpty) {
+              logsByArea.add('c:$category');
+            }
+          }
+        } catch (_) {}
+      }
+      lifeAreaCount = logsByArea.length;
+    } catch (_) {}
+
+    // Heutige Aktionen für Tages-Achievements
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+    int dailyActions = logs.where((l) => l.occurredAt.isAfter(start) && l.occurredAt.isBefore(end)).length;
+
+    await AchievementService.checkAndUnlockAchievements(
+      currentStreak: currentStreak,
+      totalActions: totalActions,
+      totalXP: totalXp,
+      level: calculateLevel(totalXp),
+      lifeAreaCount: lifeAreaCount,
+      dailyActions: dailyActions,
+      // Verwende lokale aktuelle Zeit als sichere Referenz für Special-Achievements (z. B. Wochenende),
+      // da das frisch eingefügte Log evtl. noch nicht in fetchLogs() erscheint (Replikationsverzögerung)
+      lastActionTime: DateTime.now(),
+    );
+  } catch (e) {
+    // still continue silently
+    // ignore
+  }
 }
 
 /// Alle Logs laden
@@ -248,29 +361,30 @@ Future<int> fetchTotalXp() async {
   }
 }
 
-/// XP-Schwelle für Level n
-int xpForLevel(int level) => (100 * pow(level.toDouble(), 1.5)).round();
+/// XP-Schwelle für Level n (lineares System)
+/// Jedes Level benötigt konstant 50 XP
+/// Level 1: 0-50 XP, Level 2: 50-100 XP, Level 3: 100-150 XP, etc.
+int xpForLevel(int level) => level * 50;
 
-/// Level aus Gesamt-XP berechnen (kompakte Variante, kompatibel zu Tests)
+/// Level aus Gesamt-XP berechnen (lineares System)
 int calculateLevel(int totalXp) {
-  // Spezieller Fall: Level 1 umfasst 0..=xpForLevel(1)
-  if (totalXp <= xpForLevel(1)) return 1;
-  int level = 2;
-  while (totalXp >= xpForLevel(level + 1)) {
-    level++;
-  }
-  return level;
+  // Bei linearem System: Level = (totalXp / 50) + 1, mindestens Level 1
+  if (totalXp <= 0) return 1;
+  return (totalXp / 50).floor() + 1;
 }
 
 /// Ausführliche Level-Progress-Infos: aktuelles Level, XP seit Levelstart, XP bis nächstes Level
 Map<String, int> calculateLevelDetailed(int totalXp) {
   final level = calculateLevel(totalXp);
-  final xpThis = xpForLevel(level);
-  final xpNext = xpForLevel(level + 1);
+  
+  // Bei linearem System: jedes Level benötigt genau 50 XP
+  final xpInto = totalXp % 50; // XP im aktuellen Level (Rest der Division)
+  final xpNeeded = 50; // Jedes Level benötigt 50 XP
+  
   return {
     'level': level,
-    'xpInto': totalXp - xpThis,
-    'xpNext': xpNext - xpThis,
+    'xpInto': xpInto,
+    'xpNext': xpNeeded,
   };
 }
 

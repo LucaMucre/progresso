@@ -16,6 +16,26 @@ class _AuthPageState extends State<AuthPage> {
   bool _loading = false;
   String? _error;
 
+  Future<void> _forgotPassword() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bitte E‑Mail eingeben')));
+      return;
+    }
+    try {
+      // Magic-Link zum Passwort-Reset in der App. Der Link führt zurück in die App,
+      // onAuthStateChange liefert dann USER_UPDATED, worauf wir einen Dialog zeigen.
+      final origin = Uri.base.origin; // funktioniert für Web & Desktop (http://localhost:...)
+      await Supabase.instance.client.auth.resetPasswordForEmail(email, redirectTo: origin);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort‑Reset E‑Mail versendet.')));
+    } on AuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: ${e.message}')));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+    }
+  }
+
   Future<void> _submit() async {
     setState(() {
       _loading = true;
@@ -208,7 +228,15 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _forgotPassword,
+                      child: const Text('Passwort vergessen?', style: TextStyle(color: Colors.white70)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     _isLogin
                         ? 'Melde dich mit deiner E-Mail an'

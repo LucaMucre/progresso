@@ -14,6 +14,9 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _assistOptIn = false;
   bool _loading = true;
+  final _oldPwCtrl = TextEditingController();
+  final _newPwCtrl = TextEditingController();
+  final _newPw2Ctrl = TextEditingController();
 
   @override
   void initState() {
@@ -27,6 +30,72 @@ class _SettingsPageState extends State<SettingsPage> {
       _assistOptIn = prefs.getBool('assist_opt_in') ?? false; // default: OFF (privat)
       _loading = false;
     });
+  }
+
+  Future<void> _changePassword() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Passwort ändern'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _oldPwCtrl,
+                  decoration: const InputDecoration(labelText: 'Aktuelles Passwort'),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _newPwCtrl,
+                  decoration: const InputDecoration(labelText: 'Neues Passwort'),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _newPw2Ctrl,
+                  decoration: const InputDecoration(labelText: 'Neues Passwort (wiederholen)'),
+                  obscureText: true,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+            ElevatedButton(
+              onPressed: () async {
+                final newPw = _newPwCtrl.text.trim();
+                final newPw2 = _newPw2Ctrl.text.trim();
+                if (newPw.isEmpty || newPw2.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bitte neues Passwort eingeben')));
+                  return;
+                }
+                if (newPw != newPw2) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwörter stimmen nicht überein')));
+                  return;
+                }
+                try {
+                  // Hinweis: Supabase benötigt das alte Passwort hier nicht, der Nutzer muss eingeloggt sein
+                  await Supabase.instance.client.auth.updateUser(UserAttributes(password: newPw));
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort aktualisiert')));
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+                }
+              },
+              child: const Text('Speichern'),
+            ),
+          ],
+        );
+      },
+    );
+    _oldPwCtrl.clear();
+    _newPwCtrl.clear();
+    _newPw2Ctrl.clear();
   }
 
   Future<void> _toggleAssist(bool enable) async {
@@ -109,6 +178,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   onChanged: _toggleAssist,
                 ),
                 const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.lock_reset),
+                  title: const Text('Passwort ändern'),
+                  onTap: _changePassword,
+                ),
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),
                   title: const Text('Datenschutz'),

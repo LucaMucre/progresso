@@ -35,6 +35,9 @@ class _DashboardPageState extends State<DashboardPage> {
   // Optional filter: show only activities for this life area name
   String? _selectedAreaFilterName;
 
+  // Ensure default life areas are only created once even if multiple builders call _loadLifeAreas()
+  Future<void>? _ensureDefaultsFuture;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1227,6 +1230,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
             const SizedBox(height: 24),
 
+            // Global Statistics Section
+            _buildGlobalStatisticsSection(context),
+            const SizedBox(height: 24),
+
             // Quick Actions for All Life Areas
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1413,16 +1420,463 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final areas = await LifeAreasService.getLifeAreas();
       if (areas.isEmpty) {
-        // Standardbereiche anlegen und erst danach rendern
-        await LifeAreasService.createDefaultLifeAreas();
-        final all = await LifeAreasService.getLifeAreas();
-        return all;
+        // Standardbereiche nur einmalig anlegen (schutz vor parallelen FutureBuilder-Aufrufen)
+        _ensureDefaultsFuture ??= LifeAreasService.createDefaultLifeAreas();
+        await _ensureDefaultsFuture;
+        return await LifeAreasService.getLifeAreas();
       }
       return areas;
     } catch (e) {
       print('Fehler beim Laden der Life Areas: $e');
       rethrow;
     }
+  }
+
+  Widget _buildGlobalStatisticsSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gesamt-Statistiken',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          'Alle Aktivitäten über alle Lebensbereiche hinweg',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: _calculateGlobalStatistics(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              
+              if (snapshot.hasError) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: Text('Fehler beim Laden der Statistiken')),
+                );
+              }
+              
+              final stats = snapshot.data ?? {};
+              final totalXp = stats['totalXp'] ?? 0;
+              final activityCount = stats['activityCount'] ?? 0;
+              final averageDuration = stats['averageDuration'] ?? 0.0;
+              
+              return Column(
+                children: [
+                  // Stats Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildGlobalStatCard(
+                          context,
+                          icon: Icons.star,
+                          title: 'Gesamt XP',
+                          value: '$totalXp',
+                          color: Colors.amber,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildGlobalStatCard(
+                          context,
+                          icon: Icons.trending_up,
+                          title: 'Aktivitäten',
+                          value: '$activityCount',
+                          color: Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildGlobalStatCard(
+                          context,
+                          icon: Icons.timer,
+                          title: 'Ø Dauer',
+                          value: _formatDuration(averageDuration),
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Optional: Activity Graph for the last 7 days (all areas combined)
+                  if (activityCount > 0) _buildGlobalActivityGraph(context),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGlobalStatCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: color.withOpacity(0.7),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlobalActivityGraph(BuildContext context) {
+    return FutureBuilder<List<int>>(
+      future: _getGlobalLast7DaysActivity(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+        
+        final activityCounts = snapshot.data!;
+        final int maxCount = activityCounts.isEmpty ? 1 : activityCounts.reduce((a, b) => a > b ? a : b);
+        
+        // Dynamic Y max (nice rounding)
+        int yMax;
+        if (maxCount <= 4) {
+          yMax = 4;
+        } else if (maxCount <= 6) {
+          yMax = 6;
+        } else if (maxCount <= 8) {
+          yMax = 8;
+        } else if (maxCount <= 10) {
+          yMax = 10;
+        } else {
+          yMax = ((maxCount + 4) / 5).ceil() * 5; // round up to multiple of 5
+        }
+        
+        final now = DateTime.now();
+        final last7Days = List.generate(7, (index) {
+          return DateTime(now.year, now.month, now.day - index);
+        }).reversed.toList();
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Aktivitäten der letzten 7 Tage',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 120,
+              child: Row(
+                children: [
+                  // Y-axis labels
+                  SizedBox(
+                    width: 30,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(5, (i) {
+                        final value = ((yMax / 4) * i).round();
+                        return Text(
+                          '$value',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: Colors.grey.withOpacity(0.7),
+                          ),
+                        );
+                      }).reversed.toList(),
+                    ),
+                  ),
+                  
+                  // Chart area (uses exact constraints for consistent geometry)
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final chartWidth = constraints.maxWidth;
+                        const chartHeight = 120.0;
+                        const topPad = 6.0;
+                        const bottomPad = 20.0;
+                        final usableHeight = chartHeight - topPad - bottomPad;
+
+                        double yFor(int value) {
+                          if (yMax <= 0) return chartHeight - bottomPad;
+                          final ratio = (value / yMax).clamp(0.0, 1.0);
+                          return topPad + (1 - ratio) * usableHeight;
+                        }
+
+                        double xFor(int index) {
+                          if (activityCounts.length == 1) return 0;
+                          return (index / (activityCounts.length - 1)) * chartWidth;
+                        }
+
+                        return Stack(
+                          children: [
+                            // Grid lines
+                            ...List.generate(4, (i) {
+                              final y = topPad + ((i + 1) / 4.0) * usableHeight;
+                              return Positioned(
+                                top: y,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.grey.withOpacity(0.2),
+                                ),
+                              );
+                            }),
+
+                            // Line chart (paint first, then overlay points computed with same mapping)
+                            CustomPaint(
+                              size: Size(chartWidth, chartHeight),
+                              painter: _GlobalLineChartPainter(
+                                data: activityCounts,
+                                maxValue: yMax.toDouble(),
+                                color: Colors.blue,
+                              ),
+                            ),
+
+                            // Data points with tooltips
+                            ...last7Days.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final date = entry.value;
+                              final count = activityCounts[index];
+                              final x = xFor(index);
+                              final y = yFor(count);
+                              // clamp to avoid clipping at edges
+                              final cx = x.clamp(4.0, chartWidth - 4.0);
+                              return Positioned(
+                                left: cx - 8,
+                                top: y - 8,
+                                child: Tooltip(
+                                  message: '${date.day}/${date.month}: $count Aktivitäten',
+                                  child: Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+
+                            // Date labels
+                            ...last7Days.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final date = entry.value;
+                              final x = xFor(index);
+                              final isFirst = index == 0;
+                              final isLast = index == last7Days.length - 1;
+                              return Positioned(
+                                bottom: 0,
+                                left: isFirst ? 0 : (isLast ? null : (x - 12)),
+                                right: isLast ? 0 : null,
+                                child: SizedBox(
+                                  width: 24,
+                                  child: Text(
+                                    '${date.day}/${date.month}',
+                                    textAlign: isFirst ? TextAlign.left : (isLast ? TextAlign.right : TextAlign.center),
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          fontSize: 10,
+                                          color: Colors.grey.withOpacity(0.7),
+                                        ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> _calculateGlobalStatistics() async {
+    try {
+      final logs = await fetchLogs();
+      
+      final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp);
+      final activityCount = logs.length;
+      final totalDuration = logs
+          .where((log) => log.durationMin != null)
+          .fold<int>(0, (sum, log) => sum + (log.durationMin ?? 0));
+      final averageDuration = activityCount > 0 ? totalDuration / activityCount : 0.0;
+      
+      return {
+        'totalXp': totalXp,
+        'activityCount': activityCount,
+        'averageDuration': averageDuration,
+      };
+    } catch (e) {
+      print('Fehler beim Berechnen der globalen Statistiken: $e');
+      return {};
+    }
+  }
+
+  Future<List<int>> _getGlobalLast7DaysActivity() async {
+    try {
+      final logs = await fetchLogs();
+      final now = DateTime.now();
+      final last7Days = List.generate(7, (index) {
+        return DateTime(now.year, now.month, now.day - index);
+      }).reversed.toList();
+      
+      return last7Days.map((date) {
+        final targetDate = DateTime(date.year, date.month, date.day);
+        return logs.where((log) {
+          final local = log.occurredAt.toLocal();
+          final logDate = DateTime(local.year, local.month, local.day);
+          return logDate.year == targetDate.year &&
+              logDate.month == targetDate.month &&
+              logDate.day == targetDate.day;
+        }).length;
+      }).toList();
+    } catch (e) {
+      print('Fehler beim Laden der 7-Tage-Aktivitäten: $e');
+      return List.filled(7, 0);
+    }
+  }
+
+  String _formatDuration(double minutes) {
+    if (minutes <= 0) return '0 Min';
+    
+    final totalMinutes = minutes.round();
+    
+    // Wochen (7 Tage = 10080 Minuten)
+    if (totalMinutes >= 10080) {
+      final weeks = (totalMinutes / 10080).floor();
+      final remainingMinutes = totalMinutes - (weeks * 10080);
+      final days = (remainingMinutes / 1440).floor();
+      
+      if (weeks == 1) {
+        if (days > 0) {
+          return days == 1 ? '1 Woche, 1 Tag' : '1 Woche, $days Tage';
+        } else {
+          return '1 Woche';
+        }
+      } else {
+        if (days > 0) {
+          return days == 1 ? '$weeks Wochen, 1 Tag' : '$weeks Wochen, $days Tage';
+        } else {
+          return '$weeks Wochen';
+        }
+      }
+    }
+    
+    // Tage (24 Stunden = 1440 Minuten)
+    if (totalMinutes >= 1440) {
+      final days = (totalMinutes / 1440).floor();
+      final remainingMinutes = totalMinutes - (days * 1440);
+      final hours = (remainingMinutes / 60).floor();
+      
+      if (days == 1) {
+        if (hours > 0) {
+          return hours == 1 ? '1 Tag, 1 Std' : '1 Tag, $hours Std';
+        } else {
+          return '1 Tag';
+        }
+      } else {
+        if (hours > 0) {
+          return hours == 1 ? '$days Tage, 1 Std' : '$days Tage, $hours Std';
+        } else {
+          return '$days Tage';
+        }
+      }
+    }
+    
+    // Stunden (60 Minuten)
+    if (totalMinutes >= 60) {
+      final hours = (totalMinutes / 60).floor();
+      final remainingMinutes = totalMinutes - (hours * 60);
+      
+      if (hours == 1) {
+        if (remainingMinutes > 0) {
+          return '1 Std, $remainingMinutes Min';
+        } else {
+          return '1 Std';
+        }
+      } else {
+        if (remainingMinutes > 0) {
+          return '$hours Std, $remainingMinutes Min';
+        } else {
+          return '$hours Std';
+        }
+      }
+    }
+    
+    return '$totalMinutes Min';
   }
 
   Color _parseColor(String hex) {
@@ -1546,4 +2000,52 @@ _AreaTag? _matchAreaTag(List<_AreaTag> tags, String? areaName, String? category)
     if (cat != null && cat.isNotEmpty && t.category.toLowerCase() == cat) return t;
   }
   return null;
+}
+
+class _GlobalLineChartPainter extends CustomPainter {
+  final List<int> data;
+  final double maxValue;
+  final Color color;
+
+  _GlobalLineChartPainter({
+    required this.data,
+    required this.maxValue,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final path = Path();
+    final width = size.width;
+    // Use the same paddings as in the layout (must stay in sync)
+    const double topPad = 6.0;
+    const double bottomPad = 20.0;
+    final double usableHeight = size.height - topPad - bottomPad;
+
+    for (int i = 0; i < data.length; i++) {
+      final x = data.length == 1 ? 0.0 : (i / (data.length - 1)) * width;
+      final ratio = maxValue <= 0 ? 0.0 : (data[i] / maxValue).clamp(0.0, 1.0);
+      final y = topPad + (1 - ratio) * usableHeight;
+
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

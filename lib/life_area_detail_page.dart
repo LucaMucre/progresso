@@ -9,10 +9,12 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 class LifeAreaDetailPage extends StatefulWidget {
   final LifeArea area;
+  final LifeArea? parentArea;
 
   const LifeAreaDetailPage({
     Key? key,
     required this.area,
+    this.parentArea,
   }) : super(key: key);
 
   @override
@@ -23,6 +25,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   bool _isLoading = true;
   List<ActionTemplate> _templates = [];
   List<ActionLog> _logs = [];
+  // Direkt zugeordnete Logs (für Bubble-View im Parent-Bereich)
+  List<ActionLog> _logsForBubbles = [];
+  LifeArea? _parentArea;
   int _totalXp = 0;
   int _activityCount = 0;
   double _averageDuration = 0;
@@ -33,6 +38,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   @override
   void initState() {
     super.initState();
+    // Parent, falls vorgeladen, sofort setzen (verhindert Header-Flackern)
+    if (widget.parentArea != null) {
+      _parentArea = widget.parentArea;
+    }
     _loadData();
   }
 
@@ -41,6 +50,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       final templates = await fetchTemplates();
       final logs = await fetchLogs();
       final subs = await LifeAreasService.getChildAreas(widget.area.id);
+      final parent = widget.area.parentId != null
+          ? await LifeAreasService.getAreaById(widget.area.parentId!)
+          : null;
       
       // Filter templates for this area
       final filteredTemplates = templates.where((template) {
@@ -49,8 +61,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       }).toList();
       
       // Filter logs for this specific area
+      // Für Statistiken/Tabelle: Parent soll Sub-Logs einschließen
       final filteredLogs = logs
-          .where((l) => _isLogForArea(l, templatesOverride: templates, subAreasOverride: subs))
+          .where((l) => _isLogForArea(l,
+              templatesOverride: templates,
+              subAreasOverride: subs,
+              includeSubareasForParent: true))
+          .toList();
+
+      // Für Bubble-View im Parent: nur direkt zugeordnete Logs (keine Sub-Logs)
+      final bubbleLogs = logs
+          .where((l) => _isLogForArea(l,
+              templatesOverride: templates,
+              subAreasOverride: subs,
+              includeSubareasForParent: false))
           .toList();
       
       // Calculate statistics
@@ -64,7 +88,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       setState(() {
         _templates = filteredTemplates;
         _logs = filteredLogs;
+        _logsForBubbles = bubbleLogs;
         _subAreas = subs;
+        _parentArea = parent;
         _totalXp = totalXp;
         _activityCount = activityCount;
         _averageDuration = averageDuration;
@@ -78,7 +104,12 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     }
   }
 
-  bool _isLogForArea(ActionLog log, {List<ActionTemplate>? templatesOverride, List<LifeArea>? subAreasOverride}) {
+  bool _isLogForArea(
+    ActionLog log, {
+    List<ActionTemplate>? templatesOverride,
+    List<LifeArea>? subAreasOverride,
+    bool includeSubareasForParent = true,
+  }) {
     final areaName = widget.area.name.toLowerCase();
     final category = widget.area.category.toLowerCase();
     final isSub = widget.area.parentId != null;
@@ -96,10 +127,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
           if (isSub) {
             return nArea == areaName || nSub == areaName;
           } else {
-            // parent: match own area/category OR any subarea name
+            // Parent: nur direkt zugeordnete Logs, wenn includeSubareasForParent=false
+            if (!includeSubareasForParent) {
+              // Wenn eine Subarea explizit gesetzt ist, ausschließen
+              if (nSub != null && nSub.trim().isNotEmpty) return false;
+              // Falls area einem Subnamen entspricht, ebenfalls ausschließen
+              if (nArea != null && subNames.contains(nArea)) return false;
+            }
+            // parent: match own area/category
             if (nArea == areaName || nCat == category) return true;
-            if (nArea != null && subNames.contains(nArea)) return true;
-            if (nSub != null && subNames.contains(nSub)) return true;
+            // optional: Subareas mitzählen
+            if (includeSubareasForParent) {
+              if (nArea != null && subNames.contains(nArea)) return true;
+              if (nSub != null && subNames.contains(nSub)) return true;
+            }
             return false;
           }
         } else if (parsed is List) {
@@ -109,9 +150,17 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             if (isSub) {
               return plain.contains(areaName);
             } else {
+              // Bei Bubble-View des Parents: Sub-Namen ausschließen
+              if (!includeSubareasForParent) {
+                for (final s in subNames) {
+                  if (plain.contains(s)) return false;
+                }
+              }
               if (plain.contains(areaName) || plain.contains(category)) return true;
-              for (final s in subNames) {
-                if (plain.contains(s)) return true;
+              if (includeSubareasForParent) {
+                for (final s in subNames) {
+                  if (plain.contains(s)) return true;
+                }
               }
               return false;
             }
@@ -122,9 +171,17 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       } catch (_) {
         final text = raw.toLowerCase();
         if (isSub) return text.contains(areaName);
+        // Bei Bubble-View des Parents: Sub-Namen ausschließen
+        if (!includeSubareasForParent) {
+          for (final s in subNames) {
+            if (text.contains(s)) return false;
+          }
+        }
         if (text.contains(areaName) || text.contains(category)) return true;
-        for (final s in subNames) {
-          if (text.contains(s)) return true;
+        if (includeSubareasForParent) {
+          for (final s in subNames) {
+            if (text.contains(s)) return true;
+          }
         }
         return false;
       }
@@ -140,10 +197,18 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       if (isSub) {
         return template.name.toLowerCase().contains(areaName);
       }
+      // Bei Bubble-View des Parents: Sub-Namen im Template explizit ausschließen
+      if (!includeSubareasForParent) {
+        for (final s in subNames) {
+          if (template.name.toLowerCase().contains(s)) return false;
+        }
+      }
       if (template.category.toLowerCase() == category ||
           template.name.toLowerCase().contains(areaName)) return true;
-      for (final s in subNames) {
-        if (template.name.toLowerCase().contains(s)) return true;
+      if (includeSubareasForParent) {
+        for (final s in subNames) {
+          if (template.name.toLowerCase().contains(s)) return true;
+        }
       }
       return false;
     }
@@ -343,7 +408,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             children: [
               // Header with area info
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: _parseColor(widget.area.color).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
@@ -352,42 +417,160 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                     width: 2,
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _parseColor(widget.area.color),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        _getIconData(widget.area.icon),
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    // Zeile 1: Elternbereich (falls Unterkategorie)
+                    if (widget.area.parentId != null && _parentArea != null) ...[
+                      Builder(builder: (context) {
+                        final areaColor = _parseColor(widget.area.color);
+                        final parentColor = _parseColor(_parentArea!.color);
+                        final nameFontSize = Theme.of(context).textTheme.titleLarge?.fontSize ?? 22;
+                        final arrowHeight = nameFontSize * 0.9;
+                        return IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Hoher Icon-Block, der beide Zeilen vertikal umfasst
+                              Container(
+                                width: 48,
+                                decoration: BoxDecoration(
+                                  color: parentColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  _getIconData(_parentArea!.icon),
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Zeile: Parent
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            _parentArea!.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                  color: parentColor,
+                                                ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: parentColor.withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(color: parentColor.withOpacity(0.25)),
+                                          ),
+                                          child: Text(
+                                            _parentArea!.category,
+                                            style: TextStyle(
+                                              color: parentColor,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    // Zeile: L-Pfeil + eingerückte Unterkategorie
+                                    Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 56,
+                                          height: arrowHeight,
+                                          child: CustomPaint(
+                                            painter: LArrowPainter(color: areaColor),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            widget.area.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                  color: areaColor,
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ]
+                    // Sonst: Normaler Header ohne Pfeil
+                    else ...[
+                      Row(
                         children: [
-                          Text(
-                            widget.area.name,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
                               color: _parseColor(widget.area.color),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _getIconData(widget.area.icon),
+                              color: Colors.white,
+                              size: 22,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.area.category,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: _parseColor(widget.area.color).withOpacity(0.7),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.area.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: _parseColor(widget.area.color),
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: _parseColor(widget.area.color).withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: _parseColor(widget.area.color).withOpacity(0.25)),
+                                  ),
+                                  child: Text(
+                                    widget.area.category,
+                                    style: TextStyle(
+                                      color: _parseColor(widget.area.color),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -396,7 +579,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               // Activity Canvas Section with View Toggle
               if (!_isLoading) _buildActivityCanvasWithToggle(),
               const SizedBox(height: 24),
-              _buildSubAreasSection(),
+              if (widget.area.parentId == null) _buildSubAreasSection(),
               const SizedBox(height: 24),
 
               // Progress Visualization Section
@@ -802,8 +985,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             return rect!;
           }
 
-          // 1) Activities
-          for (final log in _logs) {
+          // 1) Activities (im Parent nur direkt zugeordnete)
+          final sourceLogs = widget.area.parentId == null ? _logsForBubbles : _logs;
+          for (final log in sourceLogs) {
             final size = 70.0 + rand.nextDouble() * 40.0;
             final rect = place(size);
             final base = _parseColor(widget.area.color);
@@ -846,7 +1030,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               ),
               () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area)),
+                  MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area, parentArea: widget.area)),
                 );
               },
             );
@@ -1502,24 +1686,38 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                           ),
                         ),
 
-                        // Data points
+                        // Data points with tooltips
                         ...last7Days.asMap().entries.map((entry) {
                           final index = entry.key;
+                          final date = entry.value;
                           final count = activityCounts[index];
                           final x = xFor(index);
                           final y = yFor(count);
                           // clamp to avoid clipping at edges
                           final cx = x.clamp(4.0, chartWidth - 4.0);
                           return Positioned(
-                            left: cx - 4,
-                            top: y - 4,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _parseColor(widget.area.color),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                            left: cx - 8,
+                            top: y - 8,
+                            child: Tooltip(
+                              message: '${date.day}/${date.month}: $count Aktivitäten',
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: _parseColor(widget.area.color),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 2),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           );
@@ -1659,4 +1857,41 @@ class LineChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class LArrowPainter extends CustomPainter {
+  final Color color;
+  LArrowPainter({this.color = Colors.black87});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // L-Form: nach unten, dann rechts, mit Pfeilspitze, zentriert an der halben Höhe
+    final path = Path();
+    final startX = size.width * 0.15;
+    final midY = size.height * 0.5;
+    final arrowRightX = size.width * 0.98;
+
+    path.moveTo(startX, 0);
+    path.lineTo(startX, midY);
+    path.lineTo(arrowRightX, midY);
+    canvas.drawPath(path, paint);
+
+    // Pfeilspitze
+    final headSize = 6.0;
+    final base = Offset(arrowRightX, midY);
+    final left = Offset(arrowRightX - headSize, midY - headSize * 0.8);
+    final right = Offset(arrowRightX - headSize, midY + headSize * 0.8);
+    canvas.drawLine(base, left, paint);
+    canvas.drawLine(base, right, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

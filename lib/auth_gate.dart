@@ -20,8 +20,13 @@ class _AuthGateState extends State<AuthGate> {
     super.initState();
     try {
       // Supabase onAuthStateChange ist ein Stream<AuthStateChange>
-      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((_) {
-        setState(() {}); // beim Ein-/Ausloggen neu rendern
+      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+        final event = data.event;
+        // Wenn Nutzer über Magic-Link in den Passwort-Reset kommt, löst Supabase USER_UPDATED aus.
+        if (event == AuthChangeEvent.userUpdated) {
+          await _showInAppPasswordReset();
+        }
+        if (mounted) setState(() {}); // beim Ein-/Ausloggen neu rendern
       });
     } catch (e) {
       print('AuthGate Fehler: $e');
@@ -29,6 +34,63 @@ class _AuthGateState extends State<AuthGate> {
         _hasError = true;
       });
     }
+  }
+
+  Future<void> _showInAppPasswordReset() async {
+    final newPwCtrl = TextEditingController();
+    final newPw2Ctrl = TextEditingController();
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Neues Passwort setzen'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: newPwCtrl,
+              decoration: const InputDecoration(labelText: 'Neues Passwort'),
+              obscureText: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newPw2Ctrl,
+              decoration: const InputDecoration(labelText: 'Neues Passwort (wiederholen)'),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          ElevatedButton(
+            onPressed: () async {
+              final a = newPwCtrl.text.trim();
+              final b = newPw2Ctrl.text.trim();
+              if (a.isEmpty || b.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bitte Passwort eingeben')));
+                return;
+              }
+              if (a != b) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwörter stimmen nicht überein')));
+                return;
+              }
+              try {
+                await Supabase.instance.client.auth.updateUser(UserAttributes(password: a));
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort aktualisiert. Bitte neu einloggen.')));
+                }
+                // Optional: Session invalidieren
+                await Supabase.instance.client.auth.signOut();
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+              }
+            },
+            child: const Text('Speichern'),
+          )
+        ],
+      ),
+    );
   }
 
   @override

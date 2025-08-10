@@ -69,54 +69,40 @@ serve(async (req) => {
       )
     }
 
-    // Calculate XP with bonuses
-    let earnedXp = actionLog.action_templates.base_xp
+    // Neue XP-Formel: Zeit + Textlänge + 10% bei Bild (Kategorie/Vorlage neutral)
+    const durationMin: number = actionLog.duration_min ?? 0
+    let earnedXp = Math.floor(durationMin / 5) // 1 XP je 5 Minuten
 
-    // Duration bonus (every 10 minutes = +1 XP)
-    if (actionLog.duration_min) {
-      earnedXp += Math.floor(actionLog.duration_min / 10)
+    // Textlänge schätzen
+    const estimateTextLen = (notes?: string | null): number => {
+      if (!notes || !notes.trim()) return 0
+      try {
+        const obj = JSON.parse(notes)
+        if (Array.isArray(obj)) {
+          // Quill Delta
+          return obj.reduce((sum, e) => sum + (typeof e?.insert === 'string' ? e.insert.length : 0), 0)
+        }
+        if (typeof obj === 'object' && obj) {
+          let len = 0
+          if (typeof obj.title === 'string') len += obj.title.trim().length
+          if (typeof obj.content === 'string') len += obj.content.trim().length
+          if (Array.isArray((obj as any).ops)) {
+            len += (obj as any).ops.reduce((s: number, o: any) => s + (typeof o?.insert === 'string' ? o.insert.length : 0), 0)
+          }
+          if (len > 0) return len
+          return JSON.stringify(obj).replace(/[{}\[\]",:]+/g, ' ').trim().length
+        }
+      } catch {}
+      return notes.replace(/\s+/g, ' ').trim().length
     }
 
-    // Streak bonus (if user has a streak > 7 days)
-    const { data: streakData } = await supabaseClient
-      .from('action_logs')
-      .select('occurred_at')
-      .eq('user_id', user.id)
-      .gte('occurred_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .order('occurred_at', { ascending: false })
+    const textLen = estimateTextLen(actionLog.notes)
+    earnedXp += Math.floor(textLen / 100) // 1 XP je 100 Zeichen
 
-    if (streakData) {
-      const dates = streakData.map(log => 
-        new Date(log.occurred_at).toDateString()
-      ).filter((date, index, arr) => arr.indexOf(date) === index)
+    const hasImage = !!actionLog.image_url && String(actionLog.image_url).trim().length > 0
+    if (hasImage) earnedXp = Math.round(earnedXp * 1.1)
 
-      let streak = 0
-      const today = new Date().toDateString()
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString()
-
-      if (dates.includes(today)) {
-        streak = 1
-        let checkDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-        
-        while (dates.includes(checkDate.toDateString())) {
-          streak++
-          checkDate = new Date(checkDate.getTime() - 24 * 60 * 60 * 1000)
-        }
-      } else if (dates.includes(yesterday)) {
-        streak = 1
-        let checkDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-        
-        while (dates.includes(checkDate.toDateString())) {
-          streak++
-          checkDate = new Date(checkDate.getTime() - 24 * 60 * 60 * 1000)
-        }
-      }
-
-      // Streak bonus: +2 XP for 7+ day streak
-      if (streak >= 7) {
-        earnedXp += 2
-      }
-    }
+    if (earnedXp <= 0 && (durationMin > 0 || textLen > 0 || hasImage)) earnedXp = 1
 
     // Update the action log with calculated XP
     const { error: updateError } = await supabaseClient

@@ -2,12 +2,15 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
 import 'services/avatar_sync_service.dart';
+import 'services/achievement_service.dart';
+import 'widgets/achievement_unlock_widget.dart';
 import 'life_area_detail_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -29,6 +32,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int _currentStreak = 0;
   int _longestStreak = 0;
   int _totalXP = 0;
+  int _xpSinceBaseline = 0;
   String? _avatarUrl;
   int _cacheBust = 0;
   RealtimeChannel? _usersChannel;
@@ -42,8 +46,49 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadProfile();
     _loadStatistics();
     _subscribeToUserChanges();
+    _subscribeToActivityChanges();
+    _initializeAchievements();
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
     AvatarSyncService.avatarVersion.addListener(_loadProfile);
+  }
+  
+  void _subscribeToActivityChanges() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    
+    final channel = _supabase
+        .channel('public:action_logs:user_id=eq.${user.id}:profile-refresh')
+        .on(
+          RealtimeListenTypes.postgresChanges,
+          ChannelFilter(
+            event: 'INSERT',
+            schema: 'public',
+            table: 'action_logs',
+            filter: 'user_id=eq.${user.id}',
+          ),
+          (payload, [ref]) async {
+            // Reload statistics when new activity is created
+            await _loadStatistics();
+            if (mounted) setState(() {});
+          },
+        );
+    channel.subscribe();
+  }
+  
+  Future<void> _initializeAchievements() async {
+    await AchievementService.loadUnlockedAchievements();
+    AchievementService.setOnAchievementUnlocked(_showAchievementUnlock);
+  }
+  
+  void _showAchievementUnlock(Achievement achievement) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AchievementUnlockWidget(
+        achievement: achievement,
+        onDismissed: () => Navigator.of(context).pop(),
+      ),
+    );
   }
 
   Future<void> _loadProfile() async {
@@ -116,7 +161,23 @@ class _ProfilePageState extends State<ProfilePage> {
         _totalActions = dates.length;
         _currentStreak = _calculateCurrentStreak(dates);
         _longestStreak = _calculateLongestStreak(dates);
-        _totalXP = character.totalXp;
+        // Gesamt-XP anhand der Logs berechnen (nicht aus Character.total_xp, da dies evtl. nicht synchron ist)
+        _totalXP = await fetchTotalXp();
+
+        // Level-Baseline (Startpunkt) einmalig setzen, damit alte XP nicht das Level hochschießen lassen
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final baselineKey = 'level_xp_baseline_${user.id}';
+          int? baseline = prefs.getInt(baselineKey);
+          if (baseline == null) {
+            // Für neue Nutzer (0 oder 1 Aktivität) Baseline = 0, sonst aktueller XP-Stand
+            baseline = (_totalActions <= 1) ? 0 : _totalXP;
+            await prefs.setInt(baselineKey, baseline);
+          }
+          _xpSinceBaseline = (_totalXP - baseline).clamp(0, 1 << 31);
+        } catch (_) {
+          _xpSinceBaseline = _totalXP; // Fallback: ohne Baseline direkt verwenden
+        }
 
         // Rank life areas by activity count (desc)
         int countForArea(Map<String, dynamic> log, LifeArea area) {
@@ -154,12 +215,63 @@ class _ProfilePageState extends State<ProfilePage> {
         _areaActivityCounts = areaToCount;
       }
       
+      // Check achievements after loading statistics
+      await _checkAchievements();
+      
       setState(() {
         _character = character;
         _lifeAreas = areas;
       });
     } catch (e) {
       print('Fehler beim Laden der Statistiken: $e');
+    }
+  }
+  
+  Future<void> _checkAchievements() async {
+    if (_character == null) return;
+    
+    // Count today's actions for daily achievements
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+    
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final todayLogsResponse = await _supabase
+            .from('action_logs')
+            .select('occurred_at')
+            .eq('user_id', user.id)
+            .gte('occurred_at', todayStart.toIso8601String())
+            .lt('occurred_at', todayEnd.toIso8601String());
+        
+        final dailyActions = (todayLogsResponse as List).length;
+        
+        // Get last action time for special achievements
+        final lastActionResponse = await _supabase
+            .from('action_logs')
+            .select('occurred_at')
+            .eq('user_id', user.id)
+            .order('occurred_at', ascending: false)
+            .limit(1);
+        
+        DateTime? lastActionTime;
+        if ((lastActionResponse as List).isNotEmpty) {
+          lastActionTime = DateTime.parse(lastActionResponse.first['occurred_at']);
+        }
+        
+        await AchievementService.checkAndUnlockAchievements(
+          currentStreak: _currentStreak,
+          totalActions: _totalActions,
+          totalXP: _totalXP,
+          level: _character!.level,
+          lifeAreaCount: _lifeAreas.length,
+          dailyActions: dailyActions,
+          lastActionTime: lastActionTime,
+        );
+      }
+    } catch (e) {
+      print('Error checking achievements: $e');
     }
   }
 
@@ -316,6 +428,46 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildXPProgressBar() {
+    if (_character == null) return const SizedBox.shrink();
+    
+    // Verwende Gesamt-XP aus Logs, damit Anzeige immer aktuell ist
+    final levelDetails = calculateLevelDetailed(_xpSinceBaseline);
+    final xpInto = levelDetails['xpInto']!;
+    final xpNext = levelDetails['xpNext']!;
+    final progress = xpNext > 0 ? (xpInto / xpNext).clamp(0.0, 1.0) : 1.0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 6,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$xpInto / $xpNext XP',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -541,20 +693,28 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         if (_character != null) ...[
                           const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Level ${_character!.level}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Level ${calculateLevel(_xpSinceBaseline)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildXPProgressBar(),
+                              ),
+                            ],
                           ),
                         ],
                       ],
@@ -791,47 +951,86 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 24),
 
             // Achievements Section
-            Text(
-              'Achievements',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Column(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildAchievementCard(
-                  'Erste Schritte',
-                  'Erstelle deinen ersten Lebensbereich',
-                  Icons.add_circle,
-                  Colors.blue,
-                  _lifeAreas.isNotEmpty,
+                Text(
+                  'Achievements',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _buildAchievementCard(
-                  'Durchhalter',
-                  '7 Tage in Folge aktiv',
-                  Icons.local_fire_department,
-                  Colors.orange,
-                  _currentStreak >= 7,
-                ),
-                const SizedBox(height: 12),
-                _buildAchievementCard(
-                  'Experte',
-                  '30 Tage in Folge aktiv',
-                  Icons.emoji_events,
-                  Colors.amber,
-                  _currentStreak >= 30,
-                ),
-                const SizedBox(height: 12),
-                _buildAchievementCard(
-                  'Vielseitig',
-                  '5 verschiedene Lebensbereiche',
-                  Icons.category,
-                  Colors.green,
-                  _lifeAreas.length >= 5,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    '${AchievementService.getUnlockedCount()}/${AchievementService.getTotalCount()}',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            
+            // Progress bar
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: AchievementService.getProgressPercentage(),
+                  backgroundColor: Colors.transparent,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Achievement Grid
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final crossAxisCount = width > 800 ? 3 : width > 600 ? 2 : 1;
+                
+                final allAchievements = AchievementService.allAchievements;
+                
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: 80,
+                  ),
+                  itemCount: allAchievements.length,
+                  itemBuilder: (context, index) {
+                    final achievement = allAchievements[index];
+                    final isUnlocked = AchievementService.isUnlocked(achievement.id);
+                    
+                    return _buildAchievementCard(
+                      achievement.title,
+                      achievement.description,
+                      achievement.icon,
+                      achievement.color,
+                      isUnlocked,
+                    );
+                  },
+                );
+              },
             ),
             const SizedBox(height: 24),
 
