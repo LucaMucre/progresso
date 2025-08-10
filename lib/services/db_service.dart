@@ -304,12 +304,17 @@ Future<List<DateTime>> fetchLoggedDates(int days) async {
 /// Berechnet die aktuelle Streak basierend auf zusammenhängenden Tagen,
 /// ausgehend vom zuletzt geloggten Tag (nicht zwingend heute).
 Future<int> calculateStreak() async {
-  print('=== CALCULATE STREAK DEBUG ===');
+  print('=== CALCULATE STREAK DEBUG (RPC) ===');
   try {
-    final dates = await fetchLoggedDates(30); // bereits Tag-genormt und absteigend sortiert
+    final uid = _db.auth.currentUser?.id;
+    if (uid == null) return 0;
+    final res = await _db.rpc('calculate_streak', params: {'uid': uid});
+    final rpc = (res is int) ? res : int.tryParse('$res') ?? 0;
+    print('Calculated streak (RPC): $rpc');
+    // Fallback auf lokale Berechnung, falls RPC 0 liefert aber Daten vorhanden sind
+    if (rpc > 0) return rpc;
+    final dates = await fetchLoggedDates(30);
     if (dates.isEmpty) return 0;
-
-    // Starte beim letzten geloggten Tag (heute ODER gestern etc.)
     final DateTime start = dates.reduce((a, b) => a.isAfter(b) ? a : b);
     int streak = 0;
     DateTime cursor = start;
@@ -322,11 +327,10 @@ Future<int> calculateStreak() async {
         break;
       }
     }
-    print('Calculated streak: $streak');
     return streak;
   } catch (e) {
-    print('Error calculating streak: $e');
-    rethrow;
+    print('Error calculating streak (RPC/local): $e');
+    return 0;
   }
 }
 

@@ -128,9 +128,14 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
             ),
           ],
         ),
-        child: const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        child: const SizedBox(
+          height: 32,
+          width: 32,
+          child: Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2.2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
           ),
         ),
       );
@@ -173,7 +178,8 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                   color: Colors.white.withOpacity(0.15),
                 ),
                 child: _userAvatarUrl != null
-                    ? Image.network(
+                    ? FadeInImage.assetNetwork(
+                        placeholder: 'assets/default_avatar.png',
                         '${_userAvatarUrl!}?cb=$_cacheBust',
                         key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
                         fit: BoxFit.cover,
