@@ -1773,19 +1773,27 @@ class _DashboardPageState extends State<DashboardPage> {
         final minutesPerDay = snapshot.data!;
         final int maxMinutes = minutesPerDay.isEmpty ? 0 : minutesPerDay.reduce((a, b) => a > b ? a : b);
 
-        // Dynamic Y max in "nice" minute steps
-        int yMax;
-        if (maxMinutes <= 30) {
-          yMax = 30;
-        } else if (maxMinutes <= 60) {
-          yMax = 60;
-        } else if (maxMinutes <= 120) {
-          yMax = 120;
-        } else if (maxMinutes <= 180) {
-          yMax = 180;
+        // Y-Achse in Stunden anzeigen, Skalierung intern weiter in Minuten
+        final double maxHours = maxMinutes / 60.0;
+        double yMaxHours;
+        if (maxHours <= 1) {
+          yMaxHours = 1;
+        } else if (maxHours <= 2) {
+          yMaxHours = 2;
+        } else if (maxHours <= 3) {
+          yMaxHours = 3;
+        } else if (maxHours <= 4) {
+          yMaxHours = 4;
+        } else if (maxHours <= 6) {
+          yMaxHours = 6;
+        } else if (maxHours <= 8) {
+          yMaxHours = 8;
+        } else if (maxHours <= 10) {
+          yMaxHours = 10;
         } else {
-          yMax = ((maxMinutes + 29) / 30).ceil() * 30; // round up to multiple of 30
+          yMaxHours = (((maxHours + 4) / 5).ceil() * 5).toDouble();
         }
+        final int yMax = (yMaxHours * 60).round();
 
         final now = DateTime.now();
         final last7Days = List.generate(7, (index) {
@@ -1796,7 +1804,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Dauer der letzten 7 Tage (Minuten)',
+              'Dauer der letzten 7 Tage (Stunden)',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -1812,9 +1820,12 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: List.generate(5, (i) {
-                        final value = ((yMax / 4) * i).round();
+                        final double labelHours = (yMaxHours / 4.0) * i;
+                        final String label = (labelHours % 1 == 0)
+                            ? labelHours.toInt().toString()
+                            : labelHours.toStringAsFixed(1);
                         return Text(
-                          '$value',
+                          label,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 fontSize: 10,
                                 color: Colors.grey.withOpacity(0.7),
