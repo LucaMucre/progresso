@@ -370,7 +370,12 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      dayToTitles.putIfAbsent(dayKey, () => <_DayEntry>[]).add(_DayEntry(title: title, color: tagColor));
+      final String? areaKey = matched != null
+          ? '${matched!.name.toLowerCase()}|${matched!.category.toLowerCase()}'
+          : null;
+      dayToTitles
+          .putIfAbsent(dayKey, () => <_DayEntry>[])
+          .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey));
     }
 
     return dayToTitles;
@@ -472,13 +477,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
               }
               final data = snapshot.data ?? {};
-              // Zähle pro Farbe die Anzahl der Einträge im gesamten Monat
-              final Map<int, int> monthColorCounts = {};
+              // Zähle pro Lebensbereich (areaKey) die Anzahl im Monat
+              final Map<String, int> monthAreaCounts = {};
               data.values.forEach((list) {
                 for (final e in list) {
-                  final c = e.color;
-                  if (c != null) {
-                    monthColorCounts[c.value] = (monthColorCounts[c.value] ?? 0) + 1;
+                  if (e.areaKey != null) {
+                    monthAreaCounts[e.areaKey!] = (monthAreaCounts[e.areaKey!] ?? 0) + 1;
                   }
                 }
               });
@@ -504,7 +508,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       day: dayCounter,
                       entries: entries,
                       onTap: () => _openDayDetails(dayDate),
-                      monthColorCounts: monthColorCounts,
+                      monthAreaCounts: monthAreaCounts,
                     ));
                     dayCounter++;
                   }
@@ -2133,54 +2137,75 @@ class _CalendarDayCell extends StatelessWidget {
   final int day;
   final List<_DayEntry> entries;
   final VoidCallback? onTap;
-  final Map<int, int>? monthColorCounts; // colorValue -> count in current month
+  final Map<String, int>? monthAreaCounts; // areaKey -> count in current month
 
   const _CalendarDayCell({
     Key? key,
     required this.day,
     required this.entries,
     this.onTap,
-    this.monthColorCounts,
+    this.monthAreaCounts,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final bool hasEntries = entries.isNotEmpty;
-    // Dominante Farbe anhand der Lebensbereiche des Tages bestimmen, mit Tie-Breaker nach Monats-Häufigkeit
+    // Dominante Farbe per Lebensbereich bestimmen, mit Tie-Breaker nach Monats-Häufigkeit
     Color dominantColor() {
       if (!hasEntries) return colorScheme.outline.withOpacity(0.6);
-      final Map<int, int> valueToCount = {};
+      final Map<String, int> areaToCount = {};
+      final Map<String, Color> areaToColor = {};
       for (final e in entries) {
-        final c = e.color;
-        if (c == null) continue;
-        valueToCount[c.value] = (valueToCount[c.value] ?? 0) + 1;
+        if (e.areaKey == null) continue;
+        final key = e.areaKey!;
+        areaToCount[key] = (areaToCount[key] ?? 0) + 1;
+        if (e.color != null) areaToColor[key] = e.color!;
       }
-      if (valueToCount.isEmpty) {
-        return colorScheme.primary;
+      if (areaToCount.isEmpty) {
+        // Fallback auf Farbhäufigkeit, wenn kein areaKey vorhanden
+        final Map<int, int> colorToCount = {};
+        for (final e in entries) {
+          final c = e.color;
+          if (c == null) continue;
+          colorToCount[c.value] = (colorToCount[c.value] ?? 0) + 1;
+        }
+        if (colorToCount.isEmpty) return colorScheme.primary;
+        int bestColor = colorToCount.entries.first.key;
+        int bestCountLocal = colorToCount[bestColor] ?? 0;
+        colorToCount.forEach((val, cnt) {
+          if (cnt > bestCountLocal) {
+            bestColor = val;
+            bestCountLocal = cnt;
+          }
+        });
+        return Color(bestColor);
       }
       // Max Count bestimmen
       int bestCount = 0;
-      for (final count in valueToCount.values) {
+      for (final count in areaToCount.values) {
         if (count > bestCount) bestCount = count;
       }
       // Kandidaten mit max Count
-      final candidates = <int>[]; // color values
-      valueToCount.forEach((val, count) {
-        if (count == bestCount) candidates.add(val);
+      final candidates = <String>[]; // area keys
+      areaToCount.forEach((key, count) {
+        if (count == bestCount) candidates.add(key);
       });
-      if (candidates.length == 1) return Color(candidates.first);
+      if (candidates.length == 1) {
+        final key = candidates.first;
+        return areaToColor[key] ?? colorScheme.primary;
+      }
       // Tie-Breaker: wähle die Farbe mit geringerer Monatsanzahl
-      int? chosen;
+      String? chosen;
       int? chosenMonthCount;
-      for (final val in candidates) {
-        final monthCount = monthColorCounts?[val] ?? 0;
+      for (final key in candidates) {
+        final monthCount = monthAreaCounts?[key] ?? 0;
         if (chosen == null || monthCount < (chosenMonthCount ?? 1 << 30)) {
-          chosen = val;
+          chosen = key;
           chosenMonthCount = monthCount;
         }
       }
-      return Color(chosen!);
+      return areaToColor[chosen!] ?? colorScheme.primary;
     }
     final Color accentColor = dominantColor();
     // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"
@@ -2278,7 +2303,8 @@ class _CalendarDayCell extends StatelessWidget {
 class _DayEntry {
   final String title;
   final Color? color;
-  const _DayEntry({required this.title, this.color});
+  final String? areaKey; // canonical key to identify life area (name|category)
+  const _DayEntry({required this.title, this.color, this.areaKey});
 }
 
 class _AreaTag {
