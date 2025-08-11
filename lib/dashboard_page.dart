@@ -183,7 +183,8 @@ class _DashboardPageState extends State<DashboardPage> {
       context: context,
       builder: (ctx) {
         final dayLabel = DateFormat.yMMMMd('de_DE').format(day);
-        return Dialog(
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => Dialog(
           insetPadding: const EdgeInsets.all(16),
           child: Container(
             width: 560,
@@ -242,7 +243,21 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                           onTap: () => showDialog(
                             context: context,
-                            builder: (_) => ActivityDetailsDialog(log: log),
+                            builder: (_) => ActivityDetailsDialog(
+                              log: log,
+                              onUpdate: () {
+                                // Entferne gelöschten/angepassten Eintrag aus der Tagesliste
+                                setDialogState(() {
+                                  logs.removeWhere((l) => l.id == log.id);
+                                });
+                                // Triggere Rebuilds (Statistiken, Diagramme, Kalender)
+                                if (mounted) {
+                                  setState(() {
+                                    _refreshCounter++;
+                                  });
+                                }
+                              },
+                            ),
                           ),
                         );
                       },
@@ -250,6 +265,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
               ],
             ),
+          ),
           ),
         );
       },
