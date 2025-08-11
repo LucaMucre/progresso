@@ -1852,9 +1852,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: List.generate(5, (i) {
                         final double labelHours = (yMaxHours / 4.0) * i;
-                        final String label = (labelHours % 1 == 0)
-                            ? labelHours.toInt().toString()
-                            : labelHours.toStringAsFixed(1);
+                        final String label = labelHours.round().toString();
                         return Text(
                           label,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1939,18 +1937,16 @@ class _DashboardPageState extends State<DashboardPage> {
                             ...last7Days.asMap().entries.map((entry) {
                               final index = entry.key;
                               final date = entry.value;
-                              final x = xFor(index);
-                              final isFirst = index == 0;
-                              final isLast = index == last7Days.length - 1;
+                              final slotWidth = chartWidth / minutesPerDay.length;
+                              final center = (index * slotWidth) + slotWidth / 2.0;
                               return Positioned(
                                 bottom: 0,
-                                left: isFirst ? 0 : (isLast ? null : (x - 12)),
-                                right: isLast ? 0 : null,
+                                left: (center - 12).clamp(0.0, chartWidth - 24),
                                 child: SizedBox(
                                   width: 24,
                                   child: Text(
                                     '${date.day}/${date.month}',
-                                    textAlign: isFirst ? TextAlign.left : (isLast ? TextAlign.right : TextAlign.center),
+                                    textAlign: TextAlign.center,
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                           fontSize: 10,
                                           color: Colors.grey.withOpacity(0.7),
