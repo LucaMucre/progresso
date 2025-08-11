@@ -2134,9 +2134,29 @@ class _CalendarDayCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final bool hasEntries = entries.isNotEmpty;
-    final Color accentColor = hasEntries
-        ? (entries.first.color ?? colorScheme.primary)
-        : colorScheme.outline.withOpacity(0.6);
+    // Dominante Farbe anhand der Lebensbereiche des Tages bestimmen
+    Color dominantColor() {
+      if (!hasEntries) return colorScheme.outline.withOpacity(0.6);
+      final Map<int, int> valueToCount = {};
+      for (final e in entries) {
+        final c = e.color;
+        if (c == null) continue;
+        valueToCount[c.value] = (valueToCount[c.value] ?? 0) + 1;
+      }
+      if (valueToCount.isEmpty) {
+        return colorScheme.primary;
+      }
+      int bestValue = valueToCount.entries.first.key;
+      int bestCount = valueToCount.entries.first.value;
+      valueToCount.forEach((val, count) {
+        if (count > bestCount) {
+          bestValue = val;
+          bestCount = count;
+        }
+      });
+      return Color(bestValue);
+    }
+    final Color accentColor = dominantColor();
     // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"
     final List<_DayEntry> shown = () {
       if (entries.isEmpty) return const <_DayEntry>[];
@@ -2213,7 +2233,11 @@ class _CalendarDayCell extends StatelessWidget {
       ),
     );
 
-    final padded = Padding(padding: const EdgeInsets.all(4), child: tappable);
+    // Einheitliche Höhe für alle Tageskacheln, auch bei nur einer Aktivität
+    final padded = Padding(
+      padding: const EdgeInsets.all(4),
+      child: SizedBox(height: 84, child: tappable),
+    );
     final withTooltip = entries.isEmpty
         ? padded
         : Tooltip(message: entries.map((e) => e.title).join('\n'), child: padded);
