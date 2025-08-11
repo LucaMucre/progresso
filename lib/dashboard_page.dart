@@ -863,24 +863,21 @@ class _DashboardPageState extends State<DashboardPage> {
       final dates = await fetchLoggedDates();
       if (dates.isEmpty) return 0;
 
-      final today = DateTime.now();
-      final todayDate = DateTime(today.year, today.month, today.day);
-      
+      // Streak zählt vom zuletzt geloggten Tag zurück. "Heute ohne Log" bricht NICHT ab,
+      // solange gestern (oder ein vorheriger Tag) ein Log hat.
+      final normalized = dates
+          .map((d) => DateTime(d.year, d.month, d.day))
+          .toSet()
+          .toList()
+        ..sort();
+
+      final DateTime last = normalized.last; // letzter geloggter Tag
+
       int streak = 0;
-      DateTime currentDate = todayDate;
-
-      while (true) {
-        final hasEntry = dates.any((date) {
-          final entryDate = DateTime(date.year, date.month, date.day);
-          return entryDate.isAtSameMomentAs(currentDate);
-        });
-
-        if (hasEntry) {
-          streak++;
-          currentDate = currentDate.subtract(const Duration(days: 1));
-        } else {
-          break;
-        }
+      DateTime cursor = last;
+      while (normalized.contains(cursor)) {
+        streak++;
+        cursor = cursor.subtract(const Duration(days: 1));
       }
 
       return streak;

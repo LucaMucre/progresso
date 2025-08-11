@@ -427,19 +427,15 @@ Future<int> calculateStreak() async {
     print('Calculated streak (RPC): $rpc');
     // Fallback auf lokale Berechnung, falls RPC 0 liefert aber Daten vorhanden sind
     if (rpc > 0) return rpc;
-    final dates = await fetchLoggedDates(30);
+    final dates = await fetchLoggedDates(60);
     if (dates.isEmpty) return 0;
-    final DateTime start = dates.reduce((a, b) => a.isAfter(b) ? a : b);
+    final normalized = dates.map((d) => DateTime(d.year, d.month, d.day)).toSet().toList()..sort();
+    final DateTime last = normalized.last;
     int streak = 0;
-    DateTime cursor = start;
-    while (true) {
-      final day = DateTime(cursor.year, cursor.month, cursor.day);
-      if (dates.contains(day)) {
-        streak++;
-        cursor = cursor.subtract(const Duration(days: 1));
-      } else {
-        break;
-      }
+    DateTime cursor = last;
+    while (normalized.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
     }
     return streak;
   } catch (e) {
