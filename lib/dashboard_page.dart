@@ -472,6 +472,16 @@ class _DashboardPageState extends State<DashboardPage> {
                 );
               }
               final data = snapshot.data ?? {};
+              // Zähle pro Farbe die Anzahl der Einträge im gesamten Monat
+              final Map<int, int> monthColorCounts = {};
+              data.values.forEach((list) {
+                for (final e in list) {
+                  final c = e.color;
+                  if (c != null) {
+                    monthColorCounts[c.value] = (monthColorCounts[c.value] ?? 0) + 1;
+                  }
+                }
+              });
 
               final firstDayOfMonth = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
               final daysInMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0).day;
@@ -494,6 +504,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       day: dayCounter,
                       entries: entries,
                       onTap: () => _openDayDetails(dayDate),
+                      monthColorCounts: monthColorCounts,
                     ));
                     dayCounter++;
                   }
@@ -2122,19 +2133,21 @@ class _CalendarDayCell extends StatelessWidget {
   final int day;
   final List<_DayEntry> entries;
   final VoidCallback? onTap;
+  final Map<int, int>? monthColorCounts; // colorValue -> count in current month
 
   const _CalendarDayCell({
     Key? key,
     required this.day,
     required this.entries,
     this.onTap,
+    this.monthColorCounts,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final bool hasEntries = entries.isNotEmpty;
-    // Dominante Farbe anhand der Lebensbereiche des Tages bestimmen
+    // Dominante Farbe anhand der Lebensbereiche des Tages bestimmen, mit Tie-Breaker nach Monats-Häufigkeit
     Color dominantColor() {
       if (!hasEntries) return colorScheme.outline.withOpacity(0.6);
       final Map<int, int> valueToCount = {};
@@ -2146,15 +2159,28 @@ class _CalendarDayCell extends StatelessWidget {
       if (valueToCount.isEmpty) {
         return colorScheme.primary;
       }
-      int bestValue = valueToCount.entries.first.key;
-      int bestCount = valueToCount.entries.first.value;
+      // Max Count bestimmen
+      int bestCount = 0;
+      for (final count in valueToCount.values) {
+        if (count > bestCount) bestCount = count;
+      }
+      // Kandidaten mit max Count
+      final candidates = <int>[]; // color values
       valueToCount.forEach((val, count) {
-        if (count > bestCount) {
-          bestValue = val;
-          bestCount = count;
-        }
+        if (count == bestCount) candidates.add(val);
       });
-      return Color(bestValue);
+      if (candidates.length == 1) return Color(candidates.first);
+      // Tie-Breaker: wähle die Farbe mit geringerer Monatsanzahl
+      int? chosen;
+      int? chosenMonthCount;
+      for (final val in candidates) {
+        final monthCount = monthColorCounts?[val] ?? 0;
+        if (chosen == null || monthCount < (chosenMonthCount ?? 1 << 30)) {
+          chosen = val;
+          chosenMonthCount = monthCount;
+        }
+      }
+      return Color(chosen!);
     }
     final Color accentColor = dominantColor();
     // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"
