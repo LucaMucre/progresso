@@ -397,6 +397,59 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             onPressed: _loadData,
             tooltip: 'Aktualisieren',
           ),
+        const SizedBox(height: 16),
+        // Duration bar chart (hours on Y)
+        SizedBox(
+          height: 120,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30,
+                child: Builder(builder: (context) {
+                  final maxMinutes = durationPerDay.isEmpty ? 0 : durationPerDay.reduce(max);
+                  final maxHours = maxMinutes / 60.0;
+                  double yMaxHours;
+                  if (maxHours <= 1) yMaxHours = 1; else if (maxHours <= 2) yMaxHours = 2; else if (maxHours <= 3) yMaxHours = 3; else if (maxHours <= 4) yMaxHours = 4; else if (maxHours <= 6) yMaxHours = 6; else if (maxHours <= 8) yMaxHours = 8; else if (maxHours <= 10) yMaxHours = 10; else yMaxHours = (((maxHours + 4) / 5).ceil() * 5).toDouble();
+                  final labels = List.generate(5, (i) => ((yMaxHours / 4.0) * i).round().toString()).reversed.toList();
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: labels.map((t) => Text(t, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7)))).toList(),
+                  );
+                }),
+              ),
+              Expanded(
+                child: LayoutBuilder(builder: (context, constraints) {
+                  final chartWidth = constraints.maxWidth;
+                  const chartHeight = 120.0;
+                  const topPad = 6.0;
+                  const bottomPad = 20.0;
+                  final usableHeight = chartHeight - topPad - bottomPad;
+                  final maxMinutes = durationPerDay.isEmpty ? 0 : durationPerDay.reduce(max);
+                  final maxHours = maxMinutes / 60.0;
+                  double yMaxHours;
+                  if (maxHours <= 1) yMaxHours = 1; else if (maxHours <= 2) yMaxHours = 2; else if (maxHours <= 3) yMaxHours = 3; else if (maxHours <= 4) yMaxHours = 4; else if (maxHours <= 6) yMaxHours = 6; else if (maxHours <= 8) yMaxHours = 8; else if (maxHours <= 10) yMaxHours = 10; else yMaxHours = (((maxHours + 4) / 5).ceil() * 5).toDouble();
+                  final yMax = (yMaxHours * 60).round();
+                  return Stack(
+                    children: [
+                      ...List.generate(4, (i) {
+                        final y = topPad + ((i + 1) / 4.0) * usableHeight;
+                        return Positioned(top: y, left: 0, right: 0, child: Container(height: 1, color: Colors.grey.withOpacity(0.2)));
+                      }),
+                      CustomPaint(
+                        size: Size(chartWidth, chartHeight),
+                        painter: _GlobalBarChartPainter(
+                          data: durationPerDay,
+                          maxValue: yMax.toDouble(),
+                          color: _parseColor(widget.area.color),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
         ],
       ),
       body: RefreshIndicator(
@@ -1592,6 +1645,19 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       }).length;
     }).toList();
 
+    // Duration minutes per day for THIS area
+    final durationPerDay = last7Days.map((date) {
+      final targetDate = DateTime(date.year, date.month, date.day);
+      return _logs.where((log) {
+        final local = log.occurredAt.toLocal();
+        final logDate = DateTime(local.year, local.month, local.day);
+        final isSameDate = logDate.year == targetDate.year &&
+            logDate.month == targetDate.month &&
+            logDate.day == targetDate.day;
+        return isSameDate && _isLogForArea(log);
+      }).fold<int>(0, (sum, log) => sum + (log.durationMin ?? 0));
+    }).toList();
+
     // Dynamic Y max (nice rounding)
     final int maxCount = activityCounts.isEmpty ? 1 : activityCounts.reduce(max);
     int yMax;
@@ -1727,18 +1793,16 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                         ...last7Days.asMap().entries.map((entry) {
                           final index = entry.key;
                           final date = entry.value;
-                          final x = xFor(index);
-                          final isFirst = index == 0;
-                          final isLast = index == last7Days.length - 1;
+                          final slotWidth = chartWidth / activityCounts.length;
+                          final center = (index * slotWidth) + slotWidth / 2.0;
                           return Positioned(
                             bottom: 0,
-                            left: isFirst ? 0 : (isLast ? null : (x - 12)),
-                            right: isLast ? 0 : null,
+                            left: (center - 12).clamp(0.0, chartWidth - 24),
                             child: SizedBox(
                               width: 24,
                               child: Text(
                                 '${date.day}/${date.month}',
-                                textAlign: isFirst ? TextAlign.left : (isLast ? TextAlign.right : TextAlign.center),
+                                textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       fontSize: 10,
                                       color: Colors.grey.withOpacity(0.7),

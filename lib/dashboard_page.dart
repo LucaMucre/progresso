@@ -1923,7 +1923,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 left: left,
                                 top: topPad,
                                 child: Tooltip(
-                                  message: '${date.day}/${date.month}: ' + _formatDuration(minutes.toDouble()),
+                                  message: _formatDuration(minutes.toDouble()),
                                   child: Container(
                                     width: barWidth,
                                     height: usableHeight,
