@@ -1633,7 +1633,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 children: [
                   // Y-axis labels
                   SizedBox(
-                    width: 30,
+                    width: 36,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: List.generate(5, (i) {
@@ -1681,7 +1681,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 right: 0,
                                 child: Container(
                                   height: 1,
-                                  color: Colors.grey.withOpacity(0.2),
+                                  color: Colors.grey.withOpacity(0.15),
                                 ),
                               );
                             }),
@@ -2133,6 +2133,10 @@ class _CalendarDayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final bool hasEntries = entries.isNotEmpty;
+    final Color accentColor = hasEntries
+        ? (entries.first.color ?? colorScheme.primary)
+        : colorScheme.outline.withOpacity(0.6);
     // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"
     final List<_DayEntry> shown = () {
       if (entries.isEmpty) return const <_DayEntry>[];
@@ -2144,8 +2148,22 @@ class _CalendarDayCell extends StatelessWidget {
     final content = Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(10),
+        color: hasEntries ? accentColor.withOpacity(0.06) : null,
+        border: Border.all(
+          color: hasEntries
+              ? accentColor.withOpacity(0.35)
+              : colorScheme.outline.withOpacity(0.18),
+        ),
+        boxShadow: hasEntries
+            ? [
+                BoxShadow(
+                  color: accentColor.withOpacity(0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ]
+            : const [],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2153,7 +2171,9 @@ class _CalendarDayCell extends StatelessWidget {
           Text(
             '$day',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: colorScheme.onSurface.withOpacity(0.8),
+                  color: hasEntries
+                      ? accentColor.withOpacity(0.9)
+                      : colorScheme.onSurface.withOpacity(0.8),
                   fontWeight: FontWeight.w600,
                 ),
           ),
