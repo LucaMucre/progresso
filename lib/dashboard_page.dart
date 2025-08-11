@@ -1351,15 +1351,17 @@ class _DashboardPageState extends State<DashboardPage> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
+                                          // Oben: Bereich - Kategorie
                                           Text(
-                                            'Aktivität hinzufügen',
+                                            '${area.name} - ${area.category}',
                                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
+                                          // Unten: Aktion
                                           Text(
-                                            '${area.name} - ${area.category}',
+                                            'Aktivität hinzufügen',
                                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                                             ),
@@ -1368,28 +1370,15 @@ class _DashboardPageState extends State<DashboardPage> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
                                         color: _parseColor(area.color).withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.add,
-                                            size: 16,
-                                            color: _parseColor(area.color),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Schnell',
-                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color: _parseColor(area.color),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
+                                      child: Icon(
+                                        Icons.add,
+                                        size: 16,
+                                        color: _parseColor(area.color),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
