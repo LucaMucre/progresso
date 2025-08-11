@@ -28,7 +28,17 @@ class _AuthPageState extends State<AuthPage> {
       final origin = Uri.base.origin; // funktioniert für Web & Desktop (http://localhost:...)
       await Supabase.instance.client.auth.resetPasswordForEmail(email, redirectTo: origin);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort‑Reset E‑Mail versendet.')));
+      // Kurzer Hinweis-Dialog statt nur Snackbar
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('E‑Mail versendet'),
+          content: Text('Wir haben dir einen Link zum Zurücksetzen an "$email" geschickt.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+          ],
+        ),
+      );
     } on AuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: ${e.message}')));
     } catch (e) {

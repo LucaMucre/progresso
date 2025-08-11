@@ -14,6 +14,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   StreamSubscription? _authSub;
   bool _hasError = false;
+  bool _resetDialogShown = false;
 
   @override
   void initState() {
@@ -22,12 +23,26 @@ class _AuthGateState extends State<AuthGate> {
       // Supabase onAuthStateChange ist ein Stream<AuthStateChange>
       _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
         final event = data.event;
-        // Wenn Nutzer über Magic-Link in den Passwort-Reset kommt, löst Supabase USER_UPDATED aus.
-        if (event == AuthChangeEvent.userUpdated) {
+        // Passwort-Recovery zuverlässig abfangen (beide Events berücksichtigen)
+        if ((event == AuthChangeEvent.passwordRecovery || event == AuthChangeEvent.userUpdated) && !_resetDialogShown) {
+          _resetDialogShown = true;
           await _showInAppPasswordReset();
         }
         if (mounted) setState(() {}); // beim Ein-/Ausloggen neu rendern
       });
+
+      // Falls die App via Recovery-Link geöffnet wurde, enthält die URL typischerweise type=recovery
+      final uri = Uri.base;
+      final isRecovery = uri.queryParameters['type'] == 'recovery' || uri.fragment.contains('reset');
+      if (isRecovery && !_resetDialogShown) {
+        // Leicht verzögert zeigen, sobald der Build-Kontext steht
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (mounted && !_resetDialogShown) {
+            _resetDialogShown = true;
+            await _showInAppPasswordReset();
+          }
+        });
+      }
     } catch (e) {
       print('AuthGate Fehler: $e');
       setState(() {
