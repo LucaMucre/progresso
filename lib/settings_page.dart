@@ -25,8 +25,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    // KI-Assistenz für alle Nutzer deaktivieren (Datenschutz: keine externen Aufrufe)
+    await prefs.setBool('assist_opt_in', false);
     setState(() {
-      _assistOptIn = prefs.getBool('assist_opt_in') ?? false; // default: OFF (privat)
+      _assistOptIn = false;
       _loading = false;
     });
   }
@@ -163,12 +165,8 @@ class _SettingsPageState extends State<SettingsPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                SwitchListTile(
-                  title: const Text('KI‑Assistenz (opt‑in)'),
-                  subtitle: const Text('Externen KI‑Dienst für Antworten verwenden'),
-                  value: _assistOptIn,
-                  onChanged: _toggleAssist,
-                ),
+                // KI-Assistenz-Option entfernt (immer aus)
+                const SizedBox.shrink(),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.lock_reset),
