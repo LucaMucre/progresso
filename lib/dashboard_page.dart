@@ -1903,47 +1903,33 @@ class _DashboardPageState extends State<DashboardPage> {
                               );
                             }),
 
-                            // Line chart
+                            // Column chart (bar)
                             CustomPaint(
                               size: Size(chartWidth, chartHeight),
-                              painter: _GlobalLineChartPainter(
+                              painter: _GlobalBarChartPainter(
                                 data: minutesPerDay,
                                 maxValue: yMax.toDouble(),
                                 color: Colors.green,
                               ),
                             ),
 
-                            // Data points with tooltips
+                            // Tooltips per bar (transparent hit area per slot)
                             ...last7Days.asMap().entries.map((entry) {
                               final index = entry.key;
                               final date = entry.value;
                               final minutes = minutesPerDay[index];
-                              final x = xFor(index);
-                              final y = yFor(minutes);
-                              final cx = x.clamp(4.0, chartWidth - 4.0);
+                              final slotWidth = chartWidth / minutesPerDay.length;
+                              final barWidth = slotWidth * 0.6;
+                              final left = (index * slotWidth) + (slotWidth - barWidth) / 2;
                               return Positioned(
-                                left: cx - 8,
-                                top: y - 8,
+                                left: left,
+                                top: topPad,
                                 child: Tooltip(
                                   message: '${date.day}/${date.month}: ' + _formatDuration(minutes.toDouble()),
                                   child: Container(
-                                    width: 16,
-                                    height: 16,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.transparent,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: Colors.green,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 2),
-                                        ),
-                                      ),
-                                    ),
+                                    width: barWidth,
+                                    height: usableHeight,
+                                    color: Colors.transparent,
                                   ),
                                 ),
                               );
@@ -2374,6 +2360,50 @@ class _GlobalLineChartPainter extends CustomPainter {
     }
 
     canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class _GlobalBarChartPainter extends CustomPainter {
+  final List<int> data;
+  final double maxValue;
+  final Color color;
+
+  _GlobalBarChartPainter({
+    required this.data,
+    required this.maxValue,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty || maxValue <= 0) return;
+
+    const double topPad = 6.0;
+    const double bottomPad = 20.0;
+    final double usableHeight = size.height - topPad - bottomPad;
+
+    final double slotWidth = size.width / data.length;
+    final double barWidth = slotWidth * 0.6;
+
+    final paint = Paint()
+      ..color = color.withOpacity(0.85)
+      ..style = PaintingStyle.fill;
+
+    for (int i = 0; i < data.length; i++) {
+      final value = data[i];
+      final ratio = (value / maxValue).clamp(0.0, 1.0);
+      final barHeight = ratio * usableHeight;
+      final left = (i * slotWidth) + (slotWidth - barWidth) / 2.0;
+      final top = topPad + (usableHeight - barHeight);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, barWidth, barHeight),
+        const Radius.circular(4),
+      );
+      canvas.drawRRect(rect, paint);
+    }
   }
 
   @override
