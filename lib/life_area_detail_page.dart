@@ -1808,12 +1808,23 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             children: [
               SizedBox(
                 width: 30,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(5, (i) => ((yMaxHours / 4.0) * i).round()).reversed
-                      .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))))
-                      .toList(),
-                ),
+                child: Builder(builder: (context) {
+                  final int axisMax = yMaxHours.ceil();
+                  final int step = (axisMax / 4).ceil().clamp(1, axisMax);
+                  final List<int> values = [
+                    0,
+                    (step).clamp(0, axisMax),
+                    (2 * step).clamp(0, axisMax),
+                    (3 * step).clamp(0, axisMax),
+                    axisMax,
+                  ];
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: values.reversed
+                        .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))))
+                        .toList(),
+                  );
+                }),
               ),
               Expanded(
                 child: LayoutBuilder(builder: (context, constraints) {
