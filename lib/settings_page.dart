@@ -14,7 +14,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _assistOptIn = false;
   bool _loading = true;
-  final _oldPwCtrl = TextEditingController();
   final _newPwCtrl = TextEditingController();
   final _newPw2Ctrl = TextEditingController();
 
@@ -42,12 +41,6 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: _oldPwCtrl,
-                  decoration: const InputDecoration(labelText: 'Aktuelles Passwort'),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 12),
                 TextField(
                   controller: _newPwCtrl,
                   decoration: const InputDecoration(labelText: 'Neues Passwort'),
@@ -93,7 +86,6 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
-    _oldPwCtrl.clear();
     _newPwCtrl.clear();
     _newPw2Ctrl.clear();
   }
