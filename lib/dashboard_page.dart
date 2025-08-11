@@ -64,6 +64,29 @@ class _DashboardPageState extends State<DashboardPage> {
         setState(() {});
       }
     });
+
+    // Realtime: Änderungen an action_logs triggern Refresh
+    try {
+      final client = Supabase.instance.client;
+      client
+          .channel('realtime-logs')
+          .on(
+            RealtimeListenTypes.postgresChanges,
+            ChannelFilter(event: 'INSERT', schema: 'public', table: 'action_logs'),
+            (payload, [ref]) { if (mounted) setState(() => _refreshCounter++); },
+          )
+          .on(
+            RealtimeListenTypes.postgresChanges,
+            ChannelFilter(event: 'UPDATE', schema: 'public', table: 'action_logs'),
+            (payload, [ref]) { if (mounted) setState(() => _refreshCounter++); },
+          )
+          .on(
+            RealtimeListenTypes.postgresChanges,
+            ChannelFilter(event: 'DELETE', schema: 'public', table: 'action_logs'),
+            (payload, [ref]) { if (mounted) setState(() => _refreshCounter++); },
+          )
+          .subscribe();
+    } catch (_) {}
   }
 
 
