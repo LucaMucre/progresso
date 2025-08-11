@@ -1784,8 +1784,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildGlobalDurationGraph(BuildContext context) {
-    return FutureBuilder<List<int>>(
-      future: _getGlobalLast7DaysDurationMinutes(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getGlobalLast7DaysDurationStacks(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
@@ -1798,8 +1798,10 @@ class _DashboardPageState extends State<DashboardPage> {
           return const SizedBox.shrink();
         }
 
-        final minutesPerDay = snapshot.data!;
-        final int maxMinutes = minutesPerDay.isEmpty ? 0 : minutesPerDay.reduce((a, b) => a > b ? a : b);
+        final dataMap = snapshot.data!;
+        final List<int> totals = List<int>.from(dataMap['totals'] as List);
+        final List<List<_StackSlice>> stacks = (dataMap['stacks'] as List).cast<List<_StackSlice>>();
+        final int maxMinutes = totals.isEmpty ? 0 : totals.reduce((a, b) => a > b ? a : b);
 
         // Y-Achse in Stunden anzeigen, Skalierung intern weiter in Minuten
         final double maxHours = maxMinutes / 60.0;
@@ -1878,8 +1880,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         }
 
                         double xFor(int index) {
-                          if (minutesPerDay.length == 1) return 0;
-                          return (index / (minutesPerDay.length - 1)) * chartWidth;
+                          if (totals.length == 1) return 0;
+                          return (index / (totals.length - 1)) * chartWidth;
                         }
 
                         return Stack(
@@ -1901,10 +1903,9 @@ class _DashboardPageState extends State<DashboardPage> {
                             // Column chart (bar)
                             CustomPaint(
                               size: Size(chartWidth, chartHeight),
-                              painter: _GlobalBarChartPainter(
-                                data: minutesPerDay,
+                              painter: _StackedBarChartPainter(
+                                stacks: stacks,
                                 maxValue: yMax.toDouble(),
-                                color: Colors.green,
                               ),
                             ),
 
@@ -1912,8 +1913,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             ...last7Days.asMap().entries.map((entry) {
                               final index = entry.key;
                               final date = entry.value;
-                              final minutes = minutesPerDay[index];
-                              final slotWidth = chartWidth / minutesPerDay.length;
+                              final minutes = totals[index];
+                              final slotWidth = chartWidth / totals.length;
                               final barWidth = slotWidth * 0.6;
                               final left = (index * slotWidth) + (slotWidth - barWidth) / 2;
                               return Positioned(
@@ -1934,7 +1935,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ...last7Days.asMap().entries.map((entry) {
                               final index = entry.key;
                               final date = entry.value;
-                              final slotWidth = chartWidth / minutesPerDay.length;
+                              final slotWidth = chartWidth / totals.length;
                               final center = (index * slotWidth) + slotWidth / 2.0;
                               return Positioned(
                                 bottom: 0,
@@ -2034,6 +2035,80 @@ class _DashboardPageState extends State<DashboardPage> {
     } catch (e) {
       print('Fehler beim Laden der 7-Tage-Dauer: $e');
       return List.filled(7, 0);
+    }
+  }
+  
+  Future<Map<String, dynamic>> _getGlobalLast7DaysDurationStacks() async {
+    try {
+      final logs = await fetchLogs();
+      final now = DateTime.now();
+      final last7Days = List.generate(7, (index) => DateTime(now.year, now.month, now.day - index)).reversed.toList();
+
+      // Collect area colors
+      final lifeAreasRes = await Supabase.instance.client
+          .from('life_areas')
+          .select('name,category,color')
+          .eq('user_id', Supabase.instance.client.auth.currentUser?.id);
+      final List<_AreaTag> areaTags = (lifeAreasRes as List)
+          .map((m) => _AreaTag(
+                name: (m['name'] as String).trim(),
+                category: (m['category'] as String).trim(),
+                color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
+              ))
+          .toList();
+
+      Color resolveColorForLog(ActionLog log) {
+        try {
+          if (log.notes != null && log.notes!.isNotEmpty) {
+            final obj = jsonDecode(log.notes!);
+            if (obj is Map<String, dynamic>) {
+              final areaName = obj['area'] as String?;
+              final category = obj['category'] as String?;
+              final match = _matchAreaTag(areaTags, areaName, category);
+              if (match != null) return match.color;
+            }
+          }
+        } catch (_) {}
+        return Colors.green; // fallback
+      }
+
+      final stacks = <List<_StackSlice>>[];
+      final totals = <int>[];
+
+      for (final date in last7Days) {
+        final targetDate = DateTime(date.year, date.month, date.day);
+        final dayLogs = logs.where((log) {
+          final local = log.occurredAt.toLocal();
+          final logDate = DateTime(local.year, local.month, local.day);
+          return logDate.year == targetDate.year &&
+              logDate.month == targetDate.month &&
+              logDate.day == targetDate.day;
+        });
+
+        final Map<int, int> colorToMinutes = {};
+        for (final l in dayLogs) {
+          final mins = l.durationMin ?? 0;
+          if (mins <= 0) continue;
+          final color = resolveColorForLog(l);
+          colorToMinutes[color.value] = (colorToMinutes[color.value] ?? 0) + mins;
+        }
+        final list = colorToMinutes.entries
+            .map((e) => _StackSlice(minutes: e.value, color: Color(e.key)))
+            .toList();
+        stacks.add(list);
+        totals.add(list.fold<int>(0, (s, x) => s + x.minutes));
+      }
+
+      return {
+        'stacks': stacks,
+        'totals': totals,
+      };
+    } catch (e) {
+      print('Fehler beim Laden der 7-Tage-Stacks: $e');
+      return {
+        'stacks': List.generate(7, (_) => <_StackSlice>[]),
+        'totals': List.filled(7, 0),
+      };
     }
   }
 
@@ -2396,6 +2471,49 @@ class _GlobalBarChartPainter extends CustomPainter {
         const Radius.circular(4),
       );
       canvas.drawRRect(rect, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class _StackSlice {
+  final int minutes;
+  final Color color;
+  _StackSlice({required this.minutes, required this.color});
+}
+
+class _StackedBarChartPainter extends CustomPainter {
+  final List<List<_StackSlice>> stacks;
+  final double maxValue;
+
+  _StackedBarChartPainter({required this.stacks, required this.maxValue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (stacks.isEmpty || maxValue <= 0) return;
+
+    const double topPad = 6.0;
+    const double bottomPad = 20.0;
+    final double usableHeight = size.height - topPad - bottomPad;
+    final double slotWidth = size.width / stacks.length;
+    final double barWidth = slotWidth * 0.6;
+
+    for (int i = 0; i < stacks.length; i++) {
+      final left = (i * slotWidth) + (slotWidth - barWidth) / 2.0;
+      double accumulated = 0.0;
+      for (final slice in stacks[i]) {
+        final sliceHeight = ((slice.minutes / maxValue).clamp(0.0, 1.0)) * usableHeight;
+        final top = topPad + (usableHeight - (accumulated + sliceHeight));
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(left, top, barWidth, sliceHeight),
+          const Radius.circular(3),
+        );
+        final paint = Paint()..color = slice.color.withOpacity(0.9);
+        canvas.drawRRect(rect, paint);
+        accumulated += sliceHeight;
+      }
     }
   }
 
