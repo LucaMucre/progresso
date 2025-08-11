@@ -1792,59 +1792,91 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     if (maxHours <= 1) yMaxHours = 1; else if (maxHours <= 2) yMaxHours = 2; else if (maxHours <= 3) yMaxHours = 3; else if (maxHours <= 4) yMaxHours = 4; else if (maxHours <= 6) yMaxHours = 6; else if (maxHours <= 8) yMaxHours = 8; else if (maxHours <= 10) yMaxHours = 10; else yMaxHours = (((maxHours + 4) / 5).ceil() * 5).toDouble();
     final yMax = (yMaxHours * 60).round();
 
-    return SizedBox(
-      height: 120,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 30,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(5, (i) => ((yMaxHours / 4.0) * i).round()).reversed
-                  .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))))
-                  .toList(),
-            ),
-          ),
-          Expanded(
-            child: LayoutBuilder(builder: (context, constraints) {
-              final chartWidth = constraints.maxWidth;
-              const chartHeight = 120.0;
-              const topPad = 6.0;
-              const bottomPad = 20.0;
-              final usableHeight = chartHeight - topPad - bottomPad;
-              return Stack(children: [
-                ...List.generate(4, (i) {
-                  final y = topPad + ((i + 1) / 4.0) * usableHeight;
-                  return Positioned(top: y, left: 0, right: 0, child: Container(height: 1, color: Colors.grey.withOpacity(0.2)));
-                }),
-                CustomPaint(
-                  size: Size(chartWidth, chartHeight),
-                  painter: _GlobalBarChartPainter(
-                    data: durationPerDay,
-                    maxValue: yMax.toDouble(),
-                    color: _parseColor(widget.area.color),
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Dauer der letzten 7 Tage (Stunden)',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(5, (i) => ((yMaxHours / 4.0) * i).round()).reversed
+                      .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))))
+                      .toList(),
                 ),
-                // Centered date labels
-                ...last7Days.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final date = entry.value;
-                  final slotWidth = chartWidth / durationPerDay.length;
-                  final center = (index * slotWidth) + slotWidth / 2.0;
-                  return Positioned(
-                    bottom: 0,
-                    left: (center - 12).clamp(0.0, chartWidth - 24),
-                    child: SizedBox(
-                      width: 24,
-                      child: Text('${date.day}/${date.month}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))),
+              ),
+              Expanded(
+                child: LayoutBuilder(builder: (context, constraints) {
+                  final chartWidth = constraints.maxWidth;
+                  const chartHeight = 120.0;
+                  const double topPad = 6.0;
+                  const double bottomPad = 20.0;
+                  final usableHeight = chartHeight - topPad - bottomPad;
+                  return Stack(children: [
+                    ...List.generate(4, (i) {
+                      final y = topPad + ((i + 1) / 4.0) * usableHeight;
+                      return Positioned(top: y, left: 0, right: 0, child: Container(height: 1, color: Colors.grey.withOpacity(0.2)));
+                    }),
+                    CustomPaint(
+                      size: Size(chartWidth, chartHeight),
+                      painter: _GlobalBarChartPainter(
+                        data: durationPerDay,
+                        maxValue: yMax.toDouble(),
+                        color: _parseColor(widget.area.color),
+                      ),
                     ),
-                  );
-                }).toList(),
-              ]);
-            }),
+                    // Hover tooltips per bar
+                    ...last7Days.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final minutes = durationPerDay[index];
+                      final slotWidth = chartWidth / durationPerDay.length;
+                      final barWidth = slotWidth * 0.6;
+                      final left = (index * slotWidth) + (slotWidth - barWidth) / 2.0;
+                      return Positioned(
+                        left: left,
+                        top: topPad,
+                        child: Tooltip(
+                          message: _formatDuration(minutes.toDouble()),
+                          child: Container(
+                            width: barWidth,
+                            height: usableHeight,
+                            color: Colors.transparent,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    // Centered date labels
+                    ...last7Days.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final date = entry.value;
+                      final slotWidth = chartWidth / durationPerDay.length;
+                      final center = (index * slotWidth) + slotWidth / 2.0;
+                      return Positioned(
+                        bottom: 0,
+                        left: (center - 12).clamp(0.0, chartWidth - 24),
+                        child: SizedBox(
+                          width: 24,
+                          child: Text('${date.day}/${date.month}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))),
+                        ),
+                      );
+                    }).toList(),
+                  ]);
+                }),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
