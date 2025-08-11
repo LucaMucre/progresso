@@ -1810,17 +1810,17 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 width: 30,
                 child: Builder(builder: (context) {
                   final int axisMax = yMaxHours.ceil();
-                  final int step = (axisMax / 4).ceil().clamp(1, axisMax);
-                  final List<int> values = [
-                    0,
-                    (step).clamp(0, axisMax),
-                    (2 * step).clamp(0, axisMax),
-                    (3 * step).clamp(0, axisMax),
-                    axisMax,
-                  ];
+                  final int step = ((axisMax / 4).ceil()).clamp(1, axisMax);
+                  final List<int> ticks = [];
+                  for (int v = 0; v <= axisMax; v += step) {
+                    if (ticks.isEmpty || ticks.last != v) ticks.add(v);
+                    if (ticks.length >= 4) break; // limit before adding max
+                  }
+                  if (ticks.isEmpty || ticks.last != axisMax) ticks.add(axisMax);
+                  if (ticks.length == 1) ticks.insert(0, 0);
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: values.reversed
+                    children: ticks.reversed
                         .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))))
                         .toList(),
                   );
