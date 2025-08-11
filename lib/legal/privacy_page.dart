@@ -26,7 +26,7 @@ class PrivacyPage extends StatelessWidget {
             SizedBox(height: 8),
             Text('Speicherdauer: bis zur Kontolöschung oder Widerruf; Backups gem. gesetzlichen Fristen.'),
             SizedBox(height: 8),
-            Text('Empfänger: Supabase (Hosting, Datenbank, USA/EU je nach Region). Externe KI nur bei Opt‑in; Inhalte werden aggregiert/gekürzt übermittelt.'),
+            Text('Empfänger: Supabase (Hosting, Datenbank, USA/EU je nach Region). Externe KI‑Dienste sind in der aktuellen Version deaktiviert (kein Versand personenbezogener Inhalte an Dritte).'),
             SizedBox(height: 8),
             Text('Rechte: Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit, Widerruf, Beschwerde bei der Aufsichtsbehörde.'),
             SizedBox(height: 8),

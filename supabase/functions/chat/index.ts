@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Deno Edge Function: Chat (RAG)
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -56,7 +57,7 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { query, top_k = 8, min_similarity = 0.0, private: privateMode = true } = await req.json();
+    const { query, top_k = 8, min_similarity = 0.0 } = await req.json();
     if (typeof query === 'string' && query.length > 2000) {
       return new Response(JSON.stringify({ error: 'Query too long' }), {
         status: 400,
@@ -162,8 +163,8 @@ serve(async (req) => {
       });
     }
 
-    // Private Mode: keine externen LLM-Calls; nur strukturierte Antworten
-    if (privateMode) {
+    // Erzwinge Private Mode: keine externen LLM-Calls; nur strukturierte Antworten
+    {
       const isCount = /wie\s*viele|anzahl|wieviel/.test(lower);
       const since = sinceDet;
 
@@ -232,6 +233,14 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Externer LLM/RAG-Teil ist in Produktionsmodus deaktiviert.
+    // Wenn du ihn wieder aktivieren willst, entferne diesen early return
+    // und reaktiviere den Code unterhalb (RAG + OpenAI Chat Call).
+    return new Response(JSON.stringify({
+      answer: 'KI‑Modus ist deaktiviert. Stelle konkrete Datenfragen (z. B. "Wie viele Aktivitäten in den letzten 7 Tagen?") oder nutze die App‑Ansichten.',
+      sources: [],
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 });
 
     const qEmb = await embedQuery(query);
     // Zeitfenster-Erkennung (robust): "letzten X Tag(e|en)"
