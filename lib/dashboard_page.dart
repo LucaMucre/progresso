@@ -1510,8 +1510,11 @@ class _DashboardPageState extends State<DashboardPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Optional: Activity Graph for the last 7 days (all areas combined)
+                  // Aktivitätsanzahl der letzten 7 Tage
                   if (activityCount > 0) _buildGlobalActivityGraph(context),
+                  const SizedBox(height: 12),
+                  // Dauer in Minuten pro Tag (letzte 7 Tage)
+                  _buildGlobalDurationGraph(context),
                 ],
               );
             },
@@ -1752,6 +1755,196 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildGlobalDurationGraph(BuildContext context) {
+    return FutureBuilder<List<int>>(
+      future: _getGlobalLast7DaysDurationMinutes(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final minutesPerDay = snapshot.data!;
+        final int maxMinutes = minutesPerDay.isEmpty ? 0 : minutesPerDay.reduce((a, b) => a > b ? a : b);
+
+        // Dynamic Y max in "nice" minute steps
+        int yMax;
+        if (maxMinutes <= 30) {
+          yMax = 30;
+        } else if (maxMinutes <= 60) {
+          yMax = 60;
+        } else if (maxMinutes <= 120) {
+          yMax = 120;
+        } else if (maxMinutes <= 180) {
+          yMax = 180;
+        } else {
+          yMax = ((maxMinutes + 29) / 30).ceil() * 30; // round up to multiple of 30
+        }
+
+        final now = DateTime.now();
+        final last7Days = List.generate(7, (index) {
+          return DateTime(now.year, now.month, now.day - index);
+        }).reversed.toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Dauer der letzten 7 Tage (Minuten)',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 120,
+              child: Row(
+                children: [
+                  // Y-axis labels
+                  SizedBox(
+                    width: 30,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(5, (i) {
+                        final value = ((yMax / 4) * i).round();
+                        return Text(
+                          '$value',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontSize: 10,
+                                color: Colors.grey.withOpacity(0.7),
+                              ),
+                        );
+                      }).reversed.toList(),
+                    ),
+                  ),
+
+                  // Chart area
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final chartWidth = constraints.maxWidth;
+                        const chartHeight = 120.0;
+                        const topPad = 6.0;
+                        const bottomPad = 20.0;
+                        final usableHeight = chartHeight - topPad - bottomPad;
+
+                        double yFor(int value) {
+                          if (yMax <= 0) return chartHeight - bottomPad;
+                          final ratio = (value / yMax).clamp(0.0, 1.0);
+                          return topPad + (1 - ratio) * usableHeight;
+                        }
+
+                        double xFor(int index) {
+                          if (minutesPerDay.length == 1) return 0;
+                          return (index / (minutesPerDay.length - 1)) * chartWidth;
+                        }
+
+                        return Stack(
+                          children: [
+                            // Grid lines
+                            ...List.generate(4, (i) {
+                              final y = topPad + ((i + 1) / 4.0) * usableHeight;
+                              return Positioned(
+                                top: y,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.grey.withOpacity(0.2),
+                                ),
+                              );
+                            }),
+
+                            // Line chart
+                            CustomPaint(
+                              size: Size(chartWidth, chartHeight),
+                              painter: _GlobalLineChartPainter(
+                                data: minutesPerDay,
+                                maxValue: yMax.toDouble(),
+                                color: Colors.green,
+                              ),
+                            ),
+
+                            // Data points with tooltips
+                            ...last7Days.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final date = entry.value;
+                              final minutes = minutesPerDay[index];
+                              final x = xFor(index);
+                              final y = yFor(minutes);
+                              final cx = x.clamp(4.0, chartWidth - 4.0);
+                              return Positioned(
+                                left: cx - 8,
+                                top: y - 8,
+                                child: Tooltip(
+                                  message: '${date.day}/${date.month}: ' + _formatDuration(minutes.toDouble()),
+                                  child: Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.transparent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: Colors.green,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+
+                            // Date labels
+                            ...last7Days.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final date = entry.value;
+                              final x = xFor(index);
+                              final isFirst = index == 0;
+                              final isLast = index == last7Days.length - 1;
+                              return Positioned(
+                                bottom: 0,
+                                left: isFirst ? 0 : (isLast ? null : (x - 12)),
+                                right: isLast ? 0 : null,
+                                child: SizedBox(
+                                  width: 24,
+                                  child: Text(
+                                    '${date.day}/${date.month}',
+                                    textAlign: isFirst ? TextAlign.left : (isLast ? TextAlign.right : TextAlign.center),
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          fontSize: 10,
+                                          color: Colors.grey.withOpacity(0.7),
+                                        ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> _calculateGlobalStatistics() async {
     try {
       final logs = await fetchLogs();
@@ -1794,6 +1987,31 @@ class _DashboardPageState extends State<DashboardPage> {
       }).toList();
     } catch (e) {
       print('Fehler beim Laden der 7-Tage-Aktivitäten: $e');
+      return List.filled(7, 0);
+    }
+  }
+
+  Future<List<int>> _getGlobalLast7DaysDurationMinutes() async {
+    try {
+      final logs = await fetchLogs();
+      final now = DateTime.now();
+      final last7Days = List.generate(7, (index) {
+        return DateTime(now.year, now.month, now.day - index);
+      }).reversed.toList();
+
+      return last7Days.map((date) {
+        final targetDate = DateTime(date.year, date.month, date.day);
+        final minutes = logs.where((log) {
+          final local = log.occurredAt.toLocal();
+          final logDate = DateTime(local.year, local.month, local.day);
+          return logDate.year == targetDate.year &&
+              logDate.month == targetDate.month &&
+              logDate.day == targetDate.day;
+        }).fold<int>(0, (sum, log) => sum + (log.durationMin ?? 0));
+        return minutes;
+      }).toList();
+    } catch (e) {
+      print('Fehler beim Laden der 7-Tage-Dauer: $e');
       return List.filled(7, 0);
     }
   }
