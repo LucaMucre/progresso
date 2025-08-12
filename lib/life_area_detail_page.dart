@@ -1635,7 +1635,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 120,
+          height: 220,
           child: Row(
             children: [
               // Y-axis labels
@@ -1661,7 +1661,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final chartWidth = constraints.maxWidth;
-                    const chartHeight = 120.0;
+                    const chartHeight = 220.0;
                     const topPad = 6.0;
                     const bottomPad = 20.0;
                     final usableHeight = chartHeight - topPad - bottomPad;
@@ -1803,7 +1803,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 120,
+          height: 220,
           child: Row(
             children: [
               SizedBox(
@@ -1829,7 +1829,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               Expanded(
                 child: LayoutBuilder(builder: (context, constraints) {
                   final chartWidth = constraints.maxWidth;
-                  const chartHeight = 120.0;
+                  const chartHeight = 220.0;
                   const double topPad = 6.0;
                   const double bottomPad = 20.0;
                   final usableHeight = chartHeight - topPad - bottomPad;
