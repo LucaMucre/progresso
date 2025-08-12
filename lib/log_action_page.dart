@@ -8,6 +8,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'services/level_up_service.dart';
+import 'widgets/level_up_dialog.dart';
 
 class LogActionPage extends StatefulWidget {
   final ActionTemplate? template;
@@ -52,6 +54,17 @@ class _LogActionPageState extends State<LogActionPage> {
       _activityNameCtrl.text = widget.template!.name;
     }
     _quillCtrl = quill.QuillController.basic();
+    // Listen for level-up while user is still on the form
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      LevelUpService.setOnLevelUp((level) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (_) => LevelUpDialog(level: level),
+        );
+      });
+    });
   }
 
   Future<void> _pickImage() async {
