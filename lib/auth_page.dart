@@ -19,7 +19,7 @@ class _AuthPageState extends State<AuthPage> {
   Future<void> _forgotPassword() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bitte E‑Mail eingeben')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter your email')));
       return;
     }
     try {
@@ -32,17 +32,17 @@ class _AuthPageState extends State<AuthPage> {
       await showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('E‑Mail versendet'),
-          content: Text('Wir haben dir einen Link zum Zurücksetzen an "$email" geschickt.'),
+          title: const Text('Email sent'),
+          content: Text('We sent a reset link to "$email".'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
           ],
         ),
       );
     } on AuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: ${e.message}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -63,11 +63,11 @@ class _AuthPageState extends State<AuthPage> {
           password: pass,
         );
         if (res.session != null) {
-          // Erfolgreich eingeloggt → AuthGate wechselt automatisch ins Dashboard
+          // Successfully logged in → AuthGate will navigate to dashboard
           return;
         } else {
           setState(() {
-            _error = 'Login fehlgeschlagen. Bitte prüfe E-Mail & Passwort.';
+            _error = 'Login failed. Please check email & password.';
           });
         }
       } else {
@@ -77,14 +77,14 @@ class _AuthPageState extends State<AuthPage> {
           password: pass,
         );
         if (res.user != null) {
-          // Registrierung hat geklappt
+          // Registration succeeded
           setState(() {
-            _error = 'Registrierung erfolgreich! Bitte jetzt einloggen.';
+            _error = 'Registration successful! Please log in now.';
             _isLogin = true;
           });
         } else {
           setState(() {
-            _error = 'Registrierung fehlgeschlagen. Bitte erneut versuchen.';
+            _error = 'Registration failed. Please try again.';
           });
         }
       }
@@ -127,7 +127,7 @@ class _AuthPageState extends State<AuthPage> {
                 children: const [
                   Icon(Icons.rocket_launch, size: 16, color: Colors.white70),
                   SizedBox(width: 8),
-                  Text('Willkommen bei Progresso', style: TextStyle(color: Colors.white70)),
+                  Text('Welcome to Progresso', style: TextStyle(color: Colors.white70)),
                 ],
               ),
             ),
@@ -137,7 +137,7 @@ class _AuthPageState extends State<AuthPage> {
                 colors: [Color(0xFF64B5F6), Color(0xFF69F0AE)],
               ).createShader(rect),
               child: const Text(
-                'Bring deine Gewohnheiten\nauf Erfolgskurs',
+                'Put your habits\non the path to success',
                 style: TextStyle(
                   fontSize: 46,
                   fontWeight: FontWeight.w800,
@@ -149,7 +149,7 @@ class _AuthPageState extends State<AuthPage> {
             const SizedBox(height: 16),
             Text(
       'Understand what moves you forward. Track activities,\n'
-              'erhalte Einsichten und baue konsistente Routinen auf.',
+              'gain insights, and build consistent routines.',
               style: theme.textTheme.titleMedium?.copyWith(
                 color: Colors.white.withOpacity(0.75),
                 height: 1.4,
@@ -178,7 +178,7 @@ class _AuthPageState extends State<AuthPage> {
                             _submit();
                           }
                         },
-                  label: Text(_isLogin ? 'Kostenlos starten' : 'Jetzt registrieren'),
+                  label: Text(_isLogin ? 'Start for free' : 'Register now'),
                 ),
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
@@ -188,7 +188,7 @@ class _AuthPageState extends State<AuthPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => setState(() => _isLogin = true),
-                  child: const Text('Ich habe bereits ein Konto'),
+                  child: const Text('I already have an account'),
                 ),
               ],
             )
@@ -243,14 +243,14 @@ class _AuthPageState extends State<AuthPage> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: _forgotPassword,
-                      child: const Text('Passwort vergessen?', style: TextStyle(color: Colors.white70)),
+                      child: const Text('Forgot password?', style: TextStyle(color: Colors.white70)),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _isLogin
-                        ? 'Melde dich mit deiner E-Mail an'
-                        : 'Registriere dich mit E-Mail & Passwort',
+                        ? 'Sign in with your email'
+                        : 'Sign up with email & password',
                     style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
                   ),
                   const SizedBox(height: 20),
@@ -262,7 +262,7 @@ class _AuthPageState extends State<AuthPage> {
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.06),
                       prefixIcon: const Icon(Icons.email_outlined, color: Colors.white70),
-                      hintText: 'E-Mail',
+                      hintText: 'Email',
                       hintStyle: const TextStyle(color: Colors.white54),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -287,7 +287,7 @@ class _AuthPageState extends State<AuthPage> {
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.06),
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
-                      hintText: 'Passwort',
+                      hintText: 'Password',
                       hintStyle: const TextStyle(color: Colors.white54),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -334,7 +334,7 @@ class _AuthPageState extends State<AuthPage> {
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_isLogin ? 'Einloggen' : 'Registrieren',
+                          : Text(_isLogin ? 'Sign in' : 'Sign up',
                               style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
@@ -348,8 +348,8 @@ class _AuthPageState extends State<AuthPage> {
                     },
                     child: Text(
                       _isLogin
-                          ? 'Noch kein Konto? Jetzt registrieren'
-                          : 'Bereits ein Konto? Zum Login',
+                          ? 'No account yet? Register now'
+                          : 'Already have an account? Sign in',
                       style: const TextStyle(color: Colors.white70),
                     ),
                   ),
