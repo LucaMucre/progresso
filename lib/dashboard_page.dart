@@ -405,7 +405,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildCalendarContainer(BuildContext context) {
-    final monthLabel = DateFormat.yMMMM('de_DE').format(_calendarMonth);
+  final monthLabel = DateFormat.yMMMM('en_US').format(_calendarMonth);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -427,7 +427,7 @@ class _DashboardPageState extends State<DashboardPage> {
               IconButton(
                 icon: const Icon(Icons.chevron_left),
                 onPressed: _goToPreviousMonth,
-                tooltip: 'Vorheriger Monat',
+  tooltip: 'Previous month',
               ),
               Text(
                 monthLabel,
@@ -438,7 +438,7 @@ class _DashboardPageState extends State<DashboardPage> {
               IconButton(
                 icon: const Icon(Icons.chevron_right),
                 onPressed: _goToNextMonth,
-                tooltip: 'Nächster Monat',
+  tooltip: 'Next month',
               ),
               const Spacer(),
               FutureBuilder<List<LifeArea>>(
@@ -1477,7 +1477,7 @@ class _DashboardPageState extends State<DashboardPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Global statistics',
+          'Statistics',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),

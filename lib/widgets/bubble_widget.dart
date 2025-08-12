@@ -441,7 +441,7 @@ class _BubblesGridState extends State<BubblesGrid> {
       builder: (BuildContext context) {
         return AlertDialog(
       title: const Text('Delete life area'),
-          content: Text('Möchten Sie "${area.name}" wirklich löschen?'),
+          content: Text('Do you really want to delete "${area.name}"?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -469,7 +469,7 @@ class _BubblesGridState extends State<BubblesGrid> {
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Löschen'),
+              child: const Text('Delete'),
             ),
           ],
         );
