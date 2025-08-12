@@ -1739,12 +1739,11 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                           );
                         }).toList(),
 
-                        // Date labels
+                        // Date labels aligned exactly under the data points
                         ...last7Days.asMap().entries.map((entry) {
                           final index = entry.key;
                           final date = entry.value;
-                          final slotWidth = chartWidth / activityCounts.length;
-                          final center = (index * slotWidth) + slotWidth / 2.0;
+                          final center = xFor(index);
                           return Positioned(
                             bottom: 0,
                             left: (center - 12).clamp(0.0, chartWidth - 24),
