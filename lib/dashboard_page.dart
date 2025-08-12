@@ -1458,6 +1458,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<List<LifeArea>> _loadLifeAreas() async {
     try {
+      // Migrate existing default German areas to English names/categories once
+      await LifeAreasService.migrateDefaultsToEnglish();
       final areas = await LifeAreasService.getLifeAreas();
       if (areas.isEmpty) {
         // Standardbereiche nur einmalig anlegen (schutz vor parallelen FutureBuilder-Aufrufen)

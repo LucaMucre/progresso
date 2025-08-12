@@ -64,6 +64,29 @@ class LifeArea {
 class LifeAreasService {
   static final SupabaseClient _client = Supabase.instance.client;
 
+  // Simple DE -> EN translation map for default life areas and categories
+  static const Map<String, String> _nameDeToEn = {
+    'Karriere': 'Career',
+    'Beziehungen': 'Relationships',
+    'Spiritualität': 'Spirituality',
+    'Kunst': 'Art',
+    'Finanzen': 'Finance',
+    'Bildung': 'Learning',
+    'Ernährung': 'Nutrition',
+    'Fitness': 'Fitness',
+  };
+
+  static const Map<String, String> _categoryDeToEn = {
+    'Beruf': 'Work',
+    'Sozial': 'Social',
+    'Inneres': 'Inner',
+    'Kreativität': 'Creativity',
+    'Wirtschaft': 'Finance',
+    'Entwicklung': 'Development',
+    'Gesundheit': 'Health',
+    'Allgemein': 'General',
+  };
+
   // Alle Life Areas für einen User abrufen
   static Future<List<LifeArea>> getLifeAreas() async {
     final user = _client.auth.currentUser;
@@ -77,6 +100,44 @@ class LifeAreasService {
         .order('order_index');
 
     return (response as List).map((json) => LifeArea.fromJson(json)).toList();
+  }
+
+  // One-time migration: translate default German names/categories to English for current user
+  static Future<void> migrateDefaultsToEnglish() async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('User nicht angemeldet');
+
+    final rows = await _client
+        .from('life_areas')
+        .select('id,name,category')
+        .eq('user_id', user.id);
+
+    bool changed = false;
+    for (final row in rows as List) {
+      final String name = row['name'] as String? ?? '';
+      final String category = row['category'] as String? ?? '';
+      final Map<String, dynamic> updates = {};
+      if (_nameDeToEn.containsKey(name)) {
+        updates['name'] = _nameDeToEn[name];
+      }
+      if (_categoryDeToEn.containsKey(category)) {
+        updates['category'] = _categoryDeToEn[category];
+      }
+      if (updates.isNotEmpty) {
+        changed = true;
+        await _client
+            .from('life_areas')
+            .update({
+              ...updates,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', row['id'])
+            .eq('user_id', user.id);
+      }
+    }
+    if (changed) {
+      // no-op; caller can refetch
+    }
   }
 
   // Alle Life Areas (auch unsichtbare) für einen User abrufen
@@ -223,56 +284,56 @@ class LifeAreasService {
     final defaultAreas = [
       {
         'name': 'Fitness',
-        'category': 'Gesundheit',
+        'category': 'Health',
         'color': '#FF5722',
         'icon': 'fitness_center',
         'order_index': 0,
       },
       {
-        'name': 'Ernährung',
-        'category': 'Gesundheit',
+        'name': 'Nutrition',
+        'category': 'Health',
         'color': '#4CAF50',
         'icon': 'restaurant',
         'order_index': 1,
       },
       {
-        'name': 'Bildung',
-        'category': 'Entwicklung',
+        'name': 'Learning',
+        'category': 'Development',
         'color': '#2196F3',
         'icon': 'school',
         'order_index': 2,
       },
       {
-        'name': 'Finanzen',
-        'category': 'Wirtschaft',
+        'name': 'Finance',
+        'category': 'Finance',
         'color': '#FFC107',
         'icon': 'account_balance',
         'order_index': 3,
       },
       {
-        'name': 'Kunst',
-        'category': 'Kreativität',
+        'name': 'Art',
+        'category': 'Creativity',
         'color': '#9C27B0',
         'icon': 'palette',
         'order_index': 4,
       },
       {
-        'name': 'Beziehungen',
-        'category': 'Sozial',
+        'name': 'Relationships',
+        'category': 'Social',
         'color': '#E91E63',
         'icon': 'people',
         'order_index': 5,
       },
       {
-        'name': 'Spiritualität',
-        'category': 'Inneres',
+        'name': 'Spirituality',
+        'category': 'Inner',
         'color': '#607D8B',
         'icon': 'self_improvement',
         'order_index': 6,
       },
       {
-        'name': 'Karriere',
-        'category': 'Beruf',
+        'name': 'Career',
+        'category': 'Work',
         'color': '#795548',
         'icon': 'work',
         'order_index': 7,
