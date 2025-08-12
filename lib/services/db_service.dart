@@ -218,7 +218,7 @@ Future<ActionLog> createLog({
     final totalXp = await fetchTotalXp();
     final newLevel = calculateLevel(totalXp);
     // Fetch previous level based on stored baseline logic? We only check against previous fetch.
-    // For simplicity, notify if xpInto==0 (exact multiple of 50) or if the inserted earned_xp pushed over a boundary.
+    // Level boundary detection uses 100 XP per level
     // Compute previous XP as totalXp - earnedXp
     final prevTotal = totalXp - earnedXp;
     final prevLevel = calculateLevel(prevTotal);
@@ -384,25 +384,21 @@ Future<int> fetchTotalXp() async {
   }
 }
 
-/// XP-Schwelle für Level n (lineares System)
-/// Jedes Level benötigt konstant 50 XP
-/// Level 1: 0-50 XP, Level 2: 50-100 XP, Level 3: 100-150 XP, etc.
-int xpForLevel(int level) => level * 50;
+/// XP-Schwelle für Level n (lineares System: 100 XP pro Level)
+int xpForLevel(int level) => level * 100;
 
-/// Level aus Gesamt-XP berechnen (lineares System)
+/// Level aus Gesamt-XP berechnen (lineares System: 100 XP pro Level)
 int calculateLevel(int totalXp) {
-  // Bei linearem System: Level = (totalXp / 50) + 1, mindestens Level 1
   if (totalXp <= 0) return 1;
-  return (totalXp / 50).floor() + 1;
+  return (totalXp / 100).floor() + 1;
 }
 
 /// Ausführliche Level-Progress-Infos: aktuelles Level, XP seit Levelstart, XP bis nächstes Level
 Map<String, int> calculateLevelDetailed(int totalXp) {
   final level = calculateLevel(totalXp);
-  
-  // Bei linearem System: jedes Level benötigt genau 50 XP
-  final xpInto = totalXp % 50; // XP im aktuellen Level (Rest der Division)
-  final xpNeeded = 50; // Jedes Level benötigt 50 XP
+  // 100 XP pro Level
+  final xpInto = totalXp % 100; // XP im aktuellen Level (Rest der Division)
+  final xpNeeded = 100; // Jedes Level benötigt 100 XP
   
   return {
     'level': level,
