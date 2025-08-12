@@ -259,7 +259,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               if (log.durationMin != null)
                                 Padding(
                                   padding: const EdgeInsets.only(right: 12),
-                                  child: Row(children: [const Icon(Icons.timer, size: 12), const SizedBox(width: 4), Text('${log.durationMin} Min')]),
+                                  child: Row(children: [const Icon(Icons.timer, size: 12), const SizedBox(width: 4), Text('${log.durationMin} min')]),
                                 ),
                               Row(children: [const Icon(Icons.star, size: 12), const SizedBox(width: 4), Text('+${log.earnedXp}')]),
                             ],
@@ -1477,7 +1477,7 @@ class _DashboardPageState extends State<DashboardPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Gesamt-Statistiken',
+          'Global statistics',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -1515,7 +1515,7 @@ class _DashboardPageState extends State<DashboardPage> {
               if (snapshot.hasError) {
                 return const Padding(
                   padding: EdgeInsets.all(20),
-                  child: Center(child: Text('Fehler beim Laden der Statistiken')),
+                  child: Center(child: Text('Error loading statistics')),
                 );
               }
               
@@ -1533,7 +1533,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         child: _buildGlobalStatCard(
                           context,
                           icon: Icons.star,
-                          title: 'Gesamt XP',
+                          title: 'Total XP',
                           value: '$totalXp',
                           color: Colors.amber,
                         ),
@@ -1553,7 +1553,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         child: _buildGlobalStatCard(
                           context,
                           icon: Icons.timer,
-                          title: 'Ø Dauer',
+                          title: 'Avg duration',
                           value: _formatDuration(averageDuration),
                           color: Colors.green,
                         ),
@@ -2136,11 +2136,11 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   String _formatDuration(double minutes) {
-    if (minutes <= 0) return '0 Min';
+    if (minutes <= 0) return '0 min';
     
     final totalMinutes = minutes.round();
     
-    // Wochen (7 Tage = 10080 Minuten)
+    // Weeks (7 days = 10080 minutes)
     if (totalMinutes >= 10080) {
       final weeks = (totalMinutes / 10080).floor();
       final remainingMinutes = totalMinutes - (weeks * 10080);
@@ -2148,20 +2148,20 @@ class _DashboardPageState extends State<DashboardPage> {
       
       if (weeks == 1) {
         if (days > 0) {
-          return days == 1 ? '1 Woche, 1 Tag' : '1 Woche, $days Tage';
+          return days == 1 ? '1 week, 1 day' : '1 week, $days days';
         } else {
-          return '1 Woche';
+          return '1 week';
         }
       } else {
         if (days > 0) {
-          return days == 1 ? '$weeks Wochen, 1 Tag' : '$weeks Wochen, $days Tage';
+          return days == 1 ? '$weeks weeks, 1 day' : '$weeks weeks, $days days';
         } else {
-          return '$weeks Wochen';
+          return '$weeks weeks';
         }
       }
     }
     
-    // Tage (24 Stunden = 1440 Minuten)
+    // Days (24 hours = 1440 minutes)
     if (totalMinutes >= 1440) {
       final days = (totalMinutes / 1440).floor();
       final remainingMinutes = totalMinutes - (days * 1440);
@@ -2169,40 +2169,40 @@ class _DashboardPageState extends State<DashboardPage> {
       
       if (days == 1) {
         if (hours > 0) {
-          return hours == 1 ? '1 Tag, 1 Std' : '1 Tag, $hours Std';
+          return hours == 1 ? '1 day, 1 hr' : '1 day, $hours hrs';
         } else {
-          return '1 Tag';
+          return '1 day';
         }
       } else {
         if (hours > 0) {
-          return hours == 1 ? '$days Tage, 1 Std' : '$days Tage, $hours Std';
+          return hours == 1 ? '$days days, 1 hr' : '$days days, $hours hrs';
         } else {
-          return '$days Tage';
+          return '$days days';
         }
       }
     }
     
-    // Stunden (60 Minuten)
+    // Hours (60 minutes)
     if (totalMinutes >= 60) {
       final hours = (totalMinutes / 60).floor();
       final remainingMinutes = totalMinutes - (hours * 60);
       
       if (hours == 1) {
         if (remainingMinutes > 0) {
-          return '1 Std, $remainingMinutes Min';
+          return '1 hr, $remainingMinutes min';
         } else {
-          return '1 Std';
+          return '1 hr';
         }
       } else {
         if (remainingMinutes > 0) {
-          return '$hours Std, $remainingMinutes Min';
+          return '$hours hrs, $remainingMinutes min';
         } else {
-          return '$hours Std';
+          return '$hours hrs';
         }
       }
     }
     
-    return '$totalMinutes Min';
+  return '$totalMinutes min';
   }
 
   Color _parseColor(String hex) {

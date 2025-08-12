@@ -256,15 +256,16 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    final two = (int v) => v.toString().padLeft(2, '0');
+    return '${two(date.day)}/${two(date.month)}/${date.year} ${two(date.hour)}:${two(date.minute)}';
   }
 
   String _formatDuration(double minutes) {
-    if (minutes <= 0) return '0 Min';
+    if (minutes <= 0) return '0 min';
     
     final totalMinutes = minutes.round();
     
-    // Wochen (7 Tage = 10080 Minuten)
+      // Weeks (7 days = 10080 minutes)
     if (totalMinutes >= 10080) {
       final weeks = (totalMinutes / 10080).floor();
       final remainingMinutes = totalMinutes - (weeks * 10080);
@@ -272,20 +273,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       
       if (weeks == 1) {
         if (days > 0) {
-          return days == 1 ? '1 Woche, 1 Tag' : '1 Woche, $days Tage';
+          return days == 1 ? '1 week, 1 day' : '1 week, $days days';
         } else {
-          return '1 Woche';
+          return '1 week';
         }
       } else {
         if (days > 0) {
-          return days == 1 ? '$weeks Wochen, 1 Tag' : '$weeks Wochen, $days Tage';
+          return days == 1 ? '$weeks weeks, 1 day' : '$weeks weeks, $days days';
         } else {
-          return '$weeks Wochen';
+          return '$weeks weeks';
         }
       }
     }
     
-    // Tage (24 Stunden = 1440 Minuten)
+    // Days (24 hours = 1440 minutes)
     if (totalMinutes >= 1440) {
       final days = (totalMinutes / 1440).floor();
       final remainingMinutes = totalMinutes - (days * 1440);
@@ -293,41 +294,41 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       
       if (days == 1) {
         if (hours > 0) {
-          return hours == 1 ? '1 Tag, 1 Std' : '1 Tag, $hours Std';
+          return hours == 1 ? '1 day, 1 hr' : '1 day, $hours hrs';
         } else {
-          return '1 Tag';
+          return '1 day';
         }
       } else {
         if (hours > 0) {
-          return hours == 1 ? '$days Tage, 1 Std' : '$days Tage, $hours Std';
+          return hours == 1 ? '$days days, 1 hr' : '$days days, $hours hrs';
         } else {
-          return '$days Tage';
+          return '$days days';
         }
       }
     }
     
-    // Stunden (60 Minuten)
+    // Hours (60 minutes)
     if (totalMinutes >= 60) {
       final hours = (totalMinutes / 60).floor();
       final remainingMinutes = totalMinutes - (hours * 60);
       
       if (hours == 1) {
         if (remainingMinutes > 0) {
-          return remainingMinutes == 1 ? '1 Std, 1 Min' : '1 Std, $remainingMinutes Min';
+          return remainingMinutes == 1 ? '1 hr, 1 min' : '1 hr, $remainingMinutes min';
         } else {
-          return '1 Std';
+          return '1 hr';
         }
       } else {
         if (remainingMinutes > 0) {
-          return remainingMinutes == 1 ? '$hours Std, 1 Min' : '$hours Std, $remainingMinutes Min';
+          return remainingMinutes == 1 ? '$hours hrs, 1 min' : '$hours hrs, $remainingMinutes min';
         } else {
-          return '$hours Std';
+          return '$hours hrs';
         }
       }
     }
     
-    // Minuten
-    return '$totalMinutes Min';
+    // Minutes
+    return '$totalMinutes min';
   }
 
   String _getActivityName(ActionLog log) {
@@ -613,7 +614,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Vorlagen für ${widget.area.name}',
+                    'Templates for ${widget.area.name}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -778,7 +779,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               const SizedBox(width: 8),
               _buildToggleButton(
                 icon: Icons.table_chart,
-                label: 'Tabelle',
+                label: 'Table',
                 isSelected: !_isBubbleView,
                 onTap: () => setState(() => _isBubbleView = false),
               ),
@@ -1176,7 +1177,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    'Aktivität',
+                    'Activity',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: _parseColor(widget.area.color),
@@ -1185,7 +1186,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 ),
                 Expanded(
                   child: Text(
-                    'Datum',
+                    'Date',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: _parseColor(widget.area.color),
@@ -1245,7 +1246,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                               ),
                               if (log.durationMin != null)
                                 Text(
-                                  '${log.durationMin} Min',
+                                  '${log.durationMin} min',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey.withOpacity(0.7),
@@ -1483,7 +1484,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Fortschritt',
+            'Progress',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -1496,7 +1497,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               Expanded(
                 child: _buildStatCard(
                   icon: Icons.star,
-                  title: 'Gesammelte XP',
+                  title: 'Total XP',
                   value: '$_totalXp',
                   color: Colors.amber,
                 ),

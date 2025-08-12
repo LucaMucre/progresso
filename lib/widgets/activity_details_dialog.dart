@@ -537,7 +537,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                           Expanded(
                             flex: 2,
                             child: _buildDetailChip(
-                              label: 'Datum',
+                              label: 'Date',
                               value: _formatDate(widget.log.occurredAt),
                               icon: Icons.event,
                             ),
@@ -554,7 +554,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                           Expanded(
                             child: _buildDetailChip(
                               label: 'Dauer',
-                              value: widget.log.durationMin != null ? '${widget.log.durationMin} Min' : '-',
+                              value: widget.log.durationMin != null ? '${widget.log.durationMin} min' : '-',
                               icon: Icons.timer_outlined,
                             ),
                           ),

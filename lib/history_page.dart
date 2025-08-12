@@ -83,7 +83,7 @@ class HistoryPage extends StatelessWidget {
                             Icon(Icons.timer, size: 16, color: Colors.grey[600]),
                             const SizedBox(width: 4),
                             Text(
-                              '${log.durationMin} Minuten',
+      '${log.durationMin} minutes',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ],
