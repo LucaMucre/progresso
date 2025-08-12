@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'services/level_up_service.dart';
-import 'widgets/level_up_dialog.dart';
 
 class LogActionPage extends StatefulWidget {
   final ActionTemplate? template;
@@ -54,17 +53,6 @@ class _LogActionPageState extends State<LogActionPage> {
       _activityNameCtrl.text = widget.template!.name;
     }
     _quillCtrl = quill.QuillController.basic();
-    // Listen for level-up while user is still on the form
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      LevelUpService.setOnLevelUp((level) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          builder: (_) => LevelUpDialog(level: level),
-        );
-      });
-    });
   }
 
   Future<void> _pickImage() async {
@@ -248,12 +236,25 @@ class _LogActionPageState extends State<LogActionPage> {
         );
       }
       
+      // Prüfe Level-Up: vergleiche Level vorher/nachher anhand total XP
+      final totalAfter = await fetchTotalXp();
+      final newLevel = calculateLevel(totalAfter);
+      final prevLevel = calculateLevel(totalAfter - log.earnedXp);
+      final bool didLevelUp = newLevel > prevLevel;
+
       // Auf Erfolg hinweisen und zurück zur Liste
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Log created: +${log.earnedXp} XP')),
       );
       Navigator.of(context).pop();  // zurück
+
+      // Zeige Level-Up NACH dem Zurück-Navigieren (auf Dashboard/Profile)
+      if (didLevelUp) {
+        Future.delayed(const Duration(milliseconds: 150), () {
+          LevelUpService.notifyLevelUp(newLevel);
+        });
+      }
     } catch (err) {
       setState(() { _error = 'Error while saving: $err'; });
     } finally {
