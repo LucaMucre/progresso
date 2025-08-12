@@ -51,13 +51,15 @@ class _ProfilePageState extends State<ProfilePage> {
     _subscribeToActivityChanges();
     _initializeAchievements();
     // Global listener for level-up events (from log inserts)
-    LevelUpService.setOnLevelUp((level) {
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (_) => LevelUpDialog(level: level),
-      );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      LevelUpService.setOnLevelUp((level) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (_) => LevelUpDialog(level: level),
+        );
+      });
     });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
     AvatarSyncService.avatarVersion.addListener(_loadProfile);
