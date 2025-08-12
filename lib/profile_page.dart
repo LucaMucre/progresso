@@ -380,7 +380,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Profil gespeichert!'),
+        content: Text('Profile saved!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -606,7 +606,7 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Theme.of(context).colorScheme.surface,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         title: const Text(
-          'Mein Profil',
+          'My Profile',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
@@ -727,7 +727,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
-                      tooltip: 'Profil bearbeiten',
+            tooltip: 'Edit profile',
                       icon: const Icon(Icons.edit, color: Colors.white),
                       onPressed: () async {
                         // Öffne Bearbeitungsdialog: Name/Bio ändern und speichern
@@ -737,7 +737,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             final nameCtrl = TextEditingController(text: _nameCtrl.text);
                             final bioCtrl = TextEditingController(text: _bioCtrl.text);
                             return AlertDialog(
-                              title: const Text('Profil bearbeiten'),
+            title: const Text('Edit profile'),
                               content: SizedBox(
                                 width: 420,
                                 child: Column(
@@ -759,7 +759,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.of(ctx).pop(),
-                                  child: const Text('Abbrechen'),
+                child: const Text('Cancel'),
                                 ),
                                 ElevatedButton(
                                   onPressed: () async {

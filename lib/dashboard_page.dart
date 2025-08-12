@@ -621,21 +621,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final List<Map<String, dynamic>> iconOptions = [
       {'name': 'Fitness', 'icon': 'fitness_center'},
-      {'name': 'Ernährung', 'icon': 'restaurant'},
-      {'name': 'Bildung', 'icon': 'school'},
-      {'name': 'Finanzen', 'icon': 'account_balance'},
-      {'name': 'Kunst', 'icon': 'palette'},
-      {'name': 'Beziehungen', 'icon': 'people'},
-      {'name': 'Karriere', 'icon': 'work'},
-      {'name': 'Zuhause', 'icon': 'home'},
-      {'name': 'Gesundheit', 'icon': 'local_hospital'},
-      {'name': 'Reisen', 'icon': 'flight'},
-      {'name': 'Musik', 'icon': 'music_note'},
-      {'name': 'Sport', 'icon': 'sports_soccer'},
-      {'name': 'Technologie', 'icon': 'computer'},
-      {'name': 'Natur', 'icon': 'eco'},
-      {'name': 'Lesen', 'icon': 'book'},
-      {'name': 'Schreiben', 'icon': 'edit'},
+      {'name': 'Nutrition', 'icon': 'restaurant'},
+      {'name': 'Learning', 'icon': 'school'},
+      {'name': 'Finance', 'icon': 'account_balance'},
+      {'name': 'Art', 'icon': 'palette'},
+      {'name': 'Relationships', 'icon': 'people'},
+      {'name': 'Career', 'icon': 'work'},
+      {'name': 'Home', 'icon': 'home'},
+      {'name': 'Health', 'icon': 'local_hospital'},
+      {'name': 'Travel', 'icon': 'flight'},
+      {'name': 'Music', 'icon': 'music_note'},
+      {'name': 'Sports', 'icon': 'sports_soccer'},
+      {'name': 'Technology', 'icon': 'computer'},
+      {'name': 'Nature', 'icon': 'eco'},
+      {'name': 'Reading', 'icon': 'book'},
+      {'name': 'Writing', 'icon': 'edit'},
     ];
 
     showDialog(
@@ -644,7 +644,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setDialogState) {
             return AlertDialog(
-              title: const Text('Neuen Lebensbereich hinzufügen'),
+              title: const Text('Add new life area'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -653,8 +653,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     TextField(
                       controller: nameController,
                       decoration: const InputDecoration(
-                        labelText: 'Name',
-                        hintText: 'z.B. Fitness, Bildung, etc.',
+                         labelText: 'Name',
+                         hintText: 'e.g. Fitness, Learning, etc.',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -664,16 +664,16 @@ class _DashboardPageState extends State<DashboardPage> {
                     TextField(
                       controller: categoryController,
                       decoration: const InputDecoration(
-                        labelText: 'Kategorie (optional)',
-                        hintText: 'z.B. Gesundheit, Persönlich',
+                         labelText: 'Category (optional)',
+                         hintText: 'e.g. Health, Personal',
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 20),
                     
                     // Color Selection
-                    const Text(
-                      'Farbe auswählen:',
+                     const Text(
+                       'Choose color:',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
@@ -713,8 +713,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     const SizedBox(height: 20),
                     
                     // Icon Selection
-                    const Text(
-                      'Icon auswählen:',
+                     const Text(
+                       'Choose icon:',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
@@ -777,13 +777,13 @@ class _DashboardPageState extends State<DashboardPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Abbrechen'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Bitte gib einen Namen ein')),
+                        const SnackBar(content: Text('Please enter a name')),
                       );
                       return;
                     }
@@ -791,7 +791,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     try {
                       await LifeAreasService.createLifeArea(
                         name: nameController.text.trim(),
-                        category: categoryController.text.trim().isEmpty ? 'Allgemein' : categoryController.text.trim(),
+                         category: categoryController.text.trim().isEmpty ? 'General' : categoryController.text.trim(),
                         color: selectedColor,
                         icon: selectedIcon,
                       );
@@ -801,15 +801,15 @@ class _DashboardPageState extends State<DashboardPage> {
                         _refreshCounter++;
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Lebensbereich erfolgreich erstellt')),
+                        const SnackBar(content: Text('Life area created')),
                       );
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Fehler beim Erstellen: $e')),
+                        SnackBar(content: Text('Error creating area: $e')),
                       );
                     }
                   },
-                  child: const Text('Erstellen'),
+                  child: const Text('Create'),
                 ),
               ],
             );
@@ -948,7 +948,7 @@ class _DashboardPageState extends State<DashboardPage> {
                  actions: [
            IconButton(
              icon: const Icon(Icons.refresh),
-             tooltip: 'Dashboard neu laden',
+          tooltip: 'Reload dashboard',
              onPressed: () async {
                // Force Avatar-Sync und Dashboard-Rebuild
                await AvatarSyncService.forceSync();
@@ -1199,7 +1199,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               children: [
                                 CircularProgressIndicator(),
                                 SizedBox(height: 16),
-                                Text('Lade Lebensbereiche...'),
+                                Text('Loading life areas...'),
                               ],
                             ),
                           );
@@ -1211,7 +1211,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               children: [
                                 Icon(Icons.error, color: Colors.red, size: 48),
                                 const SizedBox(height: 8),
-                                Text('Fehler beim Laden der Lebensbereiche'),
+                                Text('Error loading life areas'),
                                 const SizedBox(height: 8),
                                                            ElevatedButton(
                                    onPressed: () {
@@ -1220,7 +1220,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                        _refreshCounter++;
                                      });
                                    },
-                                   child: const Text('Erneut versuchen'),
+                                   child: const Text('Try again'),
                                  ),
                               ],
                             ),
@@ -1240,7 +1240,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Noch keine Lebensbereiche',
+                                  'No life areas yet',
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                     color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                                   ),
@@ -1258,7 +1258,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                        print('Fehler beim Erstellen der Standard-Bereiche: $e');
                                      }
                                    },
-                                  child: const Text('Standard-Bereiche erstellen'),
+                                   child: const Text('Create default areas'),
                                 ),
                               ],
                             ),
@@ -1290,13 +1290,13 @@ class _DashboardPageState extends State<DashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Schnellzugriff auf alle Aktivitäten',
+                  'Quick access to all activities',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  'Direkte Aktivitäten für alle Lebensbereiche',
+                  'Direct activities across all life areas',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey[600],
                   ),
@@ -1336,7 +1336,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           children: [
                             Icon(Icons.error, color: Colors.red, size: 48),
                             const SizedBox(height: 8),
-                            Text('Fehler beim Laden der Lebensbereiche'),
+                            Text('Error loading life areas'),
                           ],
                         ),
                       ),
@@ -1349,7 +1349,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     return const Padding(
                       padding: EdgeInsets.all(40),
                       child: Center(
-                        child: Text('Keine Lebensbereiche verfügbar'),
+                        child: Text('No life areas available'),
                       ),
                     );
                   }
@@ -1379,7 +1379,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                       selectedCategory: area.category,
                                     ),
                                   ),
-                                );
+                                ).then((_) { if (mounted) setState(() => _refreshCounter++); });
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
@@ -1857,7 +1857,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Dauer der letzten 7 Tage (Stunden)',
+          'Duration of last 7 days (hours)',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),

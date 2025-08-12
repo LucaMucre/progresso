@@ -58,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 final newPw = _newPwCtrl.text.trim();
@@ -101,7 +101,7 @@ class _SettingsPageState extends State<SettingsPage> {
           content: const Text(
               'Wenn du den KI‑Assistenz‑Modus aktivierst, können Anfragen mit zusammengefassten Inhalten an einen externen KI‑Dienst gesendet werden. Deine Daten werden weiterhin durch RLS auf deinen Account beschränkt. Du kannst den Modus jederzeit wieder deaktivieren.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Aktivieren')),
           ],
         ),
@@ -125,7 +125,7 @@ class _SettingsPageState extends State<SettingsPage> {
         content: const Text(
             'Dies löscht deinen Account und alle zugehörigen Daten dauerhaft. Dieser Vorgang kann nicht rückgängig gemacht werden.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Endgültig löschen')),
         ],
       ),

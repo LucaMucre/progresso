@@ -76,7 +76,7 @@ class _TemplatesListState extends State<TemplatesList> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Fehler beim Laden',
+    'Error loading',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),

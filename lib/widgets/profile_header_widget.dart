@@ -66,7 +66,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           _isLoading = false;
         });
       }
-      print('Fehler beim Laden des User-Profils: $e');
+    print('Error loading user profile: $e');
     }
   }
 

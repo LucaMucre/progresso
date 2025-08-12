@@ -34,7 +34,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
   File? _selectedImage;
   String? _selectedImageUrl;
   String? _uploadedImageUrl;
-  String _activityTitle = 'Aktivität';
+  String _activityTitle = 'Activity';
   Color? _areaColor;
 
   @override
@@ -114,7 +114,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     // Default
     if (mounted) {
       setState(() {
-        _activityTitle = 'Aktivität';
+    _activityTitle = 'Activity';
       });
     }
   }
@@ -353,12 +353,12 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Aktivität löschen'),
-        content: const Text('Möchtest du diese Aktivität wirklich löschen?'),
+            title: const Text('Delete activity'),
+            content: const Text('Do you really want to delete this activity?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Abbrechen'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -429,7 +429,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Aktivitäts-Details',
+          'Activity details',
                           style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                 color: Colors.black.withOpacity(0.6),
                               ),
@@ -634,7 +634,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                             _selectedImageUrl = null;
                           });
                         },
-                        child: const Text('Abbrechen'),
+            child: const Text('Cancel'),
                       ),
                     ),
                     const SizedBox(width: 12),

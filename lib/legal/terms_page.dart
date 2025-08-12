@@ -6,27 +6,27 @@ class TermsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Nutzungsbedingungen')),
+      appBar: AppBar(title: const Text('Terms of Service')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: const [
             Text(
-              'Nutzungsbedingungen',
+              'Terms of Service',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 12),
-            Text('Leistung: Progresso ermöglicht das Erfassen von Aktivitäten/Notizen und das Abrufen von Statistiken. Optionaler KI‑Assistenz‑Modus nach Opt‑in.'),
+            Text('Service: Progresso lets you capture activities/notes and view statistics. Optional AI assistance after opt-in.'),
             SizedBox(height: 8),
-            Text('Nutzung: Du bist für Inhalte verantwortlich; keine rechtswidrigen Inhalte.'),
+            Text('Use: You are responsible for your content; no unlawful content.'),
             SizedBox(height: 8),
-            Text('Kosten: aktuell kostenlos; Änderungen mit Vorankündigung.'),
+            Text('Fees: currently free; changes may be announced in advance.'),
             SizedBox(height: 8),
-            Text('Haftung: App wird „wie besehen“ bereitgestellt; keine Gewähr für Verfügbarkeit/Fehlerfreiheit.'),
+            Text('Liability: App is provided “as is”; no warranty for availability or error-free operation.'),
             SizedBox(height: 8),
-            Text('Kündigung/Löschung: Konto kann jederzeit in der App gelöscht werden.'),
+            Text('Termination/Deletion: You can delete your account anytime in the app.'),
             SizedBox(height: 8),
-            Text('Datenschutz: siehe Datenschutzerklärung.'),
+            Text('Privacy: see Privacy Policy.'),
           ],
         ),
       ),

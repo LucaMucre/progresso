@@ -148,7 +148,7 @@ class _AuthPageState extends State<AuthPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Verstehe was dich voranbringt. Tracke Aktivitäten,\n' 
+      'Understand what moves you forward. Track activities,\n'
               'erhalte Einsichten und baue konsistente Routinen auf.',
               style: theme.textTheme.titleMedium?.copyWith(
                 color: Colors.white.withOpacity(0.75),

@@ -164,7 +164,7 @@ class _LogActionPageState extends State<LogActionPage> {
   Future<void> _submitLog() async {
     // Validate inputs
     if (_activityNameCtrl.text.trim().isEmpty) {
-      setState(() { _error = 'Bitte gib einen Namen für die Aktivität ein.'; });
+      setState(() { _error = 'Please enter a name for the activity.'; });
       return;
     }
 
@@ -173,7 +173,7 @@ class _LogActionPageState extends State<LogActionPage> {
     if (raw.isNotEmpty) {
       duration = int.tryParse(raw);
       if (duration == null) {
-        setState(() { _error = 'Bitte eine gültige Zahl für Minuten eingeben.'; });
+        setState(() { _error = 'Please enter a valid number of minutes.'; });
         return;
       }
     }
@@ -189,7 +189,7 @@ class _LogActionPageState extends State<LogActionPage> {
           // If image upload fails, continue without image but show a warning
           print('Image upload failed: $e');
           setState(() {
-            _error = 'Bild-Upload fehlgeschlagen: $e\n\nDie Aktivität wird ohne Bild gespeichert.';
+            _error = 'Image upload failed: $e\n\nThe activity will be saved without an image.';
           });
           // Don't fail the entire log creation, but show error to user
         }
@@ -202,7 +202,7 @@ class _LogActionPageState extends State<LogActionPage> {
         // Ensure we also persist context (area, category, title) in notes wrapper for later display
         final String wrappedNotes = jsonEncode({
           'area': widget.selectedArea ?? '',
-          'category': widget.selectedCategory ?? 'Allgemein',
+          'category': widget.selectedCategory ?? 'General',
           'title': widget.template!.name,
           'delta': _quillCtrl.document.toDelta().toJson(),
         });
@@ -216,7 +216,7 @@ class _LogActionPageState extends State<LogActionPage> {
         // Create a quick log without template
         final activityName = _activityNameCtrl.text.trim();
         final areaName = widget.selectedArea ?? '';
-        final category = widget.selectedCategory ?? 'Allgemein';
+        final category = widget.selectedCategory ?? 'General';
         // Immer den Wrapper speichern, auch wenn der Delta-Inhalt leer ist,
         // damit die Zuordnung zum Lebensbereich sicher ist
         final String notesDeltaJson = jsonEncode({
@@ -238,11 +238,11 @@ class _LogActionPageState extends State<LogActionPage> {
       // Auf Erfolg hinweisen und zurück zur Liste
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Log angelegt: +${log.earnedXp} XP')),
+        SnackBar(content: Text('Log created: +${log.earnedXp} XP')),
       );
       Navigator.of(context).pop();  // zurück
     } catch (err) {
-      setState(() { _error = 'Fehler beim Speichern: $err'; });
+      setState(() { _error = 'Error while saving: $err'; });
     } finally {
       setState(() { _loading = false; });
     }

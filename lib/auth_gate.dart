@@ -76,7 +76,7 @@ class _AuthGateState extends State<AuthGate> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               final a = newPwCtrl.text.trim();
@@ -155,7 +155,7 @@ class _AuthGateState extends State<AuthGate> {
               Icon(Icons.error_outline, size: 64, color: Colors.red),
               SizedBox(height: 16),
               Text(
-                'Fehler beim Laden der App',
+    'Error loading app',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 8),

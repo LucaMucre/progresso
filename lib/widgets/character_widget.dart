@@ -48,7 +48,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
           _isLoadingAvatar = false;
         });
       }
-      print('Fehler beim Laden des User-Avatars: $e');
+  print('Error loading user avatar: $e');
     }
   }
 
@@ -150,7 +150,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
               children: [
                 Icon(Icons.error, color: Colors.red, size: 48),
                 const SizedBox(height: 8),
-                Text('Fehler beim Laden des Characters'),
+  Text('Error loading character'),
               ],
             ),
           );

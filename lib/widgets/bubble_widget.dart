@@ -440,12 +440,12 @@ class _BubblesGridState extends State<BubblesGrid> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Lebensbereich löschen'),
+      title: const Text('Delete life area'),
           content: Text('Möchten Sie "${area.name}" wirklich löschen?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Abbrechen'),
+      child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -459,7 +459,7 @@ class _BubblesGridState extends State<BubblesGrid> {
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Fehler beim Löschen: $e'),
+      content: Text('Error while deleting: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );

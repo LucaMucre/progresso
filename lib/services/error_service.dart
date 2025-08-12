@@ -63,7 +63,7 @@ class ErrorService {
       if (errorString.contains('pgrst302')) {
         return 'Authentifizierung erforderlich.';
       }
-      return 'Datenbankfehler. Bitte versuche es erneut.';
+    return 'Database error. Please try again.';
     }
     
     // Auth-Fehler
@@ -80,7 +80,7 @@ class ErrorService {
       if (errorString.contains('email_already_in_use')) {
         return 'Diese E-Mail-Adresse wird bereits verwendet.';
       }
-      return 'Authentifizierungsfehler. Bitte melde dich erneut an.';
+    return 'Authentication error. Please sign in again.';
     }
     
     // Netzwerk-Fehler
@@ -88,7 +88,7 @@ class ErrorService {
         errorString.contains('connection') || 
         errorString.contains('timeout') ||
         errorString.contains('socket')) {
-      return 'Netzwerkfehler. Bitte überprüfe deine Internetverbindung.';
+    return 'Network error. Please check your internet connection.';
     }
     
     // Storage-Fehler
@@ -99,16 +99,16 @@ class ErrorService {
       if (errorString.contains('insufficient_permissions')) {
         return 'Keine Berechtigung für diese Datei.';
       }
-      return 'Fehler beim Hochladen der Datei.';
+    return 'Error uploading file.';
     }
     
     // JSON-Parsing-Fehler
     if (errorString.contains('json') || errorString.contains('format')) {
-      return 'Datenformatfehler. Bitte starte die App neu.';
+    return 'Data format error. Please restart the app.';
     }
     
     // Unbekannte Fehler
-    return 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.';
+    return 'An unexpected error occurred. Please try again.';
   }
 
   // Globale Fehlerbehandlung
@@ -136,7 +136,7 @@ class ErrorService {
         case 'PGRST302':
           return 'Authentifizierung erforderlich.';
         default:
-          return 'Datenbankfehler: ${error.message}';
+    return 'Database error: ${error.message}';
       }
     }
     
@@ -151,7 +151,7 @@ class ErrorService {
         case 'User already registered':
           return 'Diese E-Mail-Adresse wird bereits verwendet.';
         default:
-          return 'Authentifizierungsfehler: ${error.message}';
+    return 'Authentication error: ${error.message}';
       }
     }
     

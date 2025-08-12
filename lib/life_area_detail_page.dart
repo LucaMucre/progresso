@@ -601,7 +601,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                   ),
                   icon: const Icon(Icons.add),
                   label: Text(
-                    'Schnell-Aktion für ${widget.area.name} loggen',
+                    'Quick log for ${widget.area.name}',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -650,15 +650,15 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                         color: Colors.grey.withOpacity(0.5),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        'Keine Vorlagen für ${widget.area.name}',
+              Text(
+                'No templates for ${widget.area.name}',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.grey.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Erstelle eine neue Vorlage oder nutze die Schnell-Aktion',
+                'Create a new template or use the quick action',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.grey.withOpacity(0.5),
                         ),
@@ -739,14 +739,14 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Noch keine Aktivitäten',
+                'No activities yet',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.grey.withOpacity(0.7),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Starte deine erste Aktivität!',
+                'Start your first activity!',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.grey.withOpacity(0.5),
                 ),
@@ -1050,20 +1050,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Unterkategorien',
+              'Subcategories',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             OutlinedButton.icon(
               onPressed: _createSubAreaDialog,
               icon: const Icon(Icons.add),
-              label: const Text('Unterkategorie'),
+              label: const Text('Subcategory'),
             )
           ],
         ),
         const SizedBox(height: 12),
         if (_subAreas.isEmpty)
           Text(
-            'Noch keine Unterkategorien. Lege die erste an.',
+            'No subcategories yet. Create the first one.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
           )
         else
@@ -1109,8 +1109,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     String icon = widget.area.icon;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Unterkategorie erstellen'),
+        builder: (ctx) => AlertDialog(
+        title: const Text('Create subcategory'),
         content: SizedBox(
           width: 420,
           child: Column(
@@ -1118,13 +1118,13 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             children: [
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')), 
               const SizedBox(height: 8),
-              TextField(controller: catCtrl, decoration: const InputDecoration(labelText: 'Kategorie')), 
+              TextField(controller: catCtrl, decoration: const InputDecoration(labelText: 'Category')), 
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Erstellen')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
         ],
       ),
     );
@@ -1795,7 +1795,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Dauer der letzten 7 Tage (Stunden)',
+          'Duration of last 7 days (hours)',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
