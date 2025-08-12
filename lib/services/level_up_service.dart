@@ -43,7 +43,10 @@ class LevelUpService {
         await showDialog(
           context: context,
           barrierDismissible: true,
-          builder: (_) => AchievementUnlockWidget(achievement: a),
+          builder: (_) => AchievementUnlockWidget(
+            achievement: a,
+            onDismissed: () => Navigator.of(context).pop(),
+          ),
         );
       }
     }
@@ -83,7 +86,10 @@ class LevelUpService {
       await showDialog(
         context: context,
         barrierDismissible: true,
-        builder: (_) => AchievementUnlockWidget(achievement: a),
+        builder: (_) => AchievementUnlockWidget(
+          achievement: a,
+          onDismissed: () => Navigator.of(context).pop(),
+        ),
       );
     }
     _isShowing = false;

@@ -109,9 +109,11 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
   }
   
   void _dismiss() {
-    _slideController.reverse().then((_) {
-      widget.onDismissed?.call();
-    });
+    if (!_slideController.isAnimating) {
+      _slideController.reverse().whenComplete(() {
+        widget.onDismissed?.call();
+      });
+    }
   }
   
   @override
@@ -259,7 +261,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                               const SizedBox(height: 20),
                               
                               // Close button
-                              ElevatedButton(
+                  ElevatedButton(
                                 onPressed: _dismiss,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: widget.achievement.color,
@@ -268,7 +270,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                 ),
-                                child: const Text('Großartig!'),
+                                 child: const Text('Great!'),
                               ),
                             ],
                           ),
