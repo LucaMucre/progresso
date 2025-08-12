@@ -16,7 +16,6 @@ import 'widgets/profile_header_widget.dart';
 import 'templates_page.dart';
 import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
-import 'widgets/level_up_dialog.dart';
 import 'services/level_up_service.dart';
 import 'settings_page.dart';
 
@@ -62,7 +61,7 @@ class _DashboardPageState extends State<DashboardPage> {
       // Level-up popup listener (dashboard-wide)
       LevelUpService.setOnLevelUp((level) async {
         if (!mounted) return;
-        await LevelUpService.showInOrder(context: context, level: level);
+        await LevelUpService.showLevelThenPending(context: context, level: level);
       });
     });
     // Zusätzliche Aktualisierung nach kurzer Verzögerung

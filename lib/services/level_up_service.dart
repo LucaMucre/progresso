@@ -7,6 +7,8 @@ import '../widgets/level_up_dialog.dart';
 class LevelUpService {
   static final ValueNotifier<int?> _levelUpNotifier = ValueNotifier<int?>(null);
   static bool _isShowing = false;
+  static bool _levelUpPending = false;
+  static final List<Achievement> _pendingAchievements = <Achievement>[];
 
   static void setOnLevelUp(void Function(int level) listener) {
     _levelUpNotifier.addListener(() {
@@ -16,6 +18,8 @@ class LevelUpService {
   }
 
   static void notifyLevelUp(int level) {
+    // Mark that a level-up is coming so achievements won't show prematurely
+    _levelUpPending = true;
     _levelUpNotifier.value = level;
   }
 
@@ -42,6 +46,45 @@ class LevelUpService {
           builder: (_) => AchievementUnlockWidget(achievement: a),
         );
       }
+    }
+    _isShowing = false;
+  }
+
+  /// Queue an achievement to be shown later (after any level-up)
+  static void queueAchievement(Achievement achievement) {
+    _pendingAchievements.add(achievement);
+  }
+
+  /// Helper used by listeners of level-up events to ensure the level-up dialog is
+  /// shown first, followed by any queued achievements.
+  static Future<void> showLevelThenPending({
+    required BuildContext context,
+    required int level,
+  }) async {
+    // Capture and clear pending achievements at the moment we begin showing
+    final toShow = List<Achievement>.from(_pendingAchievements);
+    _pendingAchievements.clear();
+    _levelUpPending = false; // we are processing it now
+    await showInOrder(context: context, level: level, achievements: toShow);
+  }
+
+  /// If there is no level-up pending, show any queued achievements now.
+  static Future<void> showPendingAchievements({
+    required BuildContext context,
+  }) async {
+    if (_isShowing) return;
+    if (_levelUpPending) return; // a level-up will handle showing them
+    if (_pendingAchievements.isEmpty) return;
+
+    _isShowing = true;
+    final toShow = List<Achievement>.from(_pendingAchievements);
+    _pendingAchievements.clear();
+    for (final a in toShow) {
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => AchievementUnlockWidget(achievement: a),
+      );
     }
     _isShowing = false;
   }

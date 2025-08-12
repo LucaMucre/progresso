@@ -10,8 +10,7 @@ import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
 import 'services/avatar_sync_service.dart';
 import 'services/achievement_service.dart';
-import 'widgets/achievement_unlock_widget.dart';
-import 'widgets/level_up_dialog.dart';
+// Popups are orchestrated centrally via LevelUpService; do not import dialogs directly here
 import 'services/level_up_service.dart';
 import 'life_area_detail_page.dart';
 
@@ -54,7 +53,7 @@ class _ProfilePageState extends State<ProfilePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       LevelUpService.setOnLevelUp((level) async {
         if (!mounted) return;
-        await LevelUpService.showInOrder(context: context, level: level);
+        await LevelUpService.showLevelThenPending(context: context, level: level);
       });
     });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
@@ -90,14 +89,14 @@ class _ProfilePageState extends State<ProfilePage> {
   }
   
   void _showAchievementUnlock(Achievement achievement) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AchievementUnlockWidget(
-        achievement: achievement,
-        onDismissed: () => Navigator.of(context).pop(),
-      ),
-    );
+    // Queue achievement; it will be shown after any level-up or immediately if none pending
+    LevelUpService.queueAchievement(achievement);
+    // If no level-up is pending, show queued achievements now
+    // (if a level-up is pending, they will be shown afterwards automatically)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      LevelUpService.showPendingAchievements(context: context);
+    });
   }
 
   Future<void> _loadProfile() async {
