@@ -85,18 +85,14 @@ class _ProfilePageState extends State<ProfilePage> {
   
   Future<void> _initializeAchievements() async {
     await AchievementService.loadUnlockedAchievements();
+    // Only queue here; dialogs are orchestrated globally
     AchievementService.setOnAchievementUnlocked(_showAchievementUnlock);
   }
   
   void _showAchievementUnlock(Achievement achievement) {
     // Queue achievement; it will be shown after any level-up or immediately if none pending
     LevelUpService.queueAchievement(achievement);
-    // If no level-up is pending, show queued achievements now
-    // (if a level-up is pending, they will be shown afterwards automatically)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      LevelUpService.showPendingAchievements(context: context);
-    });
+    // Do not show immediately here to avoid overlap with navigation; Dashboard handles display
   }
 
   Future<void> _loadProfile() async {

@@ -17,6 +17,7 @@ import 'templates_page.dart';
 import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
+import 'services/achievement_service.dart';
 import 'settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -63,11 +64,19 @@ class _DashboardPageState extends State<DashboardPage> {
         if (!mounted) return;
         await LevelUpService.showLevelThenPending(context: context, level: level);
       });
+      // Listen for achievement unlocks globally and queue them
+      AchievementService.setOnAchievementUnlocked((a) {
+        LevelUpService.queueAchievement(a);
+      });
+      // If any achievements were queued while another page was open, show them now
+      LevelUpService.showPendingAchievements(context: context);
     });
     // Zusätzliche Aktualisierung nach kurzer Verzögerung
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         setState(() {});
+        // Try again shortly after the frame to catch late-queued achievements
+        LevelUpService.showPendingAchievements(context: context);
       }
     });
 
