@@ -60,13 +60,9 @@ class _DashboardPageState extends State<DashboardPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {});
       // Level-up popup listener (dashboard-wide)
-      LevelUpService.setOnLevelUp((level) {
+      LevelUpService.setOnLevelUp((level) async {
         if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          builder: (_) => LevelUpDialog(level: level),
-        );
+        await LevelUpService.showInOrder(context: context, level: level);
       });
     });
     // Zusätzliche Aktualisierung nach kurzer Verzögerung

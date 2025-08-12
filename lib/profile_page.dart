@@ -52,13 +52,9 @@ class _ProfilePageState extends State<ProfilePage> {
     _initializeAchievements();
     // Global listener for level-up events (from log inserts)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      LevelUpService.setOnLevelUp((level) {
+      LevelUpService.setOnLevelUp((level) async {
         if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          builder: (_) => LevelUpDialog(level: level),
-        );
+        await LevelUpService.showInOrder(context: context, level: level);
       });
     });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen

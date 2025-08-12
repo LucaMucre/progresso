@@ -9,73 +9,98 @@ class LevelUpDialog extends StatefulWidget {
 }
 
 class _LevelUpDialogState extends State<LevelUpDialog>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scale;
-  late final Animation<double> _opacity;
+    with TickerProviderStateMixin {
+  late AnimationController _slideController;
+  late AnimationController _scaleController;
+  late AnimationController _glowController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _glowAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _scale = CurvedAnimation(parent: _controller, curve: Curves.elasticOut);
-    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    _controller.forward();
+    _slideController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _scaleController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
+    _glowController = AnimationController(duration: const Duration(milliseconds: 1500), vsync: this);
+
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _slideController, curve: Curves.elasticOut));
+    _scaleAnimation = Tween<double>(begin: 0, end: 1)
+        .animate(CurvedAnimation(parent: _scaleController, curve: Curves.bounceOut));
+    _glowAnimation = Tween<double>(begin: 0, end: 1)
+        .animate(CurvedAnimation(parent: _glowController, curve: Curves.easeInOut));
+
+    _slideController.forward();
+    Future.delayed(const Duration(milliseconds: 200), () => _scaleController.forward());
+    Future.delayed(const Duration(milliseconds: 400), () => _glowController.forward());
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _slideController.dispose();
+    _scaleController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(24),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.9),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.9),
-          ]),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ScaleTransition(
-              scale: _scale,
-              child: Icon(Icons.emoji_events, color: Colors.white, size: 72),
+    final primary = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: Colors.black.withOpacity(0.3),
+      child: Center(
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: primary.withOpacity(0.3), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: primary.withOpacity(0.3 * _glowAnimation.value),
+                  blurRadius: 20 + (30 * _glowAnimation.value),
+                  spreadRadius: 5 + (10 * _glowAnimation.value),
+                )
+              ],
             ),
-            const SizedBox(height: 12),
-            FadeTransition(
-              opacity: _opacity,
-              child: Text(
-                'Level Up!',
-                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: primary.withOpacity(0.3), blurRadius: 15, spreadRadius: 5),
+                      ],
+                    ),
+                    child: const Icon(Icons.emoji_events, color: Colors.white, size: 40),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Level Up!', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, color: primary)),
+                const SizedBox(height: 8),
+                Text('You reached Level ${widget.level}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text('Awesome!'),
+                )
+              ],
             ),
-            const SizedBox(height: 8),
-            FadeTransition(
-              opacity: _opacity,
-              child: Text(
-                'You reached Level ${widget.level}',
-                style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Theme.of(context).colorScheme.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Awesome!'),
-            )
-          ],
+          ),
         ),
       ),
     );
