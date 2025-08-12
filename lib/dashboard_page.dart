@@ -192,8 +192,8 @@ class _DashboardPageState extends State<DashboardPage> {
         if (log.notes == null || log.notes!.isEmpty) return null;
         final obj = jsonDecode(log.notes!);
         if (obj is Map<String, dynamic>) {
-          final areaName = obj['area'] as String?;
-          final category = obj['category'] as String?;
+          final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
+          final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
           final match = _matchAreaTag(areaTags, areaName, category);
           return match?.color;
         }
@@ -351,8 +351,8 @@ class _DashboardPageState extends State<DashboardPage> {
         .select('name,category,color')
         .eq('user_id', user.id);
     final List<_AreaTag> areaTags = (lifeAreasRes as List).map((m) => _AreaTag(
-      name: (m['name'] as String).trim(),
-      category: (m['category'] as String).trim(),
+      name: LifeAreasService.canonicalAreaName((m['name'] as String).trim()),
+      category: LifeAreasService.canonicalCategory((m['category'] as String).trim()),
       color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
     )).toList();
 
@@ -376,10 +376,10 @@ class _DashboardPageState extends State<DashboardPage> {
             if (t is String && t.trim().isNotEmpty) {
               title = t.trim();
             }
-            final areaName = obj['area'];
-            final category = obj['category'];
+            final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
+            final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
             if (areaName is String || category is String) {
-              matched = _matchAreaTag(areaTags, areaName as String?, category as String?);
+              matched = _matchAreaTag(areaTags, areaName, category);
               if (matched != null) tagColor = matched!.color;
             }
           }
