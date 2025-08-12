@@ -173,20 +173,9 @@ class _ProfilePageState extends State<ProfilePage> {
         // Gesamt-XP anhand der Logs berechnen (nicht aus Character.total_xp, da dies evtl. nicht synchron ist)
         _totalXP = await fetchTotalXp();
 
-        // Level-Baseline (Startpunkt) einmalig setzen, damit alte XP nicht das Level hochschießen lassen
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final baselineKey = 'level_xp_baseline_${user.id}';
-          int? baseline = prefs.getInt(baselineKey);
-          if (baseline == null) {
-            // Für neue Nutzer (0 oder 1 Aktivität) Baseline = 0, sonst aktueller XP-Stand
-            baseline = (_totalActions <= 1) ? 0 : _totalXP;
-            await prefs.setInt(baselineKey, baseline);
-          }
-          _xpSinceBaseline = (_totalXP - baseline).clamp(0, 1 << 31);
-        } catch (_) {
-          _xpSinceBaseline = _totalXP; // Fallback: ohne Baseline direkt verwenden
-        }
+        // Zeige XP direkt aus Gesamt-XP (ohne Baseline-Offset), damit die Anzeige
+        // nicht nach einem Re-Login wie "reset" wirkt.
+        _xpSinceBaseline = _totalXP;
 
         // Rank life areas by activity count (desc)
         int countForArea(Map<String, dynamic> log, LifeArea area) {
