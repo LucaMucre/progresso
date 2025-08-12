@@ -784,7 +784,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // Statistics Section
             Text(
-              'Deine Statistiken',
+              'Your statistics',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -803,25 +803,25 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 final stats = [
                   (
-                    'Aktionen',
+                      'Activities',
                     '$_totalActions',
                     Icons.check_circle,
                     Colors.green,
                   ),
                   (
-                    'Aktueller Streak',
+                      'Current streak',
     '$_currentStreak days',
                     Icons.local_fire_department,
                     Colors.orange,
                   ),
                   (
-                    'Längster Streak',
+                      'Longest streak',
     '$_longestStreak days',
                     Icons.emoji_events,
                     Colors.amber,
                   ),
                   (
-                    'Gesamt XP',
+                      'Total XP',
                     '$_totalXP',
                     Icons.star,
                     Colors.purple,
@@ -904,7 +904,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            'Aktive Bereiche',
+              'Active life areas',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
                                 ),
