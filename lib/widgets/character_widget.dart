@@ -222,14 +222,6 @@ class _CharacterWidgetState extends State<CharacterWidget> {
                                   color: Colors.white,
                                 );
                               },
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return const Center(
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                );
-                              },
                             ),
                           )
                         : const Icon(

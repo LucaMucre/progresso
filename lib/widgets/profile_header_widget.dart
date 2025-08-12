@@ -173,20 +173,29 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
             height: avatarSize,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(avatarSize / 2), // perfect circle
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                  ),
+                  child: _userAvatarUrl != null
+                      ? Image.network(
+                          '${_userAvatarUrl!}?cb=$_cacheBust',
+                          key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stack) => const Icon(Icons.person, color: Colors.white, size: 22),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                              ),
+                            );
+                          },
+                        )
+                      : const Icon(Icons.person, color: Colors.white, size: 22),
                 ),
-                child: _userAvatarUrl != null
-                    ? FadeInImage.assetNetwork(
-                        placeholder: 'assets/default_avatar.png',
-                        image: '${_userAvatarUrl!}?cb=$_cacheBust',
-                        key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
-                        fit: BoxFit.cover,
-                        placeholderFit: BoxFit.cover,
-                      )
-                    : const Icon(Icons.person, color: Colors.white, size: 22),
-              ),
             ),
           ),
           
