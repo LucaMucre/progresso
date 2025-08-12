@@ -199,7 +199,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Willkommen zurück, ${_userName ?? 'User'}!',
+                  'Welcome back, ${_userName ?? 'User'}!',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: titleFontSize,

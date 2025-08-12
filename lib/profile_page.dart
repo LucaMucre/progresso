@@ -854,7 +854,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // Life Areas Summary
             Text(
-              'Deine Lebensbereiche',
+                'Your life areas',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -938,7 +938,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     )
                   else
                     Text(
-                      'Noch keine Lebensbereiche erstellt',
+                'No life areas created yet',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],

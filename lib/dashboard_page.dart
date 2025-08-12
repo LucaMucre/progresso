@@ -1054,7 +1054,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  '$streak Tage Streak!',
+                                  '$streak day streak!',
                                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                         color: Theme.of(context).colorScheme.primary,
                                         fontWeight: FontWeight.bold,
@@ -1106,13 +1106,13 @@ class _DashboardPageState extends State<DashboardPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Lebensbereiche',
+                      'Life areas',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      'Verwalte deine persönlichen Bereiche',
+                      'Manage your personal areas',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.grey[600],
                       ),
