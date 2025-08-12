@@ -21,7 +21,7 @@ class HistoryPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            return Center(child: Text('Fehler: ${snap.error}'));
+    return Center(child: Text('Error: ${snap.error}'));
           }
           final logs = snap.data!;
           if (logs.isEmpty) {

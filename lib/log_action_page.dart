@@ -74,7 +74,7 @@ class _LogActionPageState extends State<LogActionPage> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Fehler beim Auswählen des Bildes: $e';
+        _error = 'Error selecting image: $e';
       });
     }
   }
@@ -99,7 +99,7 @@ class _LogActionPageState extends State<LogActionPage> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Fehler beim Aufnehmen des Fotos: $e';
+        _error = 'Error taking photo: $e';
       });
     }
   }

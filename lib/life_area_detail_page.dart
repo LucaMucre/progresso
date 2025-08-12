@@ -360,7 +360,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               if (firstLine.trim().isNotEmpty) return firstLine.trim();
             } catch (_) {}
           }
-          return 'Aktivität';
+      return 'Activity';
         } else if (parsed is List) {
           try {
             final doc = quill.Document.fromJson(parsed);
@@ -370,7 +370,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             );
             if (firstLine.trim().isNotEmpty) return firstLine.trim();
           } catch (_) {}
-          return 'Aktivität';
+      return 'Activity';
         }
       } catch (_) {}
 
@@ -381,7 +381,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       return raw;
     }
 
-    return 'Aktivität';
+      return 'Activity';
   }
 
   @override
@@ -1505,7 +1505,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               Expanded(
                 child: _buildStatCard(
                   icon: _getIconData(widget.area.icon),
-                  title: 'Aktivitäten',
+    title: 'Activities',
                   value: '$_activityCount',
                   color: _parseColor(widget.area.color),
                 ),
@@ -1627,7 +1627,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Aktivitäten der letzten 7 Tage',
+    'Activities in the last 7 days',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -1715,7 +1715,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                             left: cx - 8,
                             top: y - 8,
                             child: Tooltip(
-                              message: '${date.day}/${date.month}: $count Aktivitäten',
+    message: '${date.day}/${date.month}: $count activities',
                               child: Container(
                                 width: 16,
                                 height: 16,

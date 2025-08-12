@@ -282,7 +282,7 @@ class CharacterService {
       // Aktualisiere das Character-Avatar (auch wenn null)
       await updateAvatar(avatarUrl);
     } catch (e) {
-      print('Fehler beim Synchronisieren des Avatars: $e');
+  print('Error syncing avatar: $e');
     }
   }
 } 

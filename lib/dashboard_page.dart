@@ -184,7 +184,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (log.templateId != null && templateMap[log.templateId!] != null) {
         return templateMap[log.templateId!]!;
       }
-      return 'Aktivität';
+              return 'Activity';
     }
 
     Color? tagColorForLog(ActionLog log) {
@@ -234,7 +234,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (logs.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Text('Keine Aktivitäten an diesem Tag', style: Theme.of(context).textTheme.bodyMedium),
+            child: Text('No activities on this day', style: Theme.of(context).textTheme.bodyMedium),
                   )
                 else
                   Flexible(
@@ -341,7 +341,7 @@ class _DashboardPageState extends State<DashboardPage> {
         rethrow;
       }
     } catch (e) {
-      print('Fehler beim Laden der Kalenderdaten: $e');
+  print('Error loading calendar data: $e');
       return {};
     }
 
@@ -365,7 +365,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final String? templateId = row['template_id'] as String?;
       final String? notes = row['notes'] as String?;
 
-      String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Aktivität') : 'Aktivität');
+    String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Activity') : 'Activity');
       Color? tagColor;
       _AreaTag? matched;
       if (notes != null && notes.isNotEmpty) {
@@ -905,7 +905,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       return streak;
     } catch (e) {
-      print('Fehler beim Berechnen des Streaks: $e');
+  print('Error calculating streak: $e');
       return 0;
     }
   }
@@ -926,7 +926,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       return dates;
     } catch (e) {
-      print('Fehler beim Laden der Log-Daten: $e');
+  print('Error loading log data: $e');
       return [];
     }
   }
@@ -1021,7 +1021,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         return const Center(child: CircularProgressIndicator());
                       }
                       if (snap.hasError) {
-                        return Text('Fehler: ${snap.error}');
+  return Text('Error: ${snap.error}');
                       }
                       final streak = snap.data ?? 0;
                       final badge = badgeLevel(streak);
@@ -1255,7 +1255,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                          _refreshCounter++;
                                        });
                                      } catch (e) {
-                                       print('Fehler beim Erstellen der Standard-Bereiche: $e');
+  print('Error creating default areas: $e');
                                      }
                                    },
                                    child: const Text('Create default areas'),
@@ -1412,7 +1412,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                           const SizedBox(height: 4),
                                           // Unten: Aktion
                                           Text(
-                                            'Aktivität hinzufügen',
+          'Add activity',
                                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                                             ),
@@ -1467,7 +1467,7 @@ class _DashboardPageState extends State<DashboardPage> {
       }
       return areas;
     } catch (e) {
-      print('Fehler beim Laden der Life Areas: $e');
+  print('Error loading life areas: $e');
       rethrow;
     }
   }
@@ -1483,7 +1483,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         Text(
-          'Alle Aktivitäten über alle Lebensbereiche hinweg',
+          'All activities across all life areas',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: Colors.grey[600],
           ),
@@ -1543,7 +1543,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         child: _buildGlobalStatCard(
                           context,
                           icon: Icons.trending_up,
-                          title: 'Aktivitäten',
+        title: 'Activities',
                           value: '$activityCount',
                           color: Colors.blue,
                         ),
@@ -1656,7 +1656,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Aktivitäten der letzten 7 Tage',
+          'Activities in the last 7 days',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -1744,7 +1744,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 left: cx - 8,
                                 top: y - 8,
                                 child: Tooltip(
-                                  message: '${date.day}/${date.month}: $count Aktivitäten',
+          message: '${date.day}/${date.month}: $count activities',
                                   child: Container(
                                     width: 16,
                                     height: 16,
@@ -2031,7 +2031,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }).length;
       }).toList();
     } catch (e) {
-      print('Fehler beim Laden der 7-Tage-Aktivitäten: $e');
+  print('Error loading 7-day activities: $e');
       return List.filled(7, 0);
     }
   }

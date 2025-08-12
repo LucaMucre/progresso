@@ -108,7 +108,7 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     } catch (e) {
-      print('Fehler beim Laden des Profils: $e');
+    print('Error loading profile: $e');
       // Erstelle Standard-Profil wenn noch nicht vorhanden
       _nameCtrl.text = _supabase.auth.currentUser?.email?.split('@')[0] ?? 'User';
       _bioCtrl.text = 'Das ist meine Bio.';
@@ -223,7 +223,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _lifeAreas = areas;
       });
     } catch (e) {
-      print('Fehler beim Laden der Statistiken: $e');
+    print('Error loading statistics: $e');
     }
   }
   
@@ -810,13 +810,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   (
                     'Aktueller Streak',
-                    '$_currentStreak Tage',
+    '$_currentStreak days',
                     Icons.local_fire_department,
                     Colors.orange,
                   ),
                   (
                     'Längster Streak',
-                    '$_longestStreak Tage',
+    '$_longestStreak days',
                     Icons.emoji_events,
                     Colors.amber,
                   ),

@@ -47,8 +47,8 @@ class AchievementService {
     // Erste Schritte
     Achievement(
       id: 'first_steps',
-      title: 'Erste Schritte',
-      description: 'Erstelle deinen ersten Lebensbereich',
+      title: 'First steps',
+      description: 'Create your first life area',
       icon: Icons.add_circle,
       color: Colors.blue,
       target: 1,
@@ -59,7 +59,7 @@ class AchievementService {
     Achievement(
       id: 'streak_3',
       title: 'Starter',
-      description: '3 Tage in Folge aktiv',
+      description: 'Active 3 days in a row',
       icon: Icons.local_fire_department,
       color: Colors.orange.shade300,
       target: 3,
@@ -67,8 +67,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'streak_7',
-      title: 'Durchhalter',
-      description: '7 Tage in Folge aktiv',
+      title: 'Consistent',
+      description: 'Active 7 days in a row',
       icon: Icons.local_fire_department,
       color: Colors.orange,
       target: 7,
@@ -76,8 +76,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'streak_30',
-      title: 'Experte',
-      description: '30 Tage in Folge aktiv',
+      title: 'Expert',
+      description: 'Active 30 days in a row',
       icon: Icons.emoji_events,
       color: Colors.amber,
       target: 30,
@@ -85,8 +85,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'streak_100',
-      title: 'Legende',
-      description: '100 Tage in Folge aktiv',
+      title: 'Legend',
+      description: 'Active 100 days in a row',
       icon: Icons.stars,
       color: Colors.purple,
       target: 100,
@@ -96,8 +96,8 @@ class AchievementService {
     // Action Achievements
     Achievement(
       id: 'actions_10',
-      title: 'Aktiv',
-      description: '10 Aktivitäten abgeschlossen',
+      title: 'Active',
+      description: '10 activities completed',
       icon: Icons.check_circle,
       color: Colors.green.shade300,
       target: 10,
@@ -105,8 +105,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'actions_50',
-      title: 'Fleißig',
-      description: '50 Aktivitäten abgeschlossen',
+      title: 'Diligent',
+      description: '50 activities completed',
       icon: Icons.check_circle,
       color: Colors.green,
       target: 50,
@@ -114,8 +114,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'actions_100',
-      title: 'Produktiv',
-      description: '100 Aktivitäten abgeschlossen',
+      title: 'Productive',
+      description: '100 activities completed',
       icon: Icons.verified,
       color: Colors.green.shade700,
       target: 100,
@@ -124,7 +124,7 @@ class AchievementService {
     Achievement(
       id: 'actions_500',
       title: 'Workaholic',
-      description: '500 Aktivitäten abgeschlossen',
+      description: '500 activities completed',
       icon: Icons.workspace_premium,
       color: Colors.indigo,
       target: 500,
@@ -134,8 +134,8 @@ class AchievementService {
     // XP Achievements
     Achievement(
       id: 'xp_100',
-      title: 'Sammler',
-      description: '100 XP gesammelt',
+      title: 'Collector',
+      description: '100 XP collected',
       icon: Icons.star,
       color: Colors.yellow.shade600,
       target: 100,
@@ -143,8 +143,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'xp_500',
-      title: 'Erfahren',
-      description: '500 XP gesammelt',
+      title: 'Experienced',
+      description: '500 XP collected',
       icon: Icons.star,
       color: Colors.yellow.shade700,
       target: 500,
@@ -152,8 +152,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'xp_1000',
-      title: 'Meister',
-      description: '1000 XP gesammelt',
+      title: 'Master',
+      description: '1000 XP collected',
       icon: Icons.auto_awesome,
       color: Colors.orange.shade600,
       target: 1000,
@@ -161,8 +161,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'xp_5000',
-      title: 'Großmeister',
-      description: '5000 XP gesammelt',
+      title: 'Grandmaster',
+      description: '5000 XP collected',
       icon: Icons.diamond,
       color: Colors.purple.shade600,
       target: 5000,
@@ -172,8 +172,8 @@ class AchievementService {
     // Level Achievements
     Achievement(
       id: 'level_5',
-      title: 'Aufsteiger',
-      description: 'Erreiche Level 5',
+      title: 'Climber',
+      description: 'Reach level 5',
       icon: Icons.trending_up,
       color: Colors.cyan,
       target: 5,
@@ -181,8 +181,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'level_10',
-      title: 'Fortgeschritten',
-      description: 'Erreiche Level 10',
+      title: 'Advanced',
+      description: 'Reach level 10',
       icon: Icons.trending_up,
       color: Colors.cyan.shade700,
       target: 10,
@@ -191,7 +191,7 @@ class AchievementService {
     Achievement(
       id: 'level_25',
       title: 'Elite',
-      description: 'Erreiche Level 25',
+      description: 'Reach level 25',
       icon: Icons.military_tech,
       color: Colors.deepPurple,
       target: 25,
@@ -201,8 +201,8 @@ class AchievementService {
     // Life Area Achievements
     Achievement(
       id: 'areas_3',
-      title: 'Organisiert',
-      description: '3 verschiedene Lebensbereiche',
+      title: 'Organized',
+      description: '3 different life areas',
       icon: Icons.category,
       color: Colors.teal.shade300,
       target: 3,
@@ -210,8 +210,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'areas_5',
-      title: 'Vielseitig',
-      description: '5 verschiedene Lebensbereiche',
+      title: 'Versatile',
+      description: '5 different life areas',
       icon: Icons.category,
       color: Colors.teal,
       target: 5,
@@ -219,8 +219,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'areas_8',
-      title: 'Ausgewogen',
-      description: '8 verschiedene Lebensbereiche',
+      title: 'Balanced',
+      description: '8 different life areas',
       icon: Icons.balance,
       color: Colors.teal.shade700,
       target: 8,
@@ -230,8 +230,8 @@ class AchievementService {
     // Session Achievements
     Achievement(
       id: 'session_5',
-      title: 'Fokussiert',
-      description: '5 Aktivitäten an einem Tag',
+      title: 'Focused',
+      description: '5 activities in one day',
       icon: Icons.flash_on,
       color: Colors.lightBlue,
       target: 5,
@@ -240,7 +240,7 @@ class AchievementService {
     Achievement(
       id: 'session_10',
       title: 'Poweruser',
-      description: '10 Aktivitäten an einem Tag',
+      description: '10 activities in one day',
       icon: Icons.bolt,
       color: Colors.blue.shade700,
       target: 10,
@@ -250,8 +250,8 @@ class AchievementService {
     // Special Achievements
     Achievement(
       id: 'early_bird',
-      title: 'Frühaufsteher',
-      description: 'Aktivität vor 8 Uhr morgens',
+      title: 'Early bird',
+      description: 'Activity before 8am',
       icon: Icons.wb_sunny,
       color: Colors.orange.shade400,
       target: 1,
@@ -259,8 +259,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'night_owl',
-      title: 'Nachteule',
-      description: 'Aktivität nach 22 Uhr',
+      title: 'Night owl',
+      description: 'Activity after 10pm',
       icon: Icons.nights_stay,
       color: Colors.indigo.shade400,
       target: 1,
@@ -268,8 +268,8 @@ class AchievementService {
     ),
     Achievement(
       id: 'weekend_warrior',
-      title: 'Wochenend-Krieger',
-      description: 'Aktivität am Wochenende',
+      title: 'Weekend warrior',
+      description: 'Activity on the weekend',
       icon: Icons.weekend,
       color: Colors.deepOrange,
       target: 1,

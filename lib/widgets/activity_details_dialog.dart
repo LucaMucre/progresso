@@ -226,7 +226,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Fehler beim Auswählen des Bildes: $e';
+        _error = 'Error selecting image: $e';
       });
     }
   }

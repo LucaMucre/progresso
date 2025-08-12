@@ -23,14 +23,14 @@ Future<void> main() async {
     if (supabaseUrl != null && supabaseAnonKey != null && 
         supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
       envLoaded = true;
-      print('✅ .env Datei erfolgreich geladen');
+  print('✅ .env file loaded successfully');
       print('📡 Supabase URL: ${supabaseUrl.substring(0, 30)}...');
       print('🔑 Anon Key: ${supabaseAnonKey.substring(0, 20)}...');
     } else {
       throw Exception('SUPABASE_URL oder SUPABASE_ANON_KEY fehlen in .env Datei');
     }
   } catch (e) {
-    print('❌ Fehler beim Laden der .env Datei: $e');
+  print('❌ Error loading .env file: $e');
     print('🔄 Verwende Fallback-Keys...');
     
     // Fallback zu den echten Supabase-Keys

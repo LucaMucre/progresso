@@ -44,7 +44,7 @@ class _AuthGateState extends State<AuthGate> {
         });
       }
     } catch (e) {
-      print('AuthGate Fehler: $e');
+  print('AuthGate error: $e');
       setState(() {
         _hasError = true;
       });
@@ -98,7 +98,7 @@ class _AuthGateState extends State<AuthGate> {
                 // Optional: Session invalidieren
                 await Supabase.instance.client.auth.signOut();
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
               }
             },
             child: const Text('Speichern'),
