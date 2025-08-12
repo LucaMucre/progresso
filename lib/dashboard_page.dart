@@ -1377,6 +1377,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                     builder: (_) => LogActionPage(
                                       selectedArea: area.name,
                                       selectedCategory: area.category,
+                                      areaColorHex: area.color,
+                                      areaIcon: area.icon,
                                     ),
                                   ),
                                 ).then((_) { if (mounted) setState(() => _refreshCounter++); });
