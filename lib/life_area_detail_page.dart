@@ -110,8 +110,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     List<LifeArea>? subAreasOverride,
     bool includeSubareasForParent = true,
   }) {
-    final areaName = widget.area.name.toLowerCase();
-    final category = widget.area.category.toLowerCase();
+    final areaName = LifeAreasService.canonicalAreaName(widget.area.name);
+    final category = LifeAreasService.canonicalCategory(widget.area.category);
     final isSub = widget.area.parentId != null;
     final templatesRef = templatesOverride ?? _templates;
     final subNames = (subAreasOverride ?? _subAreas).map((a) => a.name.toLowerCase()).toList();
@@ -121,9 +121,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       try {
         final parsed = jsonDecode(raw);
         if (parsed is Map<String, dynamic>) {
-          final nArea = (parsed['area'] as String?)?.toLowerCase();
+          final nArea = LifeAreasService.canonicalAreaName(parsed['area'] as String?);
           final nSub = (parsed['subarea'] as String?)?.toLowerCase();
-          final nCat  = (parsed['category'] as String?)?.toLowerCase();
+          final nCat  = LifeAreasService.canonicalCategory(parsed['category'] as String?);
           if (isSub) {
             return nArea == areaName || nSub == areaName;
           } else {

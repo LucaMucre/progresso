@@ -87,6 +87,24 @@ class LifeAreasService {
     'Allgemein': 'General',
   };
 
+  static Map<String, String> get _nameDeToEnLower =>
+      _nameDeToEn.map((k, v) => MapEntry(k.toLowerCase(), v.toLowerCase()));
+  static Map<String, String> get _categoryDeToEnLower => _categoryDeToEn
+      .map((k, v) => MapEntry(k.toLowerCase(), v.toLowerCase()));
+
+  // Returns a canonical, lowercase English key for comparisons
+  static String canonicalAreaName(String? name) {
+    if (name == null) return '';
+    final lower = name.toLowerCase();
+    return _nameDeToEnLower[lower] ?? lower;
+  }
+
+  static String canonicalCategory(String? category) {
+    if (category == null) return '';
+    final lower = category.toLowerCase();
+    return _categoryDeToEnLower[lower] ?? lower;
+  }
+
   // Alle Life Areas für einen User abrufen
   static Future<List<LifeArea>> getLifeAreas() async {
     final user = _client.auth.currentUser;
