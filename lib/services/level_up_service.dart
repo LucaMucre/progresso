@@ -9,6 +9,7 @@ class LevelUpService {
   static bool _isShowing = false;
   static bool _levelUpPending = false;
   static final List<Achievement> _pendingAchievements = <Achievement>[];
+  static bool _pendingDirty = false;
 
   static void setOnLevelUp(void Function(int level) listener) {
     _levelUpNotifier.addListener(() {
@@ -56,6 +57,7 @@ class LevelUpService {
   /// Queue an achievement to be shown later (after any level-up)
   static void queueAchievement(Achievement achievement) {
     _pendingAchievements.add(achievement);
+    _pendingDirty = true;
   }
 
   /// Helper used by listeners of level-up events to ensure the level-up dialog is
@@ -94,5 +96,8 @@ class LevelUpService {
     }
     _isShowing = false;
   }
+
+  /// Exposed for screens to know if something is awaiting display.
+  static bool get hasPendingAchievements => _pendingAchievements.isNotEmpty || _pendingDirty;
 }
 

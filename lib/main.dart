@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_gate.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'navigation.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -87,6 +88,7 @@ class ProgressoApp extends StatelessWidget {
         Locale('en'),
         Locale('de'),
       ],
+      navigatorObservers: const [routeObserver],
       home: const AuthGate(),
     );
   }

@@ -27,7 +27,7 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage> with RouteAware {
   // Add a counter to force FutureBuilder rebuild
   int _refreshCounter = 0;
   // Toggle between bubbles view and calendar view for life areas container
@@ -43,6 +43,8 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // subscribe to route changes
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
     // Force rebuild wenn Abhängigkeiten sich ändern
     setState(() {});
     // Zusätzliche Aktualisierung nach kurzer Verzögerung
@@ -51,6 +53,20 @@ class _DashboardPageState extends State<DashboardPage> {
         setState(() {});
       }
     });
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Returning to dashboard: show any queued achievements now
+    if (mounted) {
+      LevelUpService.showPendingAchievements(context: context);
+    }
   }
 
   @override
