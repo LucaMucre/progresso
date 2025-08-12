@@ -16,6 +16,8 @@ import 'widgets/profile_header_widget.dart';
 import 'templates_page.dart';
 import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
+import 'widgets/level_up_dialog.dart';
+import 'services/level_up_service.dart';
 import 'settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -57,6 +59,15 @@ class _DashboardPageState extends State<DashboardPage> {
     // Automatische Aktualisierung beim Start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {});
+      // Level-up popup listener (dashboard-wide)
+      LevelUpService.setOnLevelUp((level) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (_) => LevelUpDialog(level: level),
+        );
+      });
     });
     // Zusätzliche Aktualisierung nach kurzer Verzögerung
     Future.delayed(const Duration(milliseconds: 500), () {
