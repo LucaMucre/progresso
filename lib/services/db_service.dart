@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'level_up_service.dart';
 import 'achievement_service.dart';
 import 'life_areas_service.dart';
 
@@ -212,6 +213,19 @@ Future<ActionLog> createLog({
 
   // Achievements nach erfolgreichem Insert prüfen
   _checkAchievementsAfterLogInsert();
+  // Level-Up check and notification
+  try {
+    final totalXp = await fetchTotalXp();
+    final newLevel = calculateLevel(totalXp);
+    // Fetch previous level based on stored baseline logic? We only check against previous fetch.
+    // For simplicity, notify if xpInto==0 (exact multiple of 50) or if the inserted earned_xp pushed over a boundary.
+    // Compute previous XP as totalXp - earnedXp
+    final prevTotal = totalXp - earnedXp;
+    final prevLevel = calculateLevel(prevTotal);
+    if (newLevel > prevLevel) {
+      LevelUpService.notifyLevelUp(newLevel);
+    }
+  } catch (_) {}
 
   return ActionLog.fromMap(out);
 }
@@ -265,6 +279,15 @@ Future<ActionLog> createQuickLog({
 
   // Achievements nach erfolgreichem Insert prüfen
   _checkAchievementsAfterLogInsert();
+  try {
+    final totalXp = await fetchTotalXp();
+    final newLevel = calculateLevel(totalXp);
+    final prevTotal = totalXp - earnedXp;
+    final prevLevel = calculateLevel(prevTotal);
+    if (newLevel > prevLevel) {
+      LevelUpService.notifyLevelUp(newLevel);
+    }
+  } catch (_) {}
 
   return ActionLog.fromMap(out);
 }

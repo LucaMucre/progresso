@@ -11,6 +11,8 @@ import 'services/db_service.dart';
 import 'services/avatar_sync_service.dart';
 import 'services/achievement_service.dart';
 import 'widgets/achievement_unlock_widget.dart';
+import 'widgets/level_up_dialog.dart';
+import 'services/level_up_service.dart';
 import 'life_area_detail_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -48,6 +50,15 @@ class _ProfilePageState extends State<ProfilePage> {
     _subscribeToUserChanges();
     _subscribeToActivityChanges();
     _initializeAchievements();
+    // Global listener for level-up events (from log inserts)
+    LevelUpService.setOnLevelUp((level) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => LevelUpDialog(level: level),
+      );
+    });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
     AvatarSyncService.avatarVersion.addListener(_loadProfile);
   }
