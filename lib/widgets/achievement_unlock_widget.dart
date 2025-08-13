@@ -93,7 +93,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
       if (mounted) _particleController.forward();
     });
     
-    // Auto dismiss after 4 seconds
+    // Auto dismiss after 4 seconds – aber ohne unnötigen Bildschirm-Reload
     Future.delayed(const Duration(seconds: 4), () {
       if (mounted) _dismiss();
     });

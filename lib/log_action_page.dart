@@ -86,7 +86,8 @@ class _LogActionPageState extends State<LogActionPage> {
         source: ImageSource.camera,
         maxWidth: 1024,
         maxHeight: 1024,
-        imageQuality: 80,
+        imageQuality: 85,
+        preferredCameraDevice: CameraDevice.rear, // Hauptkamera bevorzugen
       );
       
       if (image != null) {
@@ -101,6 +102,72 @@ class _LogActionPageState extends State<LogActionPage> {
     } catch (e) {
       setState(() {
         _error = 'Error taking photo: $e';
+      });
+    }
+  }
+
+  Future<void> _showImageSourceDialog() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickImage();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _takePhoto();
+                },
+              ),
+              if (!kIsWeb) ...[
+                ListTile(
+                  leading: const Icon(Icons.camera_front),
+                  title: const Text('Take Selfie'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _takeSelfie();
+                  },
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _takeSelfie() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+        preferredCameraDevice: CameraDevice.front, // Frontkamera für Selfies
+      );
+      
+      if (image != null) {
+        setState(() {
+          if (kIsWeb) {
+            _selectedImageUrl = image.path;
+          } else {
+            _selectedImage = File(image.path);
+          }
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error taking selfie: $e';
       });
     }
   }
@@ -242,23 +309,28 @@ class _LogActionPageState extends State<LogActionPage> {
       final prevLevel = calculateLevel(totalAfter - log.earnedXp);
       final bool didLevelUp = newLevel > prevLevel;
 
-      // Auf Erfolg hinweisen und zurück zur Liste
+      // Auf Erfolg hinweisen und zuverlässig zur Liste zurück
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Log created: +${log.earnedXp} XP')),
       );
-      Navigator.of(context).pop();  // zurück
+      // Tastatur schließen und Pop sicher durchführen
+      FocusScope.of(context).unfocus();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
 
-      // Zeige Level-Up NACH dem Zurück-Navigieren (auf Dashboard/Profile)
+      // Level-Up-Event SOFORT setzen (vor Achievement-Prüfung), damit Reihenfolge stimmt
       if (didLevelUp) {
-        Future.delayed(const Duration(milliseconds: 150), () {
-          LevelUpService.notifyLevelUp(newLevel);
-        });
+        LevelUpService.notifyLevelUp(newLevel);
       }
     } catch (err) {
       setState(() { _error = 'Error while saving: $err'; });
     } finally {
-      setState(() { _loading = false; });
+      if (mounted) {
+        setState(() { _loading = false; });
+      }
     }
   }
 
@@ -629,7 +701,7 @@ class _LogActionPageState extends State<LogActionPage> {
             const SizedBox(height: 16),
 
             // Image upload section
-            Text('Bild hinzufügen (optional):', style: Theme.of(context).textTheme.labelLarge),
+            Text('Add Image (optional):', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             
             // Selected image preview
@@ -669,7 +741,7 @@ class _LogActionPageState extends State<LogActionPage> {
                     child: OutlinedButton.icon(
                       onPressed: _pickImage,
                       icon: const Icon(Icons.edit),
-                      label: const Text('Bild ändern'),
+                      label: const Text('Change Image'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: accent,
                         side: BorderSide(color: accent.withOpacity(0.6)),
@@ -686,7 +758,7 @@ class _LogActionPageState extends State<LogActionPage> {
                         });
                       },
                       icon: Icon(Icons.delete, color: accent),
-                      label: Text('Entfernen', style: TextStyle(color: accent)),
+                      label: Text('Remove', style: TextStyle(color: accent)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: accent,
                         side: BorderSide(color: accent.withOpacity(0.6)),
@@ -698,32 +770,17 @@ class _LogActionPageState extends State<LogActionPage> {
             ] else ...[
               _sectionCard(
                 accentColor: accent,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.photo_library),
-                        label: const Text('Aus Galerie'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: accent,
-                          side: BorderSide(color: accent.withOpacity(0.6)),
-                        ),
-                      ),
+                child: Center(
+                  child: OutlinedButton.icon(
+                    onPressed: _showImageSourceDialog,
+                    icon: const Icon(Icons.add_a_photo),
+                    label: const Text('Add Image'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: accent,
+                      side: BorderSide(color: accent.withOpacity(0.6)),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _takePhoto,
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('Foto aufnehmen'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: accent,
-                          side: BorderSide(color: accent.withOpacity(0.6)),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],

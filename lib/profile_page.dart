@@ -49,6 +49,10 @@ class _ProfilePageState extends State<ProfilePage> {
     _subscribeToUserChanges();
     _subscribeToActivityChanges();
     _initializeAchievements();
+    // Nach Schließen von Popups keine erzwungenen Reloads auslösen
+    LevelUpService.addOnDialogsClosed(() {
+      // bewusst leer – UI aktualisiert sich über Realtime/State
+    });
     // Global listener for level-up events (from log inserts)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       LevelUpService.setOnLevelUp((level) async {
@@ -85,6 +89,7 @@ class _ProfilePageState extends State<ProfilePage> {
   
   Future<void> _initializeAchievements() async {
     await AchievementService.loadUnlockedAchievements();
+    if (mounted) setState(() {}); // refresh counts/flags after loading persisted unlocks
     // Only queue here; dialogs are orchestrated globally
     AchievementService.setOnAchievementUnlocked(_showAchievementUnlock);
   }
@@ -1038,6 +1043,8 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _usersChannel?.unsubscribe();
     AvatarSyncService.avatarVersion.removeListener(_loadProfile);
+    // Cleanup optionaler Callback
+    // Da wir eine anonyme Closure registriert haben, ist hier kein Remove möglich
     super.dispose();
   }
 }

@@ -222,9 +222,7 @@ Future<ActionLog> createLog({
     // Compute previous XP as totalXp - earnedXp
     final prevTotal = totalXp - earnedXp;
     final prevLevel = calculateLevel(prevTotal);
-    if (newLevel > prevLevel) {
-      LevelUpService.notifyLevelUp(newLevel);
-    }
+    // Do NOT trigger LevelUp popup here; UI handles it after navigation to avoid navigator lock
   } catch (_) {}
 
   return ActionLog.fromMap(out);
@@ -277,17 +275,17 @@ Future<ActionLog> createQuickLog({
         .single() as Map<String, dynamic>;
   }
 
-  // Achievements nach erfolgreichem Insert prüfen
-  _checkAchievementsAfterLogInsert();
+  // Level-Up-Berechnung ZUERST, dann Achievements
   try {
     final totalXp = await fetchTotalXp();
     final newLevel = calculateLevel(totalXp);
     final prevTotal = totalXp - earnedXp;
     final prevLevel = calculateLevel(prevTotal);
-    if (newLevel > prevLevel) {
-      LevelUpService.notifyLevelUp(newLevel);
-    }
+    // Do NOT trigger LevelUp popup here; UI handles it after navigation to avoid navigator lock
   } catch (_) {}
+  
+  // Achievements NACH Level-Up-Berechnung prüfen (damit Level-Up-Flag gesetzt ist, falls nötig)
+  _checkAchievementsAfterLogInsert();
 
   return ActionLog.fromMap(out);
 }

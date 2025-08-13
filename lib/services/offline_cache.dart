@@ -169,6 +169,7 @@ class OfflineCache {
     await prefs.remove(_profileKey);
     await prefs.remove(_lastSyncKey);
     await prefs.remove(_cacheVersionKey);
+    // Do NOT clear achievements here; they are user-scoped and persistent
   }
 
   // Cache-Größe prüfen

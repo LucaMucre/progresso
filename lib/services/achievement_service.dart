@@ -279,10 +279,25 @@ class AchievementService {
   
   static List<Achievement> get allAchievements => _allAchievements;
   
+  static String _prefsKeyForUser() {
+    final uid = _supabase.auth.currentUser?.id;
+    return uid != null ? 'unlocked_achievements_$uid' : 'unlocked_achievements';
+  }
+
   static Future<void> loadUnlockedAchievements() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final unlockedJson = prefs.getString('unlocked_achievements');
+      // Migrate from legacy global key if present and user-specific key missing
+      final userKey = _prefsKeyForUser();
+      String? unlockedJson = prefs.getString(userKey);
+      if (unlockedJson == null) {
+        final legacy = prefs.getString('unlocked_achievements');
+        if (legacy != null) {
+          unlockedJson = legacy;
+          await prefs.setString(userKey, legacy);
+          await prefs.remove('unlocked_achievements');
+        }
+      }
       if (unlockedJson != null) {
         final List<dynamic> unlocked = jsonDecode(unlockedJson);
         _unlockedAchievements = unlocked.cast<String>().toSet();
@@ -295,7 +310,7 @@ class AchievementService {
   static Future<void> _saveUnlockedAchievements() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('unlocked_achievements', jsonEncode(_unlockedAchievements.toList()));
+      await prefs.setString(_prefsKeyForUser(), jsonEncode(_unlockedAchievements.toList()));
     } catch (e) {
       print('Error saving achievements: $e');
     }

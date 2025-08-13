@@ -19,6 +19,7 @@ import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
 import 'services/achievement_service.dart';
 import 'settings_page.dart';
+import 'navigation.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -30,8 +31,8 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> with RouteAware {
   // Add a counter to force FutureBuilder rebuild
   int _refreshCounter = 0;
-  // Toggle between bubbles view and calendar view for life areas container
-  bool _isCalendarView = false;
+  // View mode for life areas container: 0 = bubbles, 1 = calendar, 2 = gallery
+  int _viewMode = 0;
   // Current month displayed in the calendar view
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   // Optional filter: show only activities for this life area name
@@ -45,14 +46,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     super.didChangeDependencies();
     // subscribe to route changes
     routeObserver.subscribe(this, ModalRoute.of(context)!);
-    // Force rebuild wenn Abhängigkeiten sich ändern
-    setState(() {});
-    // Zusätzliche Aktualisierung nach kurzer Verzögerung
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {});
-      }
-    });
   }
 
   @override
@@ -63,10 +56,13 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   @override
   void didPopNext() {
-    // Returning to dashboard: show any queued achievements now
-    if (mounted) {
-      LevelUpService.showPendingAchievements(context: context);
-    }
+    // Returning to dashboard: show any queued achievements/level-ups now
+    if (!mounted) return;
+    // Direkt anzeigen ohne extra Checks – Events triggern sich selbst nach Pop
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await LevelUpService.showPendingAchievements(context: context);
+    });
   }
 
   @override
@@ -74,8 +70,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     super.initState();
     // Automatische Aktualisierung beim Start
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {});
-      // Level-up popup listener (dashboard-wide)
+      // Initial leichter Rebuild ist okay, aber keine wiederholten Trigger
+      if (mounted) setState(() {});
+      // Level-up popup listener (dashboard-wide). If the event happened just
+      // before the dashboard mounted, setOnLevelUp will trigger immediately.
       LevelUpService.setOnLevelUp((level) async {
         if (!mounted) return;
         await LevelUpService.showLevelThenPending(context: context, level: level);
@@ -86,17 +84,13 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       });
       // If any achievements were queued while another page was open, show them now
       LevelUpService.showPendingAchievements(context: context);
-    });
-    // Zusätzliche Aktualisierung nach kurzer Verzögerung
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {});
-        // Try again shortly after the frame to catch late-queued achievements
-        LevelUpService.showPendingAchievements(context: context);
-      }
+      // Nach Schließen von Dialogen nichts forcieren
+      LevelUpService.addOnDialogsClosed(() {
+        // bewusst leer – kein setState/Reload
+      });
     });
 
-    // Realtime: Änderungen an action_logs triggern Refresh
+    // Realtime: Änderungen an action_logs triggern Refresh (sanft ohne aggressive setState)
     try {
       final client = Supabase.instance.client;
       client
@@ -104,17 +98,29 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'INSERT', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) { if (mounted) setState(() => _refreshCounter++); },
+            (payload, [ref]) { 
+              if (mounted && !LevelUpService.isShowingDialogs) {
+                setState(() => _refreshCounter++); 
+              }
+            },
           )
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'UPDATE', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) { if (mounted) setState(() => _refreshCounter++); },
+            (payload, [ref]) { 
+              if (mounted && !LevelUpService.isShowingDialogs) {
+                setState(() => _refreshCounter++); 
+              }
+            },
           )
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'DELETE', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) { if (mounted) setState(() => _refreshCounter++); },
+            (payload, [ref]) { 
+              if (mounted && !LevelUpService.isShowingDialogs) {
+                setState(() => _refreshCounter++); 
+              }
+            },
           )
           .subscribe();
     } catch (_) {}
@@ -433,6 +439,384 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     }
 
     return dayToTitles;
+  }
+
+    Future<List<Map<String, dynamic>>> _fetchAllImages() async {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return [];
+
+    try {
+      final res = await client
+          .from('action_logs')
+          .select('id, occurred_at, image_url, notes')
+          .eq('user_id', user.id)
+          .not('image_url', 'is', null)
+          .order('occurred_at', ascending: false);
+
+      return (res as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      print('Error fetching images: $e');
+      return [];
+    }
+  }
+
+  Widget _buildGalleryContainer(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.photo_library,
+                color: Theme.of(context).colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Photo Gallery',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const Spacer(),
+              Text(
+                'All your memories',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 400, // Fixed height for gallery
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              key: ValueKey(_refreshCounter),
+              future: _fetchAllImages(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Loading photos...'),
+                      ],
+                    ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading photos',
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final images = snapshot.data ?? [];
+                
+                if (images.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.photo_library_outlined,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No photos yet',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Start adding photos to your activities!',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                              ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.0,
+                  ),
+                  itemCount: images.length,
+                  itemBuilder: (context, index) {
+                    final imageData = images[index];
+                    final imageUrl = imageData['image_url'] as String;
+                    final date = DateTime.parse(imageData['occurred_at']);
+                    final title = _extractActivityTitle(imageData);
+
+                    return GestureDetector(
+                      onTap: () => _showImageFullscreen(context, imageData, images, index),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Container(
+                                    color: Theme.of(context).colorScheme.surfaceVariant,
+                                    child: const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Theme.of(context).colorScheme.errorContainer,
+                                    child: Icon(
+                                      Icons.broken_image,
+                                      color: Theme.of(context).colorScheme.onErrorContainer,
+                                    ),
+                                  );
+                                },
+                              ),
+                              // Gradient overlay for text readability
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withOpacity(0.7),
+                                      ],
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        title,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        DateFormat('MMM d').format(date),
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+    String _extractActivityTitle(Map<String, dynamic> imageData) {
+    // Parse title from notes JSON
+    try {
+      final notes = imageData['notes'];
+      if (notes != null) {
+        final obj = jsonDecode(notes);
+        if (obj is Map<String, dynamic> && obj['title'] != null) {
+          return obj['title'].toString();
+        }
+      }
+    } catch (_) {}
+
+    return 'Activity';
+  }
+
+  void _showImageFullscreen(BuildContext context, Map<String, dynamic> imageData, List<Map<String, dynamic>> allImages, int initialIndex) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            PageView.builder(
+              controller: PageController(initialPage: initialIndex),
+              itemCount: allImages.length,
+              itemBuilder: (context, index) {
+                final data = allImages[index];
+                final imageUrl = data['image_url'] as String;
+                final date = DateTime.parse(data['occurred_at']);
+                final title = _extractActivityTitle(data);
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    InteractiveViewer(
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.white,
+                              size: 64,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // Bottom info overlay
+                    Positioned(
+                      bottom: 40,
+                      left: 20,
+                      right: 20,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              DateFormat('EEEE, MMMM d, y • h:mm a').format(date),
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            // Close button
+            Positioned(
+              top: 40,
+              right: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+            // Image counter
+            Positioned(
+              top: 40,
+              left: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${initialIndex + 1} of ${allImages.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildCalendarContainer(BuildContext context) {
@@ -1161,10 +1545,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         ),
                       ),
                       child: ToggleButtons(
-                        isSelected: [!_isCalendarView, _isCalendarView],
+                        isSelected: [_viewMode == 0, _viewMode == 1, _viewMode == 2],
                         onPressed: (index) {
                           setState(() {
-                            _isCalendarView = index == 1;
+                            _viewMode = index;
                           });
                         },
                         borderRadius: BorderRadius.circular(10),
@@ -1180,6 +1564,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 8),
                             child: Icon(Icons.calendar_today),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(Icons.photo_library),
                           ),
                         ],
                       ),
@@ -1204,10 +1592,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ),
             const SizedBox(height: 16),
 
-            // Life Areas content (Bubbles or Calendar)
-            _isCalendarView
+            // Life Areas content (Bubbles, Calendar, or Gallery)
+            _viewMode == 1
                 ? _buildCalendarContainer(context)
-                : Container(
+                : _viewMode == 2
+                    ? _buildGalleryContainer(context)
+                    : Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,

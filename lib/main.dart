@@ -88,7 +88,7 @@ class ProgressoApp extends StatelessWidget {
         Locale('en'),
         Locale('de'),
       ],
-      navigatorObservers: const [routeObserver],
+      navigatorObservers: [routeObserver],
       home: const AuthGate(),
     );
   }

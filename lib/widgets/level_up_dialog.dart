@@ -31,9 +31,10 @@ class _LevelUpDialogState extends State<LevelUpDialog>
     _glowAnimation = Tween<double>(begin: 0, end: 1)
         .animate(CurvedAnimation(parent: _glowController, curve: Curves.easeInOut));
 
-    _slideController.forward();
-    Future.delayed(const Duration(milliseconds: 200), () => _scaleController.forward());
-    Future.delayed(const Duration(milliseconds: 400), () => _glowController.forward());
+    // Start animations only while mounted to avoid forward() after dispose
+    if (mounted) _slideController.forward();
+    Future.delayed(const Duration(milliseconds: 200), () { if (mounted) _scaleController.forward(); });
+    Future.delayed(const Duration(milliseconds: 400), () { if (mounted) _glowController.forward(); });
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) Navigator.of(context).pop();
     });
