@@ -75,8 +75,12 @@ class LevelUpService {
   /// Queue an achievement to be shown later (after any level-up)
   static void queueAchievement(Achievement achievement) {
     print('DEBUG queueAchievement: Adding ${achievement.title}, _levelUpPending=$_levelUpPending');
-    _pendingAchievements.add(achievement);
-    _pendingDirty = true;
+    // De-duplicate by id to avoid showing the same achievement repeatedly
+    final alreadyQueued = _pendingAchievements.any((a) => a.id == achievement.id);
+    if (!alreadyQueued) {
+      _pendingAchievements.add(achievement);
+      _pendingDirty = true;
+    }
   }
 
   /// Helper used by listeners of level-up events to ensure the level-up dialog is

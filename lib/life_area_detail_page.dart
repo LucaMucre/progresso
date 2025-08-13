@@ -6,6 +6,7 @@ import 'widgets/activity_details_dialog.dart';
 import 'dart:math';
 import 'dart:convert';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'navigation.dart';
 
 class LifeAreaDetailPage extends StatefulWidget {
   final LifeArea area;
@@ -21,7 +22,7 @@ class LifeAreaDetailPage extends StatefulWidget {
   State<LifeAreaDetailPage> createState() => _LifeAreaDetailPageState();
 }
 
-class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
+class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware {
   bool _isLoading = true;
   List<ActionTemplate> _templates = [];
   List<ActionLog> _logs = [];
@@ -42,6 +43,26 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     if (widget.parentArea != null) {
       _parentArea = widget.parentArea;
     }
+    _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // subscribe to route changes
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Returning from a subcategory or details: refresh data
+    if (!mounted) return;
     _loadData();
   }
 
@@ -114,7 +135,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
     final category = LifeAreasService.canonicalCategory(widget.area.category);
     final isSub = widget.area.parentId != null;
     final templatesRef = templatesOverride ?? _templates;
-    final subNames = (subAreasOverride ?? _subAreas).map((a) => a.name.toLowerCase()).toList();
+    // Use canonical (EN/lowercase) keys for robust matching of subareas
+    final subKeys = (subAreasOverride ?? _subAreas)
+        .map((a) => LifeAreasService.canonicalAreaName(a.name))
+        .toList();
 
     if (log.notes != null && log.notes!.isNotEmpty) {
       final raw = log.notes!;
@@ -132,14 +156,14 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               // Wenn eine Subarea explizit gesetzt ist, ausschließen
               if (nSub != null && nSub.trim().isNotEmpty) return false;
               // Falls area einem Subnamen entspricht, ebenfalls ausschließen
-              if (nArea != null && subNames.contains(nArea)) return false;
+              if (nArea != null && subKeys.contains(nArea)) return false;
             }
             // parent: match own area/category
             if (nArea == areaName || nCat == category) return true;
             // optional: Subareas mitzählen
             if (includeSubareasForParent) {
-              if (nArea != null && subNames.contains(nArea)) return true;
-              if (nSub != null && subNames.contains(nSub)) return true;
+              if (nArea != null && subKeys.contains(nArea)) return true;
+              if (nSub != null && subKeys.contains(LifeAreasService.canonicalAreaName(nSub))) return true;
             }
             return false;
           }
@@ -152,13 +176,13 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
             } else {
               // Bei Bubble-View des Parents: Sub-Namen ausschließen
               if (!includeSubareasForParent) {
-                for (final s in subNames) {
+                for (final s in subKeys) {
                   if (plain.contains(s)) return false;
                 }
               }
               if (plain.contains(areaName) || plain.contains(category)) return true;
               if (includeSubareasForParent) {
-                for (final s in subNames) {
+                for (final s in subKeys) {
                   if (plain.contains(s)) return true;
                 }
               }
@@ -173,13 +197,13 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
         if (isSub) return text.contains(areaName);
         // Bei Bubble-View des Parents: Sub-Namen ausschließen
         if (!includeSubareasForParent) {
-          for (final s in subNames) {
+          for (final s in subKeys) {
             if (text.contains(s)) return false;
           }
         }
         if (text.contains(areaName) || text.contains(category)) return true;
         if (includeSubareasForParent) {
-          for (final s in subNames) {
+          for (final s in subKeys) {
             if (text.contains(s)) return true;
           }
         }
@@ -199,14 +223,14 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
       }
       // Bei Bubble-View des Parents: Sub-Namen im Template explizit ausschließen
       if (!includeSubareasForParent) {
-        for (final s in subNames) {
+        for (final s in subKeys) {
           if (template.name.toLowerCase().contains(s)) return false;
         }
       }
       if (template.category.toLowerCase() == category ||
           template.name.toLowerCase().contains(areaName)) return true;
       if (includeSubareasForParent) {
-        for (final s in subNames) {
+        for (final s in subKeys) {
           if (template.name.toLowerCase().contains(s)) return true;
         }
       }
@@ -580,14 +604,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
               // Activity Canvas Section with View Toggle
               if (!_isLoading) _buildActivityCanvasWithToggle(),
               const SizedBox(height: 24),
-              if (widget.area.parentId == null) _buildSubAreasSection(),
-              const SizedBox(height: 24),
 
-              // Progress Visualization Section
-              if (!_isLoading) _buildProgressSection(),
-              const SizedBox(height: 24),
-
-              // Quick Action Button
+              // Quick Action Button - moved up after activity canvas
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -608,108 +626,12 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> {
                 ),
               ),
               const SizedBox(height: 24),
+              
+              if (widget.area.parentId == null) _buildSubAreasSection(),
+              const SizedBox(height: 24),
 
-              // Templates Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Templates for ${widget.area.name}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (_isLoading)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              if (_isLoading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (_templates.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.add_circle_outline,
-                        size: 48,
-                        color: Colors.grey.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 16),
-              Text(
-                'No templates for ${widget.area.name}',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.grey.withOpacity(0.7),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                'Create a new template or use the quick action',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.withOpacity(0.5),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
-              else
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _templates.length,
-                  itemBuilder: (context, index) {
-                    final template = _templates[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: _parseColor(widget.area.color).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            _getCategoryIcon(template.category),
-                            color: _parseColor(widget.area.color),
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          template.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          '${template.baseXp} XP • ${template.category}',
-                          style: TextStyle(
-                            color: Colors.grey.withOpacity(0.7),
-                          ),
-                        ),
-                        trailing: Icon(
-                          Icons.arrow_forward_ios,
-                          color: _parseColor(widget.area.color),
-                          size: 16,
-                        ),
-                        onTap: () => _logTemplateAction(template),
-                      ),
-                    );
-                  },
-                ),
+              // Progress Visualization Section
+              if (!_isLoading) _buildProgressSection(),
             ],
           ),
         ),

@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_page.dart';
 import 'dashboard_page.dart';
-import 'history_page.dart';
+
 import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
 import 'profile_page.dart';
@@ -31,6 +31,11 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> with RouteAware {
   // Add a counter to force FutureBuilder rebuild
   int _refreshCounter = 0;
+  Future<List<LifeArea>>? _lifeAreasFuture; // cache to avoid refetch on minor rebuilds
+  Future<int>? _streakFuture;
+  Future<Map<String, dynamic>>? _globalStatsFuture;
+  Future<List<int>>? _globalActivity7dFuture;
+  Future<Map<String, dynamic>>? _globalDurationStacksFuture;
   // View mode for life areas container: 0 = bubbles, 1 = calendar, 2 = gallery
   int _viewMode = 0;
   // Current month displayed in the calendar view
@@ -68,6 +73,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   @override
   void initState() {
     super.initState();
+    _lifeAreasFuture = _loadLifeAreas();
+    _streakFuture = calculateStreak();
+    _globalStatsFuture = _calculateGlobalStatistics();
+    _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+    _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
     // Automatische Aktualisierung beim Start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Initial leichter Rebuild ist okay, aber keine wiederholten Trigger
@@ -93,14 +103,20 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     // Realtime: Änderungen an action_logs triggern Refresh (sanft ohne aggressive setState)
     try {
       final client = Supabase.instance.client;
-      client
+    client
           .channel('realtime-logs')
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'INSERT', schema: 'public', table: 'action_logs'),
             (payload, [ref]) { 
               if (mounted && !LevelUpService.isShowingDialogs) {
-                setState(() => _refreshCounter++); 
+                setState(() {
+                  _refreshCounter++;
+                  // refresh cached data that depends on logs
+                  _globalStatsFuture = _calculateGlobalStatistics();
+                  _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+                  _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
+                });
               }
             },
           )
@@ -109,7 +125,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ChannelFilter(event: 'UPDATE', schema: 'public', table: 'action_logs'),
             (payload, [ref]) { 
               if (mounted && !LevelUpService.isShowingDialogs) {
-                setState(() => _refreshCounter++); 
+                setState(() {
+                  _refreshCounter++;
+                  _globalStatsFuture = _calculateGlobalStatistics();
+                  _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+                  _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
+                });
               }
             },
           )
@@ -118,7 +139,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ChannelFilter(event: 'DELETE', schema: 'public', table: 'action_logs'),
             (payload, [ref]) { 
               if (mounted && !LevelUpService.isShowingDialogs) {
-                setState(() => _refreshCounter++); 
+                setState(() {
+                  _refreshCounter++;
+                  _globalStatsFuture = _calculateGlobalStatistics();
+                  _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+                  _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
+                });
               }
             },
           )
@@ -585,6 +611,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     final imageUrl = imageData['image_url'] as String;
                     final date = DateTime.parse(imageData['occurred_at']);
                     final title = _extractActivityTitle(imageData);
+                    final area = _extractActivityArea(imageData);
 
                     return GestureDetector(
                       onTap: () => _showImageFullscreen(context, imageData, images, index),
@@ -625,6 +652,37 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     ),
                                   );
                                 },
+                              ),
+                              // Life area indicator in top-right corner
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Color(int.parse(area['color'].substring(1), radix: 16) + 0xFF000000).withOpacity(0.9),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        area['icon'],
+                                        color: Colors.white,
+                                        size: 12,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        area['name'],
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                               // Gradient overlay for text readability
                               Positioned(
@@ -698,6 +756,50 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     return 'Activity';
   }
 
+  Map<String, dynamic> _extractActivityArea(Map<String, dynamic> imageData) {
+    // Parse area from notes JSON
+    try {
+      final notes = imageData['notes'];
+      if (notes != null) {
+        final obj = jsonDecode(notes);
+        if (obj is Map<String, dynamic> && obj['area'] != null) {
+          final areaName = obj['area'].toString();
+          
+          // Default life areas with their properties
+          final defaultAreas = [
+            {'name': 'Fitness', 'icon': Icons.fitness_center, 'color': '#FF5722'},
+            {'name': 'Nutrition', 'icon': Icons.restaurant, 'color': '#4CAF50'},
+            {'name': 'Learning', 'icon': Icons.school, 'color': '#2196F3'},
+            {'name': 'Finance', 'icon': Icons.account_balance, 'color': '#FFC107'},
+            {'name': 'Art', 'icon': Icons.palette, 'color': '#9C27B0'},
+            {'name': 'Relationships', 'icon': Icons.people, 'color': '#E91E63'},
+            {'name': 'Spirituality', 'icon': Icons.self_improvement, 'color': '#607D8B'},
+            {'name': 'Career', 'icon': Icons.work, 'color': '#795548'},
+          ];
+          
+          // Find matching area
+          final area = defaultAreas.firstWhere(
+            (a) => a['name'] == areaName || 
+                   LifeAreasService.canonicalAreaName(a['name'] as String?) == LifeAreasService.canonicalAreaName(areaName),
+            orElse: () => {'name': 'General', 'icon': Icons.circle, 'color': '#666666'},
+          );
+          
+          return {
+            'name': area['name'],
+            'icon': area['icon'],
+            'color': area['color'],
+          };
+        }
+      }
+    } catch (_) {}
+
+    return {
+      'name': 'General',
+      'icon': Icons.circle,
+      'color': '#666666',
+    };
+  }
+
   void _showImageFullscreen(BuildContext context, Map<String, dynamic> imageData, List<Map<String, dynamic>> allImages, int initialIndex) {
     showDialog(
       context: context,
@@ -714,6 +816,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 final imageUrl = data['image_url'] as String;
                 final date = DateTime.parse(data['occurred_at']);
                 final title = _extractActivityTitle(data);
+                final area = _extractActivityArea(data);
 
                 return Stack(
                   fit: StackFit.expand,
@@ -754,6 +857,37 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Color(int.parse(area['color'].substring(1), radix: 16) + 0xFF000000),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        area['icon'],
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        area['name'],
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                             Text(
                               title,
                               style: const TextStyle(
@@ -857,7 +991,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               ),
               const Spacer(),
               FutureBuilder<List<LifeArea>>(
-                future: _loadLifeAreas(),
+                future: _lifeAreasFuture,
                 builder: (context, snap) {
                   final areas = snap.data ?? const <LifeArea>[];
                   final items = <DropdownMenuItem<String?>>[
@@ -1064,6 +1198,75 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Quick add: default life areas
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Quick add (defaults):',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        {
+                          'name': 'Fitness', 'category': 'Health', 'color': '#FF5722', 'icon': 'fitness_center'
+                        },
+                        {
+                          'name': 'Nutrition', 'category': 'Health', 'color': '#4CAF50', 'icon': 'restaurant'
+                        },
+                        {
+                          'name': 'Learning', 'category': 'Development', 'color': '#2196F3', 'icon': 'school'
+                        },
+                        {
+                          'name': 'Finance', 'category': 'Finance', 'color': '#FFC107', 'icon': 'account_balance'
+                        },
+                        {
+                          'name': 'Art', 'category': 'Creativity', 'color': '#9C27B0', 'icon': 'palette'
+                        },
+                        {
+                          'name': 'Relationships', 'category': 'Social', 'color': '#E91E63', 'icon': 'people'
+                        },
+                        {
+                          'name': 'Spirituality', 'category': 'Inner', 'color': '#607D8B', 'icon': 'self_improvement'
+                        },
+                        {
+                          'name': 'Career', 'category': 'Work', 'color': '#795548', 'icon': 'work'
+                        },
+                      ].map((d) {
+                        final Color chipColor = Color(int.parse((d['color'] as String).replaceAll('#', '0xFF')));
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            setDialogState(() {
+                              nameController.text = d['name'] as String;
+                              categoryController.text = d['category'] as String;
+                              selectedColor = d['color'] as String;
+                              selectedIcon = d['icon'] as String;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: chipColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: chipColor.withOpacity(0.5)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(_getIconData(d['icon'] as String), color: chipColor, size: 16),
+                                const SizedBox(width: 6),
+                                Text(d['name'] as String, style: TextStyle(color: chipColor)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
                     // Name Field
                     TextField(
                       controller: nameController,
@@ -1211,8 +1414,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         icon: selectedIcon,
                       );
                       Navigator.of(context).pop();
-                      // Force rebuild
+                      // Refresh cached data immediately
                       setState(() {
+                        _lifeAreasFuture = _loadLifeAreas();
+                        _globalStatsFuture = _calculateGlobalStatistics();
+                        _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+                        _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
                         _refreshCounter++;
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1361,29 +1568,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
                  actions: [
-           IconButton(
-             icon: const Icon(Icons.refresh),
-          tooltip: 'Reload dashboard',
-             onPressed: () async {
-               // Force Avatar-Sync und Dashboard-Rebuild
-               await AvatarSyncService.forceSync();
-               setState(() {
-                 // Force rebuild des Dashboards
-               });
-               // Kurze Verzögerung für UI-Update
-               await Future.delayed(const Duration(milliseconds: 200));
-               setState(() {
-                 // Zweiter Force rebuild
-               });
-             },
-           ),
-           IconButton(
-             icon: const Icon(Icons.history),
-             tooltip: 'Meine Logs',
-             onPressed: () => Navigator.of(context).push(
-               MaterialPageRoute(builder: (_) => const HistoryPage()),
-             ),
-           ),
+
+
             IconButton(
               icon: const Icon(Icons.chat),
               tooltip: 'Chat (Beta)',
@@ -1430,7 +1616,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     ],
                   ),
                   child: FutureBuilder<int>(
-                    future: calculateStreak(),
+                    future: _streakFuture,
                     builder: (ctx, snap) {
                       if (snap.connectionState != ConnectionState.done) {
                         return const Center(child: CircularProgressIndicator());
@@ -1610,9 +1796,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         ),
                       ],
                     ),
-                                   child: FutureBuilder<List<LifeArea>>(
-                       key: ValueKey(_refreshCounter), // Force rebuild when counter changes
-                       future: _loadLifeAreas(),
+                    child: FutureBuilder<List<LifeArea>>(
+                       key: ValueKey(_refreshCounter), // still used for explicit refreshes
+                       future: _lifeAreasFuture,
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(
@@ -1668,11 +1854,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 ),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
-                                                           onPressed: () async {
+                                   onPressed: () async {
                                      try {
                                        await LifeAreasService.createDefaultLifeAreas();
-                                       // Force rebuild
+                                       // Refresh cached future
                                        setState(() {
+                                         _lifeAreasFuture = _loadLifeAreas();
                                          _refreshCounter++;
                                        });
                                      } catch (e) {
@@ -1686,13 +1873,16 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           );
                         }
 
-                                           return BubblesGrid(
+                       return BubblesGrid(
                            areas: areas,
                            onBubbleTap: (area) => _onBubbleTap(context, area),
                            onDelete: (area) {
-                             // Force rebuild when a life area is deleted
+                             // Optimistic UI update: refresh cached futures immediately
                              setState(() {
-                               _refreshCounter++;
+                               _lifeAreasFuture = _loadLifeAreas();
+                               _globalStatsFuture = _calculateGlobalStatistics();
+                               _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+                               _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
                              });
                            },
                          );
@@ -1802,7 +1992,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                       areaIcon: area.icon,
                                     ),
                                   ),
-                                ).then((_) { if (mounted) setState(() => _refreshCounter++); });
+                                 ).then((_) { if (mounted) setState(() { _refreshCounter++; _lifeAreasFuture = _loadLifeAreas(); }); });
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
@@ -1928,7 +2118,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ],
           ),
           child: FutureBuilder<Map<String, dynamic>>(
-            future: _calculateGlobalStatistics(),
+            future: _globalStatsFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
@@ -2042,7 +2232,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Widget _buildGlobalActivityGraph(BuildContext context) {
     return FutureBuilder<List<int>>(
-      future: _getGlobalLast7DaysActivity(),
+      future: _globalActivity7dFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
@@ -2233,7 +2423,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Widget _buildGlobalDurationGraph(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
-      future: _getGlobalLast7DaysDurationStacks(),
+      future: _globalDurationStacksFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(

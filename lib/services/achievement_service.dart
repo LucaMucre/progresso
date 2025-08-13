@@ -38,6 +38,7 @@ class AchievementService {
   static final _supabase = Supabase.instance.client;
   static Set<String> _unlockedAchievements = {};
   static Function(Achievement)? _onAchievementUnlocked;
+  static bool _loadedFromStorage = false;
   
   static void setOnAchievementUnlocked(Function(Achievement) callback) {
     _onAchievementUnlocked = callback;
@@ -302,8 +303,15 @@ class AchievementService {
         final List<dynamic> unlocked = jsonDecode(unlockedJson);
         _unlockedAchievements = unlocked.cast<String>().toSet();
       }
+      _loadedFromStorage = true;
     } catch (e) {
       print('Error loading achievements: $e');
+    }
+  }
+
+  static Future<void> _ensureLoaded() async {
+    if (!_loadedFromStorage) {
+      await loadUnlockedAchievements();
     }
   }
   
@@ -329,6 +337,8 @@ class AchievementService {
     int? dailyActions,
     DateTime? lastActionTime,
   }) async {
+    // Make sure previously unlocked achievements are known before checking
+    await _ensureLoaded();
     final newlyUnlocked = <Achievement>[];
     
     for (final achievement in _allAchievements) {

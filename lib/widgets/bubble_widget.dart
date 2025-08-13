@@ -268,6 +268,7 @@ class BubblesGrid extends StatefulWidget {
 class _BubblesGridState extends State<BubblesGrid> {
   int? _hoveredIndex;
   Offset? _lastMousePosition; // Add this to store mouse position
+  bool _contextMenuOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -327,12 +328,24 @@ class _BubblesGridState extends State<BubblesGrid> {
                 top: y - (size / 2),
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
-                  onEnter: (_) => setState(() => _hoveredIndex = index),
-                  onExit: (_) => setState(() => _hoveredIndex = null),
+                  onEnter: (_) {
+                    if (!mounted || _contextMenuOpen) return;
+                    setState(() => _hoveredIndex = index);
+                  },
+                  onExit: (_) {
+                    if (!mounted || _contextMenuOpen) return;
+                    setState(() => _hoveredIndex = null);
+                  },
                   child: GestureDetector(
                     onTap: () => widget.onBubbleTap(area),
+                    behavior: HitTestBehavior.opaque,
                     onSecondaryTapDown: (details) {
                       _lastMousePosition = details.globalPosition;
+                      if (!mounted) return;
+                      setState(() {
+                        _contextMenuOpen = true;
+                        _hoveredIndex = null;
+                      });
                       _showContextMenu(context, area);
                     },
                     child: Tooltip(
@@ -401,20 +414,6 @@ class _BubblesGridState extends State<BubblesGrid> {
         position.dy,
       ),
       items: [
-        // Temporarily disable visibility toggle until migration is applied
-        // PopupMenuItem(
-        //   value: 'toggle',
-        //   child: Row(
-        //     children: [
-        //       Icon(
-        //         area.isVisible ? Icons.visibility_off : Icons.visibility,
-        //         size: 20,
-        //       ),
-        //       const SizedBox(width: 8),
-        //       Text(area.isVisible ? 'Ausblenden' : 'Einblenden'),
-        //     ],
-        //   ),
-        // ),
         PopupMenuItem(
           value: 'delete',
           child: Row(
@@ -431,6 +430,13 @@ class _BubblesGridState extends State<BubblesGrid> {
         widget.onToggleVisibility!(area);
       } else if (value == 'delete') {
         _showDeleteConfirmation(context, area);
+      }
+      if (mounted) {
+        setState(() {
+          _contextMenuOpen = false;
+        });
+      } else {
+        _contextMenuOpen = false;
       }
     });
   }
