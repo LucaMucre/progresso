@@ -50,9 +50,10 @@ class _LevelUpDialogState extends State<LevelUpDialog>
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
     return Material(
-      color: Colors.black.withOpacity(0.3),
+      color: Colors.black.withAlpha(77),
       child: Center(
         child: SlideTransition(
           position: _slideAnimation,
@@ -60,12 +61,12 @@ class _LevelUpDialogState extends State<LevelUpDialog>
             margin: const EdgeInsets.symmetric(horizontal: 32),
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: scheme.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: primary.withOpacity(0.3), width: 2),
+              border: Border.all(color: scheme.outlineVariant, width: 2),
               boxShadow: [
                 BoxShadow(
-                  color: primary.withOpacity(0.3 * _glowAnimation.value),
+                  color: primary.withAlpha((0.3 * 255 * _glowAnimation.value).toInt()),
                   blurRadius: 20 + (30 * _glowAnimation.value),
                   spreadRadius: 5 + (10 * _glowAnimation.value),
                 )
@@ -83,7 +84,7 @@ class _LevelUpDialogState extends State<LevelUpDialog>
                       color: primary,
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(color: primary.withOpacity(0.3), blurRadius: 15, spreadRadius: 5),
+                        BoxShadow(color: primary.withAlpha(77), blurRadius: 15, spreadRadius: 5),
                       ],
                     ),
                     child: const Icon(Icons.emoji_events, color: Colors.white, size: 40),

@@ -358,13 +358,16 @@ class _ProfilePageState extends State<ProfilePage> {
         print('DEBUG: Avatar URL: $avatarUrl');
       }
 
-      final profile = {
+      // Only include avatar_url in upsert if a new one was chosen; avoid overwriting
+      final profile = <String, dynamic>{
         'id': currentUser.id,
         'email': currentUser.email,
         'name': _nameCtrl.text.trim(),
         'bio': _bioCtrl.text.trim(),
-        'avatar_url': avatarUrl,
       };
+      if (avatarUrl != null && avatarUrl.trim().isNotEmpty) {
+        profile['avatar_url'] = avatarUrl;
+      }
       
       print('DEBUG: Saving profile with avatar_url: $avatarUrl');
       
@@ -372,7 +375,7 @@ class _ProfilePageState extends State<ProfilePage> {
           .from('users')
           .upsert(profile, onConflict: 'id');
 
-      // Zentrale Synchronisierung und Broadcast
+      // Zentrale Synchronisierung und Broadcast (nur wenn es eine neue URL gibt)
       await AvatarSyncService.syncAvatar(avatarUrl);
 
       if (!mounted) return;
@@ -864,18 +867,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 gradient: LinearGradient(
                   colors: [
                     Theme.of(context).colorScheme.surface,
-                    Theme.of(context).colorScheme.surface.withOpacity(0.94),
+                    Theme.of(context).colorScheme.surfaceContainerHigh,
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: Theme.of(context).dividerColor.withOpacity(0.3),
+                  color: Theme.of(context).colorScheme.outlineVariant,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withAlpha(15),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),

@@ -114,7 +114,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           gradient: LinearGradient(
             colors: [
               Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.primary.withOpacity(0.8),
+              Theme.of(context).colorScheme.primary.withAlpha(204),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -122,7 +122,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.primary.withAlpha(77),
               blurRadius: 15,
               offset: const Offset(0, 8),
             ),
@@ -151,7 +151,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
         gradient: LinearGradient(
           colors: [
             Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withOpacity(0.8),
+            Theme.of(context).colorScheme.primary.withAlpha(204),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -159,7 +159,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withAlpha(77),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),

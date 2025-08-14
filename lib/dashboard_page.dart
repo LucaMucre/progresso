@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'auth_page.dart';
 import 'dashboard_page.dart';
 
@@ -51,6 +52,57 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     super.didChangeDependencies();
     // subscribe to route changes
     routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  /// Build filter chip row for gallery by life areas
+  Widget _buildGalleryFilters(BuildContext context) {
+    final theme = Theme.of(context);
+    final areas = [
+      'General',
+      'Fitness',
+      'Nutrition',
+      'Learning',
+      'Finance',
+      'Art',
+      'Relationships',
+      'Spirituality',
+      'Career',
+    ];
+
+    String? display = _selectedAreaFilterName;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: const Text('All'),
+              selected: display == null || display.isEmpty,
+              onSelected: (_) {
+                setState(() {
+                  _selectedAreaFilterName = null;
+                  _refreshCounter++; // force FutureBuilder refresh
+                });
+              },
+            ),
+          ),
+          ...areas.map((name) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(name),
+                  selected: display != null && LifeAreasService.canonicalAreaName(display) == LifeAreasService.canonicalAreaName(name),
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedAreaFilterName = name;
+                      _refreshCounter++; // trigger rebuild
+                    });
+                  },
+                ),
+              )),
+        ],
+      ),
+    );
   }
 
   @override
@@ -178,6 +230,26 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         _calendarMonth.month + 1,
       );
     });
+  }
+
+  // Supabase Image Transformations thumbnail helper
+  String _thumbUrl(String publicUrl, {int width = 600, int quality = 80}) {
+    try {
+      final uri = Uri.parse(publicUrl);
+      if (!uri.path.contains('/storage/v1/object/public/')) return publicUrl;
+      final params = {
+        'width': width.toString(),
+        'quality': quality.toString(),
+        'resize': 'contain',
+      };
+      final newUri = uri.replace(queryParameters: {
+        ...uri.queryParameters,
+        ...params,
+      });
+      return newUri.toString();
+    } catch (_) {
+      return publicUrl;
+    }
   }
 
   Future<List<ActionLog>> _fetchLogsForDay(DateTime day) async {
@@ -467,25 +539,26 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     return dayToTitles;
   }
 
-    Future<List<Map<String, dynamic>>> _fetchAllImages() async {
-    final client = Supabase.instance.client;
-    final user = client.auth.currentUser;
-    if (user == null) return [];
+    Future<List<Map<String, dynamic>>> _fetchAllImages({int limit = 60, int offset = 0}) async {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return [];
 
-    try {
-      final res = await client
-          .from('action_logs')
-          .select('id, occurred_at, image_url, notes')
-          .eq('user_id', user.id)
-          .not('image_url', 'is', null)
-          .order('occurred_at', ascending: false);
+      try {
+        final res = await client
+            .from('action_logs')
+            .select('id, occurred_at, image_url, notes')
+            .eq('user_id', user.id)
+            .not('image_url', 'is', null)
+            .order('occurred_at', ascending: false)
+            .range(offset, offset + limit - 1);
 
-      return (res as List).cast<Map<String, dynamic>>();
-    } catch (e) {
-      print('Error fetching images: $e');
-      return [];
+        return (res as List).cast<Map<String, dynamic>>();
+      } catch (e) {
+        print('Error fetching images: $e');
+        return [];
+      }
     }
-  }
 
   Widget _buildGalleryContainer(BuildContext context) {
     return Container(
@@ -527,6 +600,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          // Gallery filter chips by life area
+          _buildGalleryFilters(context),
           const SizedBox(height: 16),
           SizedBox(
             height: 400, // Fixed height for gallery
@@ -567,7 +643,16 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   );
                 }
 
-                final images = snapshot.data ?? [];
+                List<Map<String, dynamic>> images = List<Map<String, dynamic>>.from(snapshot.data ?? const []);
+                // Apply client-side filter by life area if selected
+                if (_selectedAreaFilterName != null && _selectedAreaFilterName!.trim().isNotEmpty) {
+                  final selectedCanonical = LifeAreasService.canonicalAreaName(_selectedAreaFilterName);
+                  images = images.where((img) {
+                    final area = _extractActivityArea(img);
+                    final name = area['name'] as String?;
+                    return LifeAreasService.canonicalAreaName(name) == selectedCanonical;
+                  }).toList();
+                }
                 
                 if (images.isEmpty) {
                   return Center(
@@ -599,8 +684,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 }
 
                 return GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
+                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: MediaQuery.of(context).size.width < 420 ? 2 : 3,
                     crossAxisSpacing: 8,
                     mainAxisSpacing: 8,
                     childAspectRatio: 1.0,
@@ -631,27 +716,21 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              Image.network(
-                                imageUrl,
+                              // Request a transformed thumbnail from Supabase (width ~ 600)
+                              CachedNetworkImage(
+                                imageUrl: _thumbUrl(imageUrl, width: 600),
                                 fit: BoxFit.cover,
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Container(
-                                    color: Theme.of(context).colorScheme.surfaceVariant,
-                                    child: const Center(
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    ),
-                                  );
-                                },
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: Theme.of(context).colorScheme.errorContainer,
-                                    child: Icon(
-                                      Icons.broken_image,
-                                      color: Theme.of(context).colorScheme.onErrorContainer,
-                                    ),
-                                  );
-                                },
+                                placeholder: (context, url) => Container(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Theme.of(context).colorScheme.errorContainer,
+                                  child: Icon(
+                                    Icons.broken_image,
+                                    color: Theme.of(context).colorScheme.onErrorContainer,
+                                  ),
+                                ),
                               ),
                               // Life area indicator in top-right corner
                               Positioned(
@@ -822,24 +901,19 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   fit: StackFit.expand,
                   children: [
                     InteractiveViewer(
-                      child: Image.network(
-                        imageUrl,
+                      child: CachedNetworkImage(
+                        imageUrl: _thumbUrl(imageUrl, width: 2000, quality: 90),
                         fit: BoxFit.contain,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(color: Colors.white),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Center(
-                            child: Icon(
-                              Icons.broken_image,
-                              color: Colors.white,
-                              size: 64,
-                            ),
-                          );
-                        },
+                        placeholder: (context, url) => const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                        errorWidget: (context, url, error) => const Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            color: Colors.white,
+                            size: 64,
+                          ),
+                        ),
                       ),
                     ),
                     // Bottom info overlay

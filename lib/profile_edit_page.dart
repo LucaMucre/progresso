@@ -260,12 +260,21 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
     // Verwende die gleiche Logik wie im Dashboard - lade die Avatar-URL direkt aus der users Tabelle
     final userId = _supabase.auth.currentUser?.id;
-    final avatarUrl = _currentAvatarUrl;
+    final String? rawUrl = _currentAvatarUrl;
     
-    // Stärkeres Cache-Busting für sofortige Aktualisierung
-    final avatarProvider = avatarUrl != null
-        ? NetworkImage('$avatarUrl?t=${DateTime.now().millisecondsSinceEpoch}&v=2') as ImageProvider
-        : const AssetImage('assets/default_avatar.png');
+    bool _isValidAvatarUrl(String? url) {
+      if (url == null) return false;
+      final trimmed = url.trim();
+      if (trimmed.isEmpty) return false;
+      return trimmed.contains('/storage/v1/object/public/avatars/') &&
+             (userId == null || trimmed.contains(userId));
+    }
+    
+    final String? avatarUrl = _isValidAvatarUrl(rawUrl)
+        ? '$rawUrl?t=${DateTime.now().millisecondsSinceEpoch}&v=2'
+        : null;
+    final ImageProvider? avatarProvider =
+        avatarUrl != null ? NetworkImage(avatarUrl) : null;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -350,9 +359,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                               Icons.camera_alt,
                               color: Colors.white,
                               size: 20,
-                            ),
                           ),
                         ),
+                      ),
                       ],
                     ),
                   ),

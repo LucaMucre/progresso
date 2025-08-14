@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'achievement_service.dart';
+import 'package:flutter/services.dart';
 import '../widgets/achievement_unlock_widget.dart';
 import '../widgets/level_up_dialog.dart';
 
@@ -49,6 +50,8 @@ class LevelUpService {
   }) async {
     if (_isShowing) return;
     _isShowing = true;
+    // Haptic feedback for level-up (best-effort, ignore errors on web)
+    try { HapticFeedback.heavyImpact(); } catch (_) {}
     // Show level-up first
     await showDialog(
       context: context,

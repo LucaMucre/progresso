@@ -138,8 +138,8 @@ class _ChatPageState extends State<ChatPage> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isUser
-                        ? Theme.of(context).colorScheme.primary.withOpacity(0.12)
-                        : Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : Theme.of(context).colorScheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(

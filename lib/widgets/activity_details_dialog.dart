@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:html' as html;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -259,6 +260,17 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       } else if (_selectedImage != null) {
         fileName = '${DateTime.now().millisecondsSinceEpoch}_${_selectedImage!.path.split('/').last}';
         bytes = await _selectedImage!.readAsBytes();
+        if (bytes.length > 800000) {
+          try {
+            final result = await FlutterImageCompress.compressWithList(
+              bytes,
+              quality: 80,
+              minWidth: 1600,
+              minHeight: 1600,
+            );
+            if (result.isNotEmpty) bytes = Uint8List.fromList(result);
+          } catch (_) {}
+        }
       } else {
         throw Exception('Kein Bild ausgewählt');
       }

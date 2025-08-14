@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:html' as html;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -205,6 +206,17 @@ class _LogActionPageState extends State<LogActionPage> {
       } else if (_selectedImage != null) {
         fileName = '${DateTime.now().millisecondsSinceEpoch}_${_selectedImage!.path.split('/').last}';
         bytes = await _selectedImage!.readAsBytes();
+        if (bytes.length > 800000) {
+          try {
+            final result = await FlutterImageCompress.compressWithList(
+              bytes,
+              quality: 80,
+              minWidth: 1600,
+              minHeight: 1600,
+            );
+            if (result.isNotEmpty) bytes = Uint8List.fromList(result);
+          } catch (_) {}
+        }
         print('Image size: ${bytes.length} bytes');
       } else {
         throw Exception('Kein Bild ausgewählt');
@@ -414,17 +426,17 @@ class _LogActionPageState extends State<LogActionPage> {
     EdgeInsetsGeometry padding = const EdgeInsets.all(12),
   }) {
     final theme = Theme.of(context);
-    final Color stripeColor = (accentColor ?? theme.colorScheme.primary).withOpacity(0.55);
-    final Color bgColor = theme.colorScheme.surfaceVariant.withOpacity(0.12);
+    final Color stripeColor = (accentColor ?? theme.colorScheme.primary).withAlpha(140);
+    final Color bgColor = theme.colorScheme.surfaceContainerHighest;
 
     return Container(
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.14)),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withAlpha(10),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -461,7 +473,7 @@ class _LogActionPageState extends State<LogActionPage> {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: stripeColor.withOpacity(0.15),
+                            color: stripeColor.withAlpha(38),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(leadingIcon, size: 18, color: stripeColor),
@@ -471,7 +483,7 @@ class _LogActionPageState extends State<LogActionPage> {
                         title,
                         style: theme.textTheme.labelLarge?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface.withOpacity(0.8),
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -493,16 +505,16 @@ class _LogActionPageState extends State<LogActionPage> {
     final Color focusColor = accentColor ?? theme.colorScheme.primary;
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon, color: focusColor.withOpacity(0.8)),
+      prefixIcon: Icon(icon, color: focusColor.withAlpha(204)),
       filled: true,
-      fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.25),
+      fillColor: theme.colorScheme.surfaceContainerHighest,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.3)),
+        borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
+        borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

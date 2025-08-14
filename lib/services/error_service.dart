@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' as frp;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ErrorService {
@@ -160,11 +160,11 @@ class ErrorService {
 }
 
 // Riverpod Provider für Error Handling
-final errorServiceProvider = Provider<ErrorService>((ref) {
+final errorServiceProvider = frp.Provider<ErrorService>((ref) {
   return ErrorService();
 });
 
 // Global Error Handler Provider
-final globalErrorHandlerProvider = Provider<Function(BuildContext, dynamic, StackTrace?)>((ref) {
+final globalErrorHandlerProvider = frp.Provider<Function(BuildContext, dynamic, StackTrace?)>((ref) {
   return ErrorService.handleGlobalError;
 }); 

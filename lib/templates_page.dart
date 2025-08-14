@@ -41,20 +41,20 @@ class _TemplatesListState extends State<TemplatesList> {
   Color _getCategoryColor(String category) {
     switch (category.toLowerCase()) {
       case 'fitness':
-        return Colors.red.withOpacity(0.1);
+        return Colors.red.withAlpha(26);
       case 'lernen':
       case 'learning':
-        return Colors.blue.withOpacity(0.1);
+        return Colors.blue.withAlpha(26);
       case 'arbeit':
       case 'work':
-        return Colors.orange.withOpacity(0.1);
+        return Colors.orange.withAlpha(26);
       case 'hobby':
-        return Colors.green.withOpacity(0.1);
+        return Colors.green.withAlpha(26);
       case 'gesundheit':
       case 'health':
-        return Colors.pink.withOpacity(0.1);
+        return Colors.pink.withAlpha(26);
       default:
-        return Colors.purple.withOpacity(0.1);
+        return Colors.purple.withAlpha(26);
     }
   }
 
@@ -80,13 +80,13 @@ class _TemplatesListState extends State<TemplatesList> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${snapshot.error}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                      Text(
+                        '${snapshot.error}',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                 ],
               ),
             ),
@@ -110,24 +110,24 @@ class _TemplatesListState extends State<TemplatesList> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(
-                    Icons.add_task,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                  ),
+                    Icon(
+                      Icons.add_task,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   const SizedBox(height: 16),
                   Text(
                     'Keine Actions gefunden',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Erstelle deine erste Action um zu starten!',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                      Text(
+                        'Erstelle deine erste Action um zu starten!',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                 ],
               ),
             ),
