@@ -6,6 +6,7 @@ import 'log_action_page.dart';
 import 'chat_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart';
+import 'navigation.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({Key? key}) : super(key: key);
@@ -17,6 +18,37 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
   int _profileNonce = 0; // forces ProfilePage to rebuild/refresh when selected
+
+  @override
+  void initState() {
+    super.initState();
+    homeShellTabIndex.addListener(_onExternalTabChange);
+    homeShellProfileRefreshTick.addListener(_onExternalProfileRefresh);
+  }
+
+  @override
+  void dispose() {
+    homeShellTabIndex.removeListener(_onExternalTabChange);
+    homeShellProfileRefreshTick.removeListener(_onExternalProfileRefresh);
+    super.dispose();
+  }
+
+  void _onExternalTabChange() {
+    final i = homeShellTabIndex.value;
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = i;
+      if (i == 4) _profileNonce++;
+    });
+  }
+
+  void _onExternalProfileRefresh() {
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = 4;
+      _profileNonce++;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

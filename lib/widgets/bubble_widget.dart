@@ -293,24 +293,16 @@ class _BubblesGridState extends State<BubblesGrid> {
               alignment: Alignment.center,
               child: GestureDetector(
                 onTap: () {
-                  // Navigate to the same tabbed ProfilePage instead of stacking a second instance
-                  // by switching the HomeShell index to the Profile tab (index 4)
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                  // Try to find the nearest HomeShell and set its tab
-                  // Fallback: push ProfilePage if shell not found (e.g., deep link)
+                  // Switch to the HomeShell Profile tab via global notifier
+                  // (works on Web without private type references)
                   try {
-                    final state = context.findAncestorStateOfType<_HomeShellState>();
-                    if (state != null) {
-                      state.setState(() {
-                        state._currentIndex = 4;
-                        state._profileNonce++;
-                      });
-                      return;
-                    }
-                  } catch (_) {}
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ProfilePage()),
-                  );
+                    goToHomeTab(4);
+                    refreshProfileTab();
+                  } catch (_) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ProfilePage()),
+                    );
+                  }
                 },
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
