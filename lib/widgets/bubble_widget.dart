@@ -368,13 +368,16 @@ class _BubblesGridState extends State<BubblesGrid> {
       minutes[area] = _minutesByKey[key] ?? 0.0;
     }
     final double maxMin = (minutes.values.isEmpty ? 0.0 : minutes.values.reduce(max)).clamp(0.0, double.infinity);
-    final double maxSize = (canvasSize * 0.26).clamp(48.0, 180.0);
-    final double minSize = 28.0;
+    // Bigger lead bubble ~32% of canvas; allow larger upper bound on wide screens
+    final double maxSize = (canvasSize * 0.32).clamp(54.0, 240.0);
+    // Ensure a minimum of 20% of the biggest bubble for tiny/zero-minute areas
+    final double minSize = maxSize * 0.20;
 
     final ordered = minutes.keys.toList()
       ..sort((a, b) => (minutes[b] ?? 0).compareTo(minutes[a] ?? 0));
     final List<Rect> placed = [];
-    final double radiusBound = canvasSize * 0.48;
+    // Use almost the whole canvas for placement
+    final double radiusBound = canvasSize * 0.90;
     final Offset center = Offset(canvasSize / 2, canvasSize / 2);
 
     for (int idx = 0; idx < ordered.length; idx++) {
