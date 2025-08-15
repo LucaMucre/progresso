@@ -44,8 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
-    _loadStatistics();
+    _primeFromCacheThenReload();
     _subscribeToUserChanges();
     _subscribeToActivityChanges();
     _initializeAchievements();
@@ -62,6 +61,22 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
     AvatarSyncService.avatarVersion.addListener(_loadProfile);
+  }
+
+  Future<void> _primeFromCacheThenReload() async {
+    try {
+      final cached = await OfflineCache.getCachedProfile();
+      if (cached != null) {
+        _nameCtrl.text = cached['name'] ?? _supabase.auth.currentUser?.email?.split('@')[0] ?? '';
+        _bioCtrl.text = cached['bio'] ?? '';
+        setState(() {
+          _avatarUrl = cached['avatar_url'];
+          _cacheBust = DateTime.now().millisecondsSinceEpoch;
+        });
+      }
+    } catch (_) {}
+    _loadProfile();
+    _loadStatistics();
   }
   
   void _subscribeToActivityChanges() {
@@ -150,21 +165,22 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadStatistics() async {
     try {
-      // Load character
-      final character = await CharacterService.getOrCreateCharacter();
-      
-      // Load life areas
-      final areas = await LifeAreasService.getLifeAreas();
-      
-      // Load action statistics
+      // Load in parallel to reduce total wait time
       final user = _supabase.auth.currentUser;
-      if (user != null) {
-        final actionResponse = await _supabase
-            .from('action_logs')
-            .select('occurred_at, notes')
-            .eq('user_id', user.id);
+      final futures = <Future<dynamic>>[
+        CharacterService.getOrCreateCharacter(),
+        LifeAreasService.getLifeAreas(),
+        if (user != null)
+          _supabase.from('action_logs').select('occurred_at, notes').eq('user_id', user.id)
+        else
+          Future.value(<dynamic>[]),
+      ];
+      final results = await Future.wait(futures);
+      final character = results[0] as Character;
+      final areas = results[1] as List<LifeArea>;
+      final actionResponse = results[2] as List;
         
-        final logs = (actionResponse as List);
+        final logs = actionResponse;
         final dates = logs.map((log) => DateTime.parse(log['occurred_at'])).toList();
         
         _totalActions = dates.length;
