@@ -8,6 +8,7 @@ import '../services/character_service.dart';
 import '../services/avatar_sync_service.dart';
 import '../profile_page.dart';
 import '../navigation.dart';
+import 'dart:convert'; // Added for jsonDecode
 
 // Separate Character Widget to prevent rebuilding on hover
 class CharacterWidget extends StatefulWidget {
@@ -269,6 +270,65 @@ class _BubblesGridState extends State<BubblesGrid> {
   int? _hoveredIndex;
   Offset? _lastMousePosition; // Add this to store mouse position
   bool _contextMenuOpen = false;
+  Map<String, double> _minutesByKey = {};
+  bool _loadingDurations = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAreaDurations();
+  }
+
+  Future<void> _loadAreaDurations() async {
+    setState(() => _loadingDurations = true);
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) {
+        setState(() { _minutesByKey = {}; _loadingDurations = false; });
+        return;
+      }
+      final rows = await client
+          .from('action_logs')
+          .select('duration_min, notes')
+          .eq('user_id', user.id);
+
+      final Map<String, double> agg = {};
+      String resolveKey(Map<String, dynamic> obj) {
+        String? area = (obj['area'] as String?)?.trim().toLowerCase();
+        final lifeArea = (obj['life_area'] as String?)?.trim().toLowerCase();
+        area ??= lifeArea;
+        final category = (obj['category'] as String?)?.trim().toLowerCase();
+        bool isKnownParent(String? v) => const {
+          'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
+        }.contains(v);
+        if (isKnownParent(area)) return area!;
+        switch (category) {
+          case 'inner': return 'spirituality';
+          case 'social': return 'relationships';
+          case 'work': return 'career';
+          case 'development': return 'learning';
+          case 'finance': return 'finance';
+          case 'health': return 'health';
+          default: return area ?? 'unknown';
+        }
+      }
+      for (final r in (rows as List)) {
+        final int mins = (r['duration_min'] as int?) ?? 0;
+        String key = 'unknown';
+        try {
+          if (r['notes'] != null) {
+            final obj = jsonDecode(r['notes'] as String);
+            if (obj is Map<String, dynamic>) key = resolveKey(obj);
+          }
+        } catch (_) {}
+        agg[key] = (agg[key] ?? 0) + (mins > 0 ? mins.toDouble() : 0.0);
+      }
+      setState(() { _minutesByKey = agg; _loadingDurations = false; });
+    } catch (_) {
+      setState(() { _minutesByKey = {}; _loadingDurations = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -289,121 +349,129 @@ class _BubblesGridState extends State<BubblesGrid> {
         width: canvasSize,
         child: Stack(
           children: [
-            // Character in the absolute center – robust against badge overflow
-            Align(
-              alignment: Alignment.center,
-              child: GestureDetector(
-                onTap: () {
-                  // Switch to the HomeShell Profile tab via global notifier
-                  // (works on Web without private type references)
-                  try {
-                    // Profile tab index changed after removing Chat: now 3
-                    goToHomeTab(3);
-                    refreshProfileTab();
-                  } catch (_) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfilePage()),
-                    );
-                  }
-                },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Transform.scale(
-                    scale: scale,
-                    child: const CharacterWidget(),
-                  ),
-                ),
-              ),
-            ),
-
-            // Life Area Bubbles arranged in a circle around the character
-            ...widget.areas.asMap().entries.map((entry) {
-              final index = entry.key;
-              final area = entry.value;
-              final angle = (2 * pi * index) / widget.areas.length;
-              final radius = canvasSize * 0.38; // Abstand vom Zentrum
-              final centerX = canvasSize / 2; // Center X position
-              final centerY = canvasSize / 2; // Center Y position
-              
-              final x = centerX + radius * cos(angle);
-              final y = centerY + radius * sin(angle);
-              final isHovered = _hoveredIndex == index;
-              final hoverScale = isHovered ? 1.15 : 1.0;
-              final size = 50.0 * scale * hoverScale;
-
-              return Positioned(
-                left: x - (size / 2),
-                top: y - (size / 2),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  onEnter: (_) {
-                    if (!mounted || _contextMenuOpen) return;
-                    setState(() => _hoveredIndex = index);
-                  },
-                  onExit: (_) {
-                    if (!mounted || _contextMenuOpen) return;
-                    setState(() => _hoveredIndex = null);
-                  },
-                  child: GestureDetector(
-                    onTap: () => widget.onBubbleTap(area),
-                    behavior: HitTestBehavior.opaque,
-                    onSecondaryTapDown: (details) {
-                      _lastMousePosition = details.globalPosition;
-                      if (!mounted) return;
-                      setState(() {
-                        _contextMenuOpen = true;
-                        _hoveredIndex = null;
-                      });
-                      _showContextMenu(context, area);
-                    },
-                    child: Tooltip(
-                      message: area.name,
-                      waitDuration: const Duration(milliseconds: 400),
-                      child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
-                      width: size,
-                      height: size,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isHovered 
-                            ? _parseColor(area.color).withOpacity(0.9)
-                            : _parseColor(area.color),
-                        border: Border.all(
-                          color: isHovered 
-                              ? Colors.white.withOpacity(0.6)
-                              : Colors.white.withOpacity(0.3),
-                          width: isHovered ? 3 : 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _parseColor(area.color).withOpacity(isHovered ? 0.6 : 0.4),
-                            blurRadius: isHovered ? 16 : 12,
-                            offset: const Offset(0, 4),
-                            spreadRadius: isHovered ? 2 : 1,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(isHovered ? 0.15 : 0.1),
-                            blurRadius: isHovered ? 6 : 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        _getIconData(area.icon),
-                        color: Colors.white,
-                        size: 20 * scale * hoverScale,
-                      ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+            if (_loadingDurations)
+              const Center(child: CircularProgressIndicator())
+            else
+              ..._buildRandomBubbles(canvasSize, scale),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildRandomBubbles(double canvasSize, double scale) {
+    final List<Widget> widgets = [];
+    if (widget.areas.isEmpty) return widgets;
+    final Map<LifeArea, double> minutes = {};
+    for (final area in widget.areas) {
+      final key = LifeAreasService.canonicalAreaName(area.name);
+      minutes[area] = _minutesByKey[key] ?? 0.0;
+    }
+    final double maxMin = (minutes.values.isEmpty ? 0.0 : minutes.values.reduce(max)).clamp(0.0, double.infinity);
+    final double maxSize = (canvasSize * 0.26).clamp(48.0, 180.0);
+    final double minSize = 28.0;
+
+    final ordered = minutes.keys.toList()
+      ..sort((a, b) => (minutes[b] ?? 0).compareTo(minutes[a] ?? 0));
+    final List<Rect> placed = [];
+    final double radiusBound = canvasSize * 0.48;
+    final Offset center = Offset(canvasSize / 2, canvasSize / 2);
+
+    for (int idx = 0; idx < ordered.length; idx++) {
+      final area = ordered[idx];
+      final mins = minutes[area] ?? 0.0;
+      final factor = maxMin > 0 ? (mins / maxMin).clamp(0.0, 1.0) : 0.5;
+      final double bubbleSize = max(minSize, maxSize * factor);
+      final isHovered = _hoveredIndex == idx;
+      final hoverScale = isHovered ? 1.15 : 1.0;
+      final double size = bubbleSize * hoverScale;
+      final rnd = Random(area.id.hashCode);
+      Offset? pos;
+      for (int attempt = 0; attempt < 200; attempt++) {
+        final angle = rnd.nextDouble() * 2 * pi;
+        final r = rnd.nextDouble() * (radiusBound - size * 0.6);
+        final x = center.dx + r * cos(angle);
+        final y = center.dy + r * sin(angle);
+        final rect = Rect.fromLTWH(x - size / 2, y - size / 2, size, size);
+        final safe = rect.left >= 0 && rect.top >= 0 && rect.right <= canvasSize && rect.bottom <= canvasSize;
+        if (!safe) continue;
+        bool overlaps = false;
+        for (final placedRect in placed) {
+          if (rect.overlaps(placedRect.inflate(6))) { overlaps = true; break; }
+        }
+        if (!overlaps) { pos = Offset(x, y); placed.add(rect); break; }
+      }
+      pos ??= Offset(center.dx, center.dy);
+      widgets.add(Positioned(
+        left: pos.dx - (size / 2),
+        top: pos.dy - (size / 2),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) {
+            if (!mounted || _contextMenuOpen) return;
+            setState(() => _hoveredIndex = idx);
+          },
+          onExit: (_) {
+            if (!mounted || _contextMenuOpen) return;
+            setState(() => _hoveredIndex = null);
+          },
+          child: GestureDetector(
+            onTap: () => widget.onBubbleTap(area),
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapDown: (details) {
+              _lastMousePosition = details.globalPosition;
+              if (!mounted) return;
+              setState(() {
+                _contextMenuOpen = true;
+                _hoveredIndex = null;
+              });
+              _showContextMenu(context, area);
+            },
+            child: Tooltip(
+              message: '${area.name} • ${mins.toInt()} min',
+              waitDuration: const Duration(milliseconds: 400),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isHovered 
+                      ? _parseColor(area.color).withOpacity(0.9)
+                      : _parseColor(area.color),
+                  border: Border.all(
+                    color: isHovered 
+                        ? Colors.white.withOpacity(0.6)
+                        : Colors.white.withOpacity(0.3),
+                    width: isHovered ? 3 : 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _parseColor(area.color).withOpacity(isHovered ? 0.6 : 0.4),
+                      blurRadius: isHovered ? 16 : 12,
+                      offset: const Offset(0, 4),
+                      spreadRadius: isHovered ? 2 : 1,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isHovered ? 0.15 : 0.1),
+                      blurRadius: isHovered ? 6 : 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _getIconData(area.icon),
+                  color: Colors.white,
+                  size: max(16.0, size * 0.35),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ));
+    }
+    return widgets;
   }
 
   void _showContextMenu(BuildContext context, LifeArea area) {
