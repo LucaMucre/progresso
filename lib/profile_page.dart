@@ -856,6 +856,28 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 16),
+            if (_totalActions == 0)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.add_circle_outline, size: 28, color: Colors.grey.withOpacity(0.6)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'No activities yet. Tap the + button to add your first activity.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.withOpacity(0.8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
