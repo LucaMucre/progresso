@@ -4,8 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html show window, HttpRequest; // only used on web via conditional checks
+// Avoid direct dart:html in non-web builds; use conditional helper instead
+import '../utils/web_bytes_stub.dart'
+    if (dart.library.html) '../utils/web_bytes_web.dart' as web_bytes;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/db_service.dart';
@@ -247,13 +248,11 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
         fileName = '${DateTime.now().millisecondsSinceEpoch}_web_image.jpg';
         
         try {
-          final response = await html.HttpRequest.request(
-            _selectedImageUrl!,
-            responseType: 'arraybuffer',
-          );
-          
-          final arrayBuffer = response.response as dynamic;
-          bytes = Uint8List.fromList(arrayBuffer.asUint8List());
+          final fetched = await web_bytes.fetchBytesFromUrl(_selectedImageUrl!);
+          if (fetched == null) {
+            return 'https://via.placeholder.com/400x300/FF0000/FFFFFF?text=Upload+Failed';
+          }
+          bytes = fetched;
         } catch (e) {
           print('Error converting web image: $e');
           return 'https://via.placeholder.com/400x300/FF0000/FFFFFF?text=Upload+Failed';

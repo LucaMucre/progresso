@@ -8,14 +8,14 @@ on:
 
 jobs:
   ios:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.5'
-      - name: Xcode select (latest)
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Xcode version
+        run: xcodebuild -version
       - name: Pub get
         run: flutter pub get
       - name: Analyze
