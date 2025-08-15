@@ -1,72 +1,19 @@
-import 'dart:math';
 import 'dart:convert';
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'level_up_service.dart';
 import 'achievement_service.dart';
 import 'life_areas_service.dart';
+import '../models/action_models.dart' as models;
 
 final _db = Supabase.instance.client;
 
 /// Modell für eine Action-Vorlage
-class ActionTemplate {
-  final String id, name, category;
-  final int baseXp, attrStrength, attrEndurance, attrKnowledge;
-
-  ActionTemplate({
-    required this.id,
-    required this.name,
-    required this.category,
-    required this.baseXp,
-    required this.attrStrength,
-    required this.attrEndurance,
-    required this.attrKnowledge,
-  });
-
-  factory ActionTemplate.fromMap(Map<String, dynamic> m) => ActionTemplate(
-        id:            m['id']           as String,
-        name:          m['name']         as String,
-        category:      m['category']     as String,
-        baseXp:        m['base_xp']       as int,
-        attrStrength:  m['attr_strength'] as int,
-        attrEndurance: m['attr_endurance'] as int,
-        attrKnowledge: m['attr_knowledge'] as int,
-      );
-}
+typedef ActionTemplate = models.ActionTemplate;
 
 /// Modell für einen Action-Log
-class ActionLog {
-  final String id;
-  final DateTime occurredAt;
-  final int? durationMin;
-  final String? notes;
-  final int earnedXp;
-  final String? templateId;
-  final String? activityName;
-  final String? imageUrl;
-
-  ActionLog({
-    required this.id,
-    required this.occurredAt,
-    this.durationMin,
-    this.notes,
-    required this.earnedXp,
-    this.templateId,
-    this.activityName,
-    this.imageUrl,
-  });
-
-  factory ActionLog.fromMap(Map<String, dynamic> m) => ActionLog(
-        id:          m['id']             as String,
-        occurredAt:  DateTime.parse(m['occurred_at'] as String),
-        durationMin: m['duration_min']    as int?,
-        notes:       m['notes']           as String?,
-        earnedXp:    m['earned_xp']       as int,
-        templateId:  m['template_id']     as String?,
-        // Support both top-level and nested (in notes JSON) titles
-        activityName: (m['activity_name'] as String?) ?? extractTitleFromNotes(m['notes']),
-        imageUrl:    m['image_url']       as String?,
-      );
-}
+typedef ActionLog = models.ActionLog;
 
 // Try to extract a 'title' from notes JSON wrapper (top-level helper)
 String? extractTitleFromNotes(dynamic notesValue) {
@@ -84,8 +31,10 @@ String? extractTitleFromNotes(dynamic notesValue) {
 
 /// Templates laden
 Future<List<ActionTemplate>> fetchTemplates() async {
-  print('=== FETCH TEMPLATES DEBUG ===');
-  print('Current User ID: ${_db.auth.currentUser?.id}');
+  if (kDebugMode) {
+    debugPrint('=== FETCH TEMPLATES DEBUG ===');
+    debugPrint('Current User ID: ${_db.auth.currentUser?.id}');
+  }
   
   try {
     final res = await _db
@@ -93,12 +42,12 @@ Future<List<ActionTemplate>> fetchTemplates() async {
         .select()
         .eq('user_id', _db.auth.currentUser!.id)
         .order('created_at', ascending: true);
-    print('Templates Result: $res');
+    if (kDebugMode) debugPrint('Templates Result: $res');
     return (res as List)
-        .map((e) => ActionTemplate.fromMap(e as Map<String, dynamic>))
+        .map((e) => ActionTemplate.fromJson(e as Map<String, dynamic>))
         .toList();
   } catch (e) {
-    print('Error fetching templates: $e');
+    if (kDebugMode) debugPrint('Error fetching templates: $e');
     rethrow;
   }
 }
@@ -160,11 +109,13 @@ int calculateEarnedXp({int? durationMin, String? notes, String? imageUrl}) {
   // Sicherheitsnetz: mindestens 1 XP, wenn überhaupt etwas geloggt wurde
   if (xp <= 0 && (timeMinutes > 0 || textLen > 0 || hasImage)) xp = 1;
   
-  print('=== XP CALCULATION DEBUG ===');
-  print('Duration: $timeMinutes min -> ${timeMinutes ~/ 5} XP');
-  print('Notes: "$notes" -> $textLen chars -> ${textLen ~/ 100} XP');
-  print('Has Image: $hasImage -> ${hasImage ? "+10%" : "no bonus"}');
-  print('Final XP: $xp');
+  if (kDebugMode) {
+    debugPrint('=== XP CALCULATION DEBUG ===');
+    debugPrint('Duration: $timeMinutes min -> ${timeMinutes ~/ 5} XP');
+    debugPrint('Notes length: $textLen -> ${textLen ~/ 100} XP');
+    debugPrint('Has Image: $hasImage -> ${hasImage ? "+10%" : "no bonus"}');
+    debugPrint('Final XP: $xp');
+  }
   
   return xp;
 }
@@ -225,7 +176,7 @@ Future<ActionLog> createLog({
     // Do NOT trigger LevelUp popup here; UI handles it after navigation to avoid navigator lock
   } catch (_) {}
 
-  return ActionLog.fromMap(out);
+  return ActionLog.fromJson(out);
 }
 
 /// Quick Log ohne Template erstellen
@@ -285,9 +236,9 @@ Future<ActionLog> createQuickLog({
   } catch (_) {}
   
   // Achievements NACH Level-Up-Berechnung prüfen (damit Level-Up-Flag gesetzt ist, falls nötig)
-  _checkAchievementsAfterLogInsert();
+  await _checkAchievementsAfterLogInsert();
 
-  return ActionLog.fromMap(out);
+  return ActionLog.fromJson(out);
 }
 
 Future<void> _checkAchievementsAfterLogInsert() async {
@@ -349,8 +300,10 @@ Future<void> _checkAchievementsAfterLogInsert() async {
 
 /// Alle Logs laden
 Future<List<ActionLog>> fetchLogs() async {
-  print('=== FETCH LOGS DEBUG ===');
-  print('Current User ID: ${_db.auth.currentUser?.id}');
+  if (kDebugMode) {
+    debugPrint('=== FETCH LOGS DEBUG ===');
+    debugPrint('Current User ID: ${_db.auth.currentUser?.id}');
+  }
   
   try {
     final res = await _db
@@ -358,45 +311,125 @@ Future<List<ActionLog>> fetchLogs() async {
         .select()
         .eq('user_id', _db.auth.currentUser!.id)
         .order('occurred_at', ascending: false);
-    print('Logs Result: $res');
+    if (kDebugMode) debugPrint('Logs Result: $res');
     return (res as List)
-        .map((e) => ActionLog.fromMap(e as Map<String, dynamic>))
+        .map((e) => ActionLog.fromJson(e as Map<String, dynamic>))
         .toList();
   } catch (e) {
-    print('Error fetching logs: $e');
+    if (kDebugMode) debugPrint('Error fetching logs: $e');
     rethrow;
   }
 }
 
 /// Gesamt-XP berechnen
 Future<int> fetchTotalXp() async {
-  print('=== FETCH TOTAL XP DEBUG ===');
+  if (kDebugMode) debugPrint('=== FETCH TOTAL XP DEBUG ===');
   try {
-    final logs = await fetchLogs();
-    final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp);
-    print('Total XP: $totalXp');
-    return totalXp;
+    final uid = _db.auth.currentUser?.id;
+    if (uid == null) return 0;
+    // Prefer RPC for aggregation to avoid PostgREST relationship constraints
+    try {
+      final rpc = await _db.rpc('sum_user_xp', params: {'uid': uid}).single();
+      final value = rpc['sum'] ?? rpc['total'] ?? rpc['sum_earned_xp'];
+      final parsed = value is int ? value : (value is String ? int.tryParse(value) : null);
+      if (parsed != null) {
+        if (kDebugMode) debugPrint('Total XP: $parsed');
+        return parsed;
+      }
+    } catch (_) {
+      // ignore and fall back
+    }
+
+    // Fallback: lightweight projection and fold
+    final rows = await _db
+        .from('action_logs')
+        .select('earned_xp')
+        .eq('user_id', uid);
+    final sum = (rows as List).fold<int>(0, (acc, e) => acc + ((e['earned_xp'] as int?) ?? 0));
+    if (kDebugMode) debugPrint('Total XP: $sum');
+    return sum;
   } catch (e) {
-    print('Error calculating total XP: $e');
+    if (kDebugMode) debugPrint('Error calculating total XP: $e');
     rethrow;
   }
 }
 
-/// XP-Schwelle für Level n (lineares System: 50 XP pro Level)
-int xpForLevel(int level) => level * 50;
+/// Aggregierte Aktivitäten pro Tag und Bereich (serverseitig via RPC)
+Future<Map<DateTime, Map<String, int>>> fetchDailyAreaTotals({
+  required DateTime month,
+}) async {
+  final uid = _db.auth.currentUser?.id;
+  if (uid == null) return {};
+  final start = DateTime(month.year, month.month, 1);
+  final end = DateTime(month.year, month.month + 1, 0);
+  final res = await _db.rpc('daily_activity_totals', params: {
+    'uid': uid,
+    'start_date': '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}',
+    'end_date': '${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}',
+  });
+  final out = <DateTime, Map<String, int>>{};
+  if (res is List) {
+    for (final row in res) {
+      final String? dayStr = row['day'] as String?;
+      if (dayStr == null) continue;
+      final String area = (row['area_key'] as String?) ?? 'unknown';
+      final int total = (row['total'] as num?)?.toInt() ?? 0;
+      final day = DateTime.parse(dayStr);
+      final key = DateTime(day.year, day.month, day.day);
+      final bucket = out.putIfAbsent(key, () => <String, int>{});
+      bucket[area] = total;
+    }
+  }
+  return out;
+}
 
-/// Level aus Gesamt-XP berechnen (lineares System: 50 XP pro Level)
+/// Detaillierte Aggregation (Count, Dauer, XP) pro Tag und Bereich via RPC
+Future<Map<DateTime, List<Map<String, dynamic>>>> fetchDailyAreaTotalsDetailed({
+  required DateTime month,
+}) async {
+  final uid = _db.auth.currentUser?.id;
+  if (uid == null) return {};
+  final start = DateTime(month.year, month.month, 1);
+  final end = DateTime(month.year, month.month + 1, 0);
+  final res = await _db.rpc('daily_activity_totals', params: {
+    'uid': uid,
+    'start_date': '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}',
+    'end_date': '${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}',
+  });
+  final out = <DateTime, List<Map<String, dynamic>>>{};
+  if (res is List) {
+    for (final row in res) {
+      final String? dayStr = row['day'] as String?;
+      if (dayStr == null) continue;
+      final day = DateTime.parse(dayStr);
+      final key = DateTime(day.year, day.month, day.day);
+      final item = {
+        'area_key': (row['area_key'] as String?) ?? 'unknown',
+        'total': (row['total'] as num?)?.toInt() ?? 0,
+        'sum_duration': (row['sum_duration'] as num?)?.toInt() ?? 0,
+        'sum_xp': (row['sum_xp'] as num?)?.toInt() ?? 0,
+      };
+      (out[key] ??= <Map<String, dynamic>>[]).add(item);
+    }
+  }
+  return out;
+}
+
+/// XP-Schwelle für Level n (lineares System: 100 XP pro Level)
+int xpForLevel(int level) => level * 100;
+
+/// Level aus Gesamt-XP berechnen (lineares System: 100 XP pro Level)
 int calculateLevel(int totalXp) {
   if (totalXp <= 0) return 1;
-  return (totalXp / 50).floor() + 1;
+  return (totalXp / 100).floor() + 1;
 }
 
 /// Ausführliche Level-Progress-Infos: aktuelles Level, XP seit Levelstart, XP bis nächstes Level
 Map<String, int> calculateLevelDetailed(int totalXp) {
   final level = calculateLevel(totalXp);
-  // 50 XP pro Level
-  final xpInto = totalXp % 50; // XP im aktuellen Level (Rest der Division)
-  final xpNeeded = 50; // Jedes Level benötigt 50 XP
+  // 100 XP pro Level
+  final xpInto = totalXp % 100; // XP im aktuellen Level (Rest der Division)
+  final xpNeeded = 100; // Jedes Level benötigt 100 XP
   
   return {
     'level': level,
@@ -407,8 +440,10 @@ Map<String, int> calculateLevelDetailed(int totalXp) {
 
 /// Lade alle Datumswerte (ohne Zeit) der letzten [days] Tage, an denen geloggt wurde
 Future<List<DateTime>> fetchLoggedDates(int days) async {
-  print('=== FETCH LOGGED DATES DEBUG ===');
-  print('Days: $days');
+  if (kDebugMode) {
+    debugPrint('=== FETCH LOGGED DATES DEBUG ===');
+    debugPrint('Days: $days');
+  }
   
   try {
     final since = DateTime.now().subtract(Duration(days: days));
@@ -416,7 +451,7 @@ Future<List<DateTime>> fetchLoggedDates(int days) async {
         .from('action_logs')
         .select('occurred_at')
         .gte('occurred_at', since.toIso8601String());
-    print('Logged dates result: $res');
+    if (kDebugMode) debugPrint('Logged dates result: $res');
     
     final dates = (res as List)
         .map((e) => DateTime.parse(e['occurred_at'] as String).toLocal())
@@ -424,10 +459,10 @@ Future<List<DateTime>> fetchLoggedDates(int days) async {
         .toSet()
         .toList()
       ..sort((a, b) => b.compareTo(a));
-    print('Processed dates: $dates');
+    if (kDebugMode) debugPrint('Processed dates: $dates');
     return dates;
   } catch (e) {
-    print('Error fetching logged dates: $e');
+    if (kDebugMode) debugPrint('Error fetching logged dates: $e');
     rethrow;
   }
 }
@@ -435,13 +470,13 @@ Future<List<DateTime>> fetchLoggedDates(int days) async {
 /// Berechnet die aktuelle Streak basierend auf zusammenhängenden Tagen,
 /// ausgehend vom zuletzt geloggten Tag (nicht zwingend heute).
 Future<int> calculateStreak() async {
-  print('=== CALCULATE STREAK DEBUG (RPC) ===');
+  if (kDebugMode) debugPrint('=== CALCULATE STREAK DEBUG (RPC) ===');
   try {
     final uid = _db.auth.currentUser?.id;
     if (uid == null) return 0;
     final res = await _db.rpc('calculate_streak', params: {'uid': uid});
     final rpc = (res is int) ? res : int.tryParse('$res') ?? 0;
-    print('Calculated streak (RPC): $rpc');
+    if (kDebugMode) debugPrint('Calculated streak (RPC): $rpc');
     // Fallback auf lokale Berechnung, falls RPC 0 liefert aber Daten vorhanden sind
     if (rpc > 0) return rpc;
     final dates = await fetchLoggedDates(60);
@@ -456,7 +491,7 @@ Future<int> calculateStreak() async {
     }
     return streak;
   } catch (e) {
-    print('Error calculating streak (RPC/local): $e');
+    if (kDebugMode) debugPrint('Error calculating streak (RPC/local): $e');
     return 0;
   }
 }

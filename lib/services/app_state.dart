@@ -121,7 +121,10 @@ class XpNotifier extends _$XpNotifier {
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => fetchTotalXp());
+    state = await AsyncValue.guard(() async {
+      final value = await fetchTotalXp();
+      return value;
+    });
   }
 }
 

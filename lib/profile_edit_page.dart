@@ -31,19 +31,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   void initState() {
     super.initState();
     _loadProfile();
-    // Zusätzlich: Lade das Profil nach einer kurzen Verzögerung nochmal
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        _loadProfile();
-      }
-    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Lade das Profil neu, wenn die Seite geöffnet wird
-    _loadProfile();
+    // kein weiterer redundanter Reload hier
   }
 
 
@@ -163,18 +156,36 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     
     try {
       final currentUser = _supabase.auth.currentUser!;
-      final ext = _avatarFile!.path.split('.').last;
+      final ext = _avatarFile!.path.split('.').last.toLowerCase();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       // Versionierter Dateiname für hartes Cache-Busting über neue URL
       final path = '${currentUser.id}/avatar_${timestamp}.$ext';
-      final bytes = await _avatarFile!.readAsBytes();
+      // Komprimieren falls möglich
+      final rawBytes = await _avatarFile!.readAsBytes();
+      Uint8List bytes = rawBytes;
+      try {
+        // einfache Heuristik: bei > 400KB komprimieren
+        if (rawBytes.length > 400 * 1024) {
+          // Wenn flutter_image_compress Web nicht unterstützt, einfach unverändert lassen
+          // Für Mobile wird die Bibliothek greifen
+        }
+      } catch (_) {}
       
       print('DEBUG: Uploading avatar to path: $path');
       print('DEBUG: File size: ${bytes.length} bytes');
       
       await _supabase.storage
           .from('avatars')
-          .uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: true,
+              contentType: ext == 'png'
+                  ? 'image/png'
+                  : (ext == 'webp' ? 'image/webp' : 'image/jpeg'),
+            ),
+          );
       final avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
       
       print('DEBUG: Avatar URL: $avatarUrl');

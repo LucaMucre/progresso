@@ -1,22 +1,12 @@
 import 'package:flutter/material.dart';
 import 'services/db_service.dart';
 import 'log_action_page.dart';
+import 'widgets/skeleton.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'services/app_state.dart';
 
-class TemplatesList extends StatefulWidget {
+class TemplatesList extends ConsumerWidget {
   const TemplatesList({Key? key}) : super(key: key);
-
-  @override
-  State<TemplatesList> createState() => _TemplatesListState();
-}
-
-class _TemplatesListState extends State<TemplatesList> {
-  late Future<List<ActionTemplate>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = fetchTemplates();
-  }
 
   Widget _getCategoryIcon(String category) {
     switch (category.toLowerCase()) {
@@ -59,11 +49,11 @@ class _TemplatesListState extends State<TemplatesList> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<ActionTemplate>>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final templatesAsync = ref.watch(templatesNotifierProvider);
+    return templatesAsync.when(
+      loading: () => const SkeletonList(itemCount: 6),
+      error: (error, stack) {
           return Container(
             padding: const EdgeInsets.all(20),
             child: Center(
@@ -76,12 +66,12 @@ class _TemplatesListState extends State<TemplatesList> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-    'Error loading',
+                    'Error loading',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                       Text(
-                        '${snapshot.error}',
+                        '$error',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -91,18 +81,8 @@ class _TemplatesListState extends State<TemplatesList> {
               ),
             ),
           );
-        }
-        
-        if (!snapshot.hasData) {
-          return Container(
-            padding: const EdgeInsets.all(40),
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
-        
-        final templates = snapshot.data!;
+      },
+      data: (templates) {
         
         if (templates.isEmpty) {
           return Container(

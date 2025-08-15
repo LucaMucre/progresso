@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'db_service.dart';
+import '../models/action_models.dart' as models;
 
 class OfflineCache {
   static const String _templatesKey = 'cached_templates';
@@ -15,9 +18,21 @@ class OfflineCache {
   // TTL in Stunden
   static const int _cacheTtlHours = 1;
 
+  // Hilfsfunktion: Namespacing pro Benutzer
+  static Future<String> _nsKey(String baseKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    // Zusätzlich letzten eingeloggten User mitschreiben (für Debug/Invalidation)
+    if (uid != null) {
+      await prefs.setString('last_uid', uid);
+    }
+    return uid == null ? baseKey : '${baseKey}_$uid';
+  }
+
   // Templates cachen
   static Future<void> cacheTemplates(List<ActionTemplate> templates) async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _nsKey(_templatesKey);
     final templatesJson = templates.map((t) => {
       'id': t.id,
       'name': t.name,
@@ -28,7 +43,7 @@ class OfflineCache {
       'attr_knowledge': t.attrKnowledge,
     }).toList();
     
-    await prefs.setString(_templatesKey, jsonEncode(templatesJson));
+    await prefs.setString(key, jsonEncode(templatesJson));
     await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
     await prefs.setInt(_cacheVersionKey, _currentVersion);
   }
@@ -36,6 +51,7 @@ class OfflineCache {
   // Templates aus Cache laden
   static Future<List<ActionTemplate>> getCachedTemplates() async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _nsKey(_templatesKey);
     
     // Prüfe Cache-Version
     final version = prefs.getInt(_cacheVersionKey);
@@ -50,14 +66,14 @@ class OfflineCache {
       return [];
     }
     
-    final templatesJson = prefs.getString(_templatesKey);
+    final templatesJson = prefs.getString(key);
     if (templatesJson == null) return [];
     
     try {
       final List<dynamic> templatesList = jsonDecode(templatesJson);
-      return templatesList.map((json) => ActionTemplate.fromMap(json)).toList();
+      return templatesList.map((json) => models.ActionTemplate.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
-      print('Error loading cached templates: $e');
+      if (kDebugMode) debugPrint('Error loading cached templates: $e');
       await clearCache();
       return [];
     }
@@ -66,6 +82,7 @@ class OfflineCache {
   // Logs cachen
   static Future<void> cacheLogs(List<ActionLog> logs) async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _nsKey(_logsKey);
     final logsJson = logs.map((l) => {
       'id': l.id,
       'occurred_at': l.occurredAt.toIso8601String(),
@@ -75,7 +92,7 @@ class OfflineCache {
       'template_id': l.templateId,
     }).toList();
     
-    await prefs.setString(_logsKey, jsonEncode(logsJson));
+    await prefs.setString(key, jsonEncode(logsJson));
     await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
     await prefs.setInt(_cacheVersionKey, _currentVersion);
   }
@@ -83,6 +100,7 @@ class OfflineCache {
   // Logs aus Cache laden
   static Future<List<ActionLog>> getCachedLogs() async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _nsKey(_logsKey);
     
     // Prüfe Cache-Version
     final version = prefs.getInt(_cacheVersionKey);
@@ -97,14 +115,14 @@ class OfflineCache {
       return [];
     }
     
-    final logsJson = prefs.getString(_logsKey);
+    final logsJson = prefs.getString(key);
     if (logsJson == null) return [];
     
     try {
       final List<dynamic> logsList = jsonDecode(logsJson);
-      return logsList.map((json) => ActionLog.fromMap(json)).toList();
+      return logsList.map((json) => models.ActionLog.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
-      print('Error loading cached logs: $e');
+      if (kDebugMode) debugPrint('Error loading cached logs: $e');
       await clearCache();
       return [];
     }
@@ -113,7 +131,8 @@ class OfflineCache {
   // Profile cachen
   static Future<void> cacheProfile(Map<String, dynamic> profile) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profileKey, jsonEncode(profile));
+    final key = await _nsKey(_profileKey);
+    await prefs.setString(key, jsonEncode(profile));
     await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
     await prefs.setInt(_cacheVersionKey, _currentVersion);
   }
@@ -121,6 +140,7 @@ class OfflineCache {
   // Profile aus Cache laden
   static Future<Map<String, dynamic>?> getCachedProfile() async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _nsKey(_profileKey);
     
     // Prüfe Cache-Version
     final version = prefs.getInt(_cacheVersionKey);
@@ -135,13 +155,13 @@ class OfflineCache {
       return null;
     }
     
-    final profileJson = prefs.getString(_profileKey);
+    final profileJson = prefs.getString(key);
     if (profileJson == null) return null;
     
     try {
       return jsonDecode(profileJson) as Map<String, dynamic>;
     } catch (e) {
-      print('Error loading cached profile: $e');
+      if (kDebugMode) debugPrint('Error loading cached profile: $e');
       await clearCache();
       return null;
     }
@@ -164,9 +184,13 @@ class OfflineCache {
   // Cache löschen
   static Future<void> clearCache() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_templatesKey);
-    await prefs.remove(_logsKey);
-    await prefs.remove(_profileKey);
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final tKey = uid == null ? _templatesKey : '${_templatesKey}_$uid';
+    final lKey = uid == null ? _logsKey : '${_logsKey}_$uid';
+    final pKey = uid == null ? _profileKey : '${_profileKey}_$uid';
+    await prefs.remove(tKey);
+    await prefs.remove(lKey);
+    await prefs.remove(pKey);
     await prefs.remove(_lastSyncKey);
     await prefs.remove(_cacheVersionKey);
     // Do NOT clear achievements here; they are user-scoped and persistent
@@ -175,15 +199,19 @@ class OfflineCache {
   // Cache-Größe prüfen
   static Future<int> getCacheSize() async {
     final prefs = await SharedPreferences.getInstance();
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final tKey = uid == null ? _templatesKey : '${_templatesKey}_$uid';
+    final lKey = uid == null ? _logsKey : '${_logsKey}_$uid';
+    final pKey = uid == null ? _profileKey : '${_profileKey}_$uid';
     int size = 0;
     
-    final templates = prefs.getString(_templatesKey);
+    final templates = prefs.getString(tKey);
     if (templates != null) size += templates.length;
     
-    final logs = prefs.getString(_logsKey);
+    final logs = prefs.getString(lKey);
     if (logs != null) size += logs.length;
     
-    final profile = prefs.getString(_profileKey);
+    final profile = prefs.getString(pKey);
     if (profile != null) size += profile.length;
     
     return size;
@@ -210,6 +238,6 @@ class OfflineCache {
   // Cache manuell invalidieren
   static Future<void> invalidateCache() async {
     await clearCache();
-    print('Cache invalidated');
+    if (kDebugMode) debugPrint('Cache invalidated');
   }
 } 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/life_areas_service.dart';
@@ -84,11 +86,11 @@ class _CharacterWidgetState extends State<CharacterWidget> {
             _userAvatarUrl = res['avatar_url'];
             _cacheBust = DateTime.now().millisecondsSinceEpoch;
           });
-          print('DEBUG: BubbleWidget - Loaded avatar_url: $_userAvatarUrl');
+          if (kDebugMode) debugPrint('DEBUG: BubbleWidget - Loaded avatar_url: $_userAvatarUrl');
         }
       }
     } catch (e) {
-      print('Fehler beim Laden des User-Avatars: $e');
+      if (kDebugMode) debugPrint('Fehler beim Laden des User-Avatars: $e');
     }
   }
 
@@ -184,25 +186,22 @@ class _CharacterWidgetState extends State<CharacterWidget> {
           Center(
             child: avatarUrl != null
                 ? ClipOval(
-                    child: Image.network(
-                      avatarUrl,
-                      key: ValueKey(avatarUrl),
+                    child: CachedNetworkImage(
+                      imageUrl: avatarUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        print('Avatar load error: $error');
+                      fadeInDuration: const Duration(milliseconds: 200),
+                      placeholder: (context, url) => const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      errorWidget: (context, url, error) {
+                        if (kDebugMode) debugPrint('Avatar load error: $error');
                         return const Icon(
                           Icons.person,
                           size: 40,
                           color: Colors.white,
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 2,
-                          ),
                         );
                       },
                     ),

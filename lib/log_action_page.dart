@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'services/level_up_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'services/app_state.dart';
 
 class LogActionPage extends StatefulWidget {
   final ActionTemplate? template;
@@ -332,6 +334,14 @@ class _LogActionPageState extends State<LogActionPage> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
+
+      // Provider invalidieren, damit Dashboard-Header/Charts/Streak/XP aktualisieren
+      try {
+        final container = ProviderScope.containerOf(context, listen: false);
+        container.refresh(logsNotifierProvider);
+        container.refresh(xpNotifierProvider);
+        container.refresh(streakNotifierProvider);
+      } catch (_) {}
 
       // Level-Up-Event SOFORT setzen (vor Achievement-Prüfung), damit Reihenfolge stimmt
       if (didLevelUp) {

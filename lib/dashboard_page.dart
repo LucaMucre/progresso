@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +15,8 @@ import 'services/life_areas_service.dart';
 import 'services/avatar_sync_service.dart';
 import 'widgets/bubble_widget.dart';
 import 'widgets/profile_header_widget.dart';
+import 'dashboard/widgets/dashboard_header.dart';
+import 'dashboard/widgets/gallery_filters.dart';
 import 'templates_page.dart';
 import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
@@ -21,6 +24,12 @@ import 'services/level_up_service.dart';
 import 'services/achievement_service.dart';
 import 'settings_page.dart';
 import 'navigation.dart';
+import 'dashboard/widgets/calendar_view.dart';
+import 'dashboard/widgets/calendar_header.dart';
+import 'dashboard/widgets/calendar_grid.dart';
+import 'widgets/skeleton.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'services/app_state.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -33,7 +42,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   // Add a counter to force FutureBuilder rebuild
   int _refreshCounter = 0;
   Future<List<LifeArea>>? _lifeAreasFuture; // cache to avoid refetch on minor rebuilds
-  Future<int>? _streakFuture;
   Future<Map<String, dynamic>>? _globalStatsFuture;
   Future<List<int>>? _globalActivity7dFuture;
   Future<Map<String, dynamic>>? _globalDurationStacksFuture;
@@ -46,6 +54,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   // Ensure default life areas are only created once even if multiple builders call _loadLifeAreas()
   Future<void>? _ensureDefaultsFuture;
+  // Debounce timer for realtime refreshes
+  Timer? _realtimeDebounce;
 
   @override
   void didChangeDependencies() {
@@ -54,59 +64,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
-  /// Build filter chip row for gallery by life areas
-  Widget _buildGalleryFilters(BuildContext context) {
-    final theme = Theme.of(context);
-    final areas = [
-      'General',
-      'Fitness',
-      'Nutrition',
-      'Learning',
-      'Finance',
-      'Art',
-      'Relationships',
-      'Spirituality',
-      'Career',
-    ];
-
-    String? display = _selectedAreaFilterName;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: const Text('All'),
-              selected: display == null || display.isEmpty,
-              onSelected: (_) {
-                setState(() {
-                  _selectedAreaFilterName = null;
-                  _refreshCounter++; // force FutureBuilder refresh
-                });
-              },
-            ),
-          ),
-          ...areas.map((name) => Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(name),
-                  selected: display != null && LifeAreasService.canonicalAreaName(display) == LifeAreasService.canonicalAreaName(name),
-                  onSelected: (_) {
-                    setState(() {
-                      _selectedAreaFilterName = name;
-                      _refreshCounter++; // trigger rebuild
-                    });
-                  },
-                ),
-              )),
-        ],
-      ),
-    );
-  }
+  // moved: gallery filters extracted into GalleryFilters widget
 
   @override
   void dispose() {
+    _realtimeDebounce?.cancel();
     routeObserver.unsubscribe(this);
     super.dispose();
   }
@@ -119,6 +81,17 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await LevelUpService.showPendingAchievements(context: context);
+      // Nach Rückkehr Daten aktualisieren (Stats/Charts/Streak)
+      setState(() {
+        _globalStatsFuture = _calculateGlobalStatistics();
+        _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+        _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
+      });
+      try {
+        // Riverpod Provider invalidieren, damit Streak neu berechnet wird
+        final container = ProviderScope.containerOf(context, listen: false);
+        container.refresh(streakNotifierProvider);
+      } catch (_) {}
     });
   }
 
@@ -126,7 +99,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   void initState() {
     super.initState();
     _lifeAreasFuture = _loadLifeAreas();
-    _streakFuture = calculateStreak();
     _globalStatsFuture = _calculateGlobalStatistics();
     _globalActivity7dFuture = _getGlobalLast7DaysActivity();
     _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
@@ -144,6 +116,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       AchievementService.setOnAchievementUnlocked((a) {
         LevelUpService.queueAchievement(a);
       });
+    // Ensure achievements are loaded for the current session user on dashboard start
+    // This prevents re-showing already unlocked achievements after login/logout
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await AchievementService.loadUnlockedAchievements();
+    });
       // If any achievements were queued while another page was open, show them now
       LevelUpService.showPendingAchievements(context: context);
       // Nach Schließen von Dialogen nichts forcieren
@@ -155,49 +132,57 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     // Realtime: Änderungen an action_logs triggern Refresh (sanft ohne aggressive setState)
     try {
       final client = Supabase.instance.client;
-    client
+      client
           .channel('realtime-logs')
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'INSERT', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) { 
-              if (mounted && !LevelUpService.isShowingDialogs) {
+            (payload, [ref]) {
+              if (!mounted || LevelUpService.isShowingDialogs) return;
+              _realtimeDebounce?.cancel();
+              _realtimeDebounce = Timer(const Duration(milliseconds: 250), () {
+                if (!mounted) return;
                 setState(() {
                   _refreshCounter++;
-                  // refresh cached data that depends on logs
                   _globalStatsFuture = _calculateGlobalStatistics();
                   _globalActivity7dFuture = _getGlobalLast7DaysActivity();
                   _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
                 });
-              }
+              });
             },
           )
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'UPDATE', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) { 
-              if (mounted && !LevelUpService.isShowingDialogs) {
+            (payload, [ref]) {
+              if (!mounted || LevelUpService.isShowingDialogs) return;
+              _realtimeDebounce?.cancel();
+              _realtimeDebounce = Timer(const Duration(milliseconds: 250), () {
+                if (!mounted) return;
                 setState(() {
                   _refreshCounter++;
                   _globalStatsFuture = _calculateGlobalStatistics();
                   _globalActivity7dFuture = _getGlobalLast7DaysActivity();
                   _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
                 });
-              }
+              });
             },
           )
           .on(
             RealtimeListenTypes.postgresChanges,
             ChannelFilter(event: 'DELETE', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) { 
-              if (mounted && !LevelUpService.isShowingDialogs) {
+            (payload, [ref]) {
+              if (!mounted || LevelUpService.isShowingDialogs) return;
+              _realtimeDebounce?.cancel();
+              _realtimeDebounce = Timer(const Duration(milliseconds: 250), () {
+                if (!mounted) return;
                 setState(() {
                   _refreshCounter++;
                   _globalStatsFuture = _calculateGlobalStatistics();
                   _globalActivity7dFuture = _getGlobalLast7DaysActivity();
                   _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
                 });
-              }
+              });
             },
           )
           .subscribe();
@@ -268,7 +253,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           .gte('occurred_at', start.toIso8601String())
           .lt('occurred_at', end.toIso8601String())
           .order('occurred_at');
-      return (res as List).map((m) => ActionLog.fromMap(m as Map<String, dynamic>)).toList();
+      return (res as List).map((m) => ActionLog.fromJson(m as Map<String, dynamic>)).toList();
     } on PostgrestException catch (e) {
       // Fallback when activity_name column doesn't exist
       if ((e.message ?? '').contains('activity_name')) {
@@ -279,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             .gte('occurred_at', start.toIso8601String())
             .lt('occurred_at', end.toIso8601String())
             .order('occurred_at');
-        return (res as List).map((m) => ActionLog.fromMap(m as Map<String, dynamic>)).toList();
+        return (res as List).map((m) => ActionLog.fromJson(m as Map<String, dynamic>)).toList();
       }
       rethrow;
     }
@@ -366,6 +351,57 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   ],
                 ),
                 const SizedBox(height: 8),
+                FutureBuilder<Map<DateTime, List<Map<String, dynamic>>>>(
+                  future: fetchDailyAreaTotalsDetailed(month: DateTime(day.year, day.month, 1)),
+                  builder: (context, snap) {
+                    if (snap.connectionState != ConnectionState.done || snap.data == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final rows = snap.data![DateTime(day.year, day.month, day.day)] ?? const [];
+                    if (rows.isEmpty) return const SizedBox.shrink();
+                    final known = rows.where((r) => (r['area_key'] as String?) != 'unknown').toList();
+                    final list = known.isNotEmpty ? known : rows;
+                    list.sort((a, b) {
+                      final c = (b['total'] as int).compareTo(a['total'] as int);
+                      if (c != 0) return c;
+                      final d = (b['sum_duration'] as int).compareTo(a['sum_duration'] as int);
+                      if (d != 0) return d;
+                      final x = (b['sum_xp'] as int).compareTo(a['sum_xp'] as int);
+                      if (x != 0) return x;
+                      return ((a['area_key'] as String?) ?? '').compareTo(((b['area_key'] as String?) ?? ''));
+                    });
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: list.map((r) {
+                          final String area = (r['area_key'] as String?) ?? 'unknown';
+                          final int total = (r['total'] as num?)?.toInt() ?? 0;
+                          final int mins = (r['sum_duration'] as num?)?.toInt() ?? 0;
+                          final int xp = (r['sum_xp'] as num?)?.toInt() ?? 0;
+                          final color = _colorForAreaKey(area);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.10),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: color.withOpacity(0.25)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                                const SizedBox(width: 6),
+                                Text('$area: $total • ${mins}m • +$xp'),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                ),
                 if (logs.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(12),
@@ -602,29 +638,22 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           ),
           const SizedBox(height: 12),
           // Gallery filter chips by life area
-          _buildGalleryFilters(context),
+          GalleryFilters(
+            selectedAreaFilterName: _selectedAreaFilterName,
+            onSelected: (name) => setState(() {
+              _selectedAreaFilterName = name;
+              _refreshCounter++;
+            }),
+          ),
           const SizedBox(height: 16),
           SizedBox(
             height: 400, // Fixed height for gallery
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              key: ValueKey(_refreshCounter),
-              future: _fetchAllImages(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text('Loading photos...'),
-                      ],
-                    ),
-                  );
-                }
-
-                if (snapshot.hasError) {
-                  return Center(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final logsAsync = ref.watch(logsNotifierProvider);
+                return logsAsync.when(
+                  loading: () => const Center(child: SkeletonCard(height: 180)),
+                  error: (e, st) => Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -640,175 +669,49 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         ),
                       ],
                     ),
-                  );
-                }
-
-                List<Map<String, dynamic>> images = List<Map<String, dynamic>>.from(snapshot.data ?? const []);
-                // Apply client-side filter by life area if selected
-                if (_selectedAreaFilterName != null && _selectedAreaFilterName!.trim().isNotEmpty) {
-                  final selectedCanonical = LifeAreasService.canonicalAreaName(_selectedAreaFilterName);
-                  images = images.where((img) {
-                    final area = _extractActivityArea(img);
-                    final name = area['name'] as String?;
-                    return LifeAreasService.canonicalAreaName(name) == selectedCanonical;
-                  }).toList();
-                }
-                
-                if (images.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.photo_library_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No photos yet',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Start adding photos to your activities!',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
-                              ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return GridView.builder(
-                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: MediaQuery.of(context).size.width < 420 ? 2 : 3,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 1.0,
                   ),
-                  itemCount: images.length,
-                  itemBuilder: (context, index) {
-                    final imageData = images[index];
-                    final imageUrl = imageData['image_url'] as String;
-                    final date = DateTime.parse(imageData['occurred_at']);
-                    final title = _extractActivityTitle(imageData);
-                    final area = _extractActivityArea(imageData);
-
-                    return GestureDetector(
-                      onTap: () => _showImageFullscreen(context, imageData, images, index),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+                  data: (_) {
+                    return FutureBuilder<List<Map<String, dynamic>>>(
+                      key: ValueKey(_refreshCounter),
+                      future: _fetchAllImages(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: SkeletonCard(height: 180));
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 48,
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Error loading photos',
+                                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // Request a transformed thumbnail from Supabase (width ~ 600)
-                              CachedNetworkImage(
-                                imageUrl: _thumbUrl(imageUrl, width: 600),
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: Theme.of(context).colorScheme.errorContainer,
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    color: Theme.of(context).colorScheme.onErrorContainer,
-                                  ),
-                                ),
-                              ),
-                              // Life area indicator in top-right corner
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Color(int.parse(area['color'].substring(1), radix: 16) + 0xFF000000).withOpacity(0.9),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        area['icon'],
-                                        color: Colors.white,
-                                        size: 12,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        area['name'],
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              // Gradient overlay for text readability
-                              Positioned(
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.black.withOpacity(0.7),
-                                      ],
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.all(8),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        title,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        DateFormat('MMM d').format(date),
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.8),
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                          );
+                        }
+                        List<Map<String, dynamic>> images = List<Map<String, dynamic>>.from(snapshot.data ?? const []);
+                        // Apply client-side filter by life area if selected
+                        if (_selectedAreaFilterName != null && _selectedAreaFilterName!.trim().isNotEmpty) {
+                          final selectedCanonical = LifeAreasService.canonicalAreaName(_selectedAreaFilterName);
+                          images = images.where((img) {
+                            final area = _extractActivityArea(img);
+                            final name = area['name'] as String?;
+                            return LifeAreasService.canonicalAreaName(name) == selectedCanonical;
+                          }).toList();
+                        }
+                        if (images.isEmpty) {
+                          return const Center(child: Text('No photos yet'));
+                        }
+                        return _buildImageGrid(images);
+                      },
                     );
                   },
                 );
@@ -1028,76 +931,31 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   }
 
   Widget _buildCalendarContainer(BuildContext context) {
-  final monthLabel = DateFormat.yMMMM('en_US').format(_calendarMonth);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: _goToPreviousMonth,
-  tooltip: 'Previous month',
-              ),
-              Text(
-                monthLabel,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _goToNextMonth,
-  tooltip: 'Next month',
-              ),
-              const Spacer(),
-              FutureBuilder<List<LifeArea>>(
-                future: _lifeAreasFuture,
-                builder: (context, snap) {
-                  final areas = snap.data ?? const <LifeArea>[];
-                  final items = <DropdownMenuItem<String?>>[
-                    const DropdownMenuItem(value: null, child: Text('Alle Bereiche')),
-                    ...areas.map((a) => DropdownMenuItem<String?>(value: a.name, child: Text(a.name))).toList(),
-                  ];
-                  final availableNames = areas.map((a) => a.name).toSet();
-                  final dropdownValue = (availableNames.contains(_selectedAreaFilterName))
-                      ? _selectedAreaFilterName
-                      : null;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.2)),
-                    ),
-                    child: DropdownButton<String?>
-                    (
-                      value: dropdownValue,
-                      items: items,
-                      underline: const SizedBox.shrink(),
-                      onChanged: (v) {
-                        setState(() {
-                          _selectedAreaFilterName = v;
-                        });
-                      },
-                    ),
-                  );
-                },
-              ),
-            ],
+          FutureBuilder<List<LifeArea>>(
+            future: _lifeAreasFuture,
+            builder: (context, snap) {
+              final areas = snap.data ?? const <LifeArea>[];
+              return CalendarHeader(
+                month: _calendarMonth,
+                onPrev: _goToPreviousMonth,
+                onNext: _goToNextMonth,
+                areaNames: areas.map((a) => a.name).toList(),
+                selectedAreaName: _selectedAreaFilterName,
+                onAreaSelected: (v) => setState(() => _selectedAreaFilterName = v),
+              );
+            },
           ),
           const SizedBox(height: 12),
           Row(
@@ -1113,66 +971,134 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ],
           ),
           const SizedBox(height: 8),
-          FutureBuilder<Map<DateTime, List<_DayEntry>>>(
-            future: _loadCalendarLogsForMonth(_calendarMonth, areaFilterName: _selectedAreaFilterName),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final data = snapshot.data ?? {};
-              // Zähle pro Lebensbereich (areaKey) die Anzahl im Monat
-              final Map<String, int> monthAreaCounts = {};
-              data.values.forEach((list) {
-                for (final e in list) {
-                  if (e.areaKey != null) {
-                    monthAreaCounts[e.areaKey!] = (monthAreaCounts[e.areaKey!] ?? 0) + 1;
-                  }
-                }
-              });
-
-              final firstDayOfMonth = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
-              final daysInMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0).day;
-              final leadingEmpty = (firstDayOfMonth.weekday + 6) % 7; // 0 for Monday, ... 6 for Sunday
-
-              final totalCells = leadingEmpty + daysInMonth;
-              final rows = <TableRow>[];
-              int dayCounter = 1;
-
-              for (int r = 0; r < (totalCells / 7.0).ceil(); r++) {
-                final cells = <Widget>[];
-                for (int c = 0; c < 7; c++) {
-                  final cellIndex = r * 7 + c;
-                  if (cellIndex < leadingEmpty || dayCounter > daysInMonth) {
-                    cells.add(Container(height: 84));
-                  } else {
-                    final dayDate = DateTime(_calendarMonth.year, _calendarMonth.month, dayCounter);
-                    final entries = data[dayDate] ?? const <_DayEntry>[];
-                    cells.add(_CalendarDayCell(
-                      day: dayCounter,
-                      entries: entries,
-                      onTap: () => _openDayDetails(dayDate),
-                      monthAreaCounts: monthAreaCounts,
-                    ));
-                    dayCounter++;
-                  }
-                }
-                rows.add(TableRow(children: cells));
-              }
-
-              return Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(),
-                  1: FlexColumnWidth(),
-                  2: FlexColumnWidth(),
-                  3: FlexColumnWidth(),
-                  4: FlexColumnWidth(),
-                  5: FlexColumnWidth(),
-                  6: FlexColumnWidth(),
+          Consumer(
+            builder: (context, ref, _) {
+              final logsAsync = ref.watch(logsNotifierProvider);
+              return logsAsync.when(
+                loading: () {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
                 },
-                children: rows,
+                error: (e, st) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('Error loading calendar')),
+                  );
+                },
+                data: (logs) {
+                  final data = <DateTime, List<_DayEntry>>{};
+                  for (final l in logs) {
+                    final d = l.occurredAt.toLocal();
+                    final key = DateTime(d.year, d.month, d.day);
+                    if (key.year != _calendarMonth.year || key.month != _calendarMonth.month) continue;
+                    if (_selectedAreaFilterName != null) {
+                      try {
+                        if (l.notes != null) {
+                          final obj = jsonDecode(l.notes!);
+                          final area = obj is Map<String, dynamic> ? (obj['area'] as String?) : null;
+                          if (area != null && area != _selectedAreaFilterName) continue;
+                        }
+                      } catch (_) {}
+                    }
+                    final fromNotes = extractTitleFromNotes(l.notes);
+                    final title = l.activityName ?? fromNotes ?? 'Activity';
+                    Color? color;
+                    try {
+                      if (l.notes != null && l.notes!.isNotEmpty) {
+                        final obj = jsonDecode(l.notes!);
+                        if (obj is Map<String, dynamic>) {
+                          final area = (obj['area'] as String?)?.toLowerCase();
+                          final cat = (obj['category'] as String?)?.toLowerCase();
+
+                          // Prefer area-specific color when available
+                          switch (area) {
+                            case 'spirituality':
+                              color = Colors.grey; // requested grey for Spiritualität
+                              break;
+                            case 'finance':
+                              color = Colors.amber;
+                              break;
+                            case 'career':
+                              color = Colors.brown;
+                              break;
+                            case 'learning':
+                              color = Colors.blueGrey;
+                              break;
+                          }
+
+                          // Fallback to category if area not mapped
+                          if (color == null) {
+                            switch (cat) {
+                              case 'health':
+                                color = Colors.green;
+                                break;
+                              case 'work':
+                                color = Colors.brown;
+                                break;
+                              case 'finance':
+                                color = Colors.amber;
+                                break;
+                              case 'social':
+                                color = Colors.pink;
+                                break;
+                              case 'inner':
+                                color = Colors.grey; // treat "Inner" as neutral/grey
+                                break;
+                              case 'development':
+                                color = Colors.blueGrey;
+                                break;
+                              case 'creativity':
+                                color = Colors.purple;
+                                break;
+                              default:
+                                color = Colors.grey; // neutral default
+                            }
+                          }
+                        }
+                      }
+                    } catch (_) {}
+                    (data[key] ??= []).add(_DayEntry(title: title, color: color));
+                  }
+                  final mapped = <DateTime, List<CalendarDayEntry>>{};
+                  data.forEach((k, v) {
+                    mapped[k] = v.map((e) => CalendarDayEntry(title: e.title, color: e.color)).toList();
+                  });
+                  return FutureBuilder<Map<DateTime, List<Map<String, dynamic>>>>(
+                    future: fetchDailyAreaTotalsDetailed(month: _calendarMonth),
+                    builder: (context, snap) {
+                      final Map<DateTime, Color> dominant = {};
+                      final agg = snap.data;
+                      if (agg != null) {
+                        agg.forEach((day, rows) {
+                          // Optional: ignoriere 'unknown', wenn es bekannte Bereiche gibt
+                          final known = rows.where((r) => (r['area_key'] as String?) != 'unknown').toList();
+                          final list = known.isNotEmpty ? known : rows;
+                          list.sort((a, b) {
+                            final c = (b['total'] as int).compareTo(a['total'] as int);
+                            if (c != 0) return c;
+                            final d = (b['sum_duration'] as int).compareTo(a['sum_duration'] as int);
+                            if (d != 0) return d;
+                            final x = (b['sum_xp'] as int).compareTo(a['sum_xp'] as int);
+                            if (x != 0) return x;
+                            return ((a['area_key'] as String?) ?? '').compareTo(((b['area_key'] as String?) ?? ''));
+                          });
+                          final top = list.isNotEmpty ? (list.first['area_key'] as String?) : null;
+                          if (top != null) {
+                            dominant[day] = _colorForAreaKey(top);
+                          }
+                        });
+                      }
+                      return CalendarGrid(
+                        month: _calendarMonth,
+                        dayEntries: mapped,
+                        dayDominantColors: dominant.isEmpty ? null : dominant,
+                        onOpenDay: _openDayDetails,
+                      );
+                    },
+                  );
+                },
               );
             },
           ),
@@ -1212,6 +1138,29 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         );
       default:
         return const SizedBox.shrink();
+    }
+  }
+
+  Color _colorForAreaKey(String area) {
+    switch (area.toLowerCase()) {
+      case 'spirituality':
+      case 'inner':
+        return Colors.grey;
+      case 'finance':
+        return Colors.amber;
+      case 'career':
+      case 'work':
+        return Colors.brown;
+      case 'learning':
+      case 'development':
+        return Colors.blueGrey;
+      case 'relationships':
+      case 'social':
+        return Colors.pink;
+      case 'health':
+        return Colors.green;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -1689,16 +1638,14 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       ),
                     ],
                   ),
-                  child: FutureBuilder<int>(
-                    future: _streakFuture,
-                    builder: (ctx, snap) {
-                      if (snap.connectionState != ConnectionState.done) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snap.hasError) {
-  return Text('Error: ${snap.error}');
-                      }
-                      final streak = snap.data ?? 0;
+                  child: _StreakConsumer(
+                    onRetry: () {
+                      try {
+                        final container = ProviderScope.containerOf(context, listen: false);
+                        container.refresh(streakNotifierProvider);
+                      } catch (_) {}
+                    },
+                    builder: (context, streak) {
                       final badge = badgeLevel(streak);
 
                       return Row(
@@ -1753,7 +1700,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       const Expanded(
                         child: SizedBox(
                           height: heroRowHeight,
-                          child: ProfileHeaderWidget(),
+                          child: DashboardHeader(),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -1764,7 +1711,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
                 return Column(
                   children: [
-                    const ProfileHeaderWidget(),
+                    const DashboardHeader(),
                     const SizedBox(height: 24),
                     streakCard,
                   ],
@@ -1854,7 +1801,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
             // Life Areas content (Bubbles, Calendar, or Gallery)
             _viewMode == 1
-                ? _buildCalendarContainer(context)
+          ? _buildCalendarContainer(context)
                 : _viewMode == 2
                     ? _buildGalleryContainer(context)
                     : Container(
@@ -2191,71 +2138,68 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               ),
             ],
           ),
-          child: FutureBuilder<Map<String, dynamic>>(
-            future: _globalStatsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              
-              if (snapshot.hasError) {
-                return const Padding(
+          child: Consumer(
+            builder: (context, ref, _) {
+              final logsAsync = ref.watch(logsNotifierProvider);
+              return logsAsync.when(
+                loading: () => Column(
+                  children: const [
+                    SkeletonCard(height: 100),
+                    SkeletonCard(height: 100),
+                  ],
+                ),
+                error: (e, st) => const Padding(
                   padding: EdgeInsets.all(20),
                   child: Center(child: Text('Error loading statistics')),
-                );
-              }
-              
-              final stats = snapshot.data ?? {};
-              final totalXp = stats['totalXp'] ?? 0;
-              final activityCount = stats['activityCount'] ?? 0;
-              final averageDuration = stats['averageDuration'] ?? 0.0;
-              
-              return Column(
-                children: [
-                  // Stats Row
-                  Row(
+                ),
+                data: (logs) {
+                  final totalXp = logs.fold<int>(0, (sum, l) => sum + l.earnedXp);
+                  final activityCount = logs.length;
+                  final totalDuration = logs.where((l) => l.durationMin != null).fold<int>(0, (s, l) => s + (l.durationMin ?? 0));
+                  final averageDuration = activityCount > 0 ? totalDuration / activityCount : 0.0;
+
+                  return Column(
                     children: [
-                      Expanded(
-                        child: _buildGlobalStatCard(
-                          context,
-                          icon: Icons.star,
-                          title: 'Total XP',
-                          value: '$totalXp',
-                          color: Colors.amber,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildGlobalStatCard(
+                              context,
+                              icon: Icons.star,
+                              title: 'Total XP',
+                              value: '$totalXp',
+                              color: Colors.amber,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildGlobalStatCard(
+                              context,
+                              icon: Icons.trending_up,
+                              title: 'Activities',
+                              value: '$activityCount',
+                              color: Colors.blue,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildGlobalStatCard(
+                              context,
+                              icon: Icons.timer,
+                              title: 'Avg duration',
+                              value: _formatDuration(averageDuration),
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildGlobalStatCard(
-                          context,
-                          icon: Icons.trending_up,
-        title: 'Activities',
-                          value: '$activityCount',
-                          color: Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildGlobalStatCard(
-                          context,
-                          icon: Icons.timer,
-                          title: 'Avg duration',
-                          value: _formatDuration(averageDuration),
-                          color: Colors.green,
-                        ),
-                      ),
+                      const SizedBox(height: 16),
+                      _buildGlobalActivityGraph(context),
+                      const SizedBox(height: 12),
+                      _buildGlobalDurationGraph(context),
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Aktivitätsanzahl der letzten 7 Tage
-                  if (activityCount > 0) _buildGlobalActivityGraph(context),
-                  const SizedBox(height: 12),
-                  // Dauer in Minuten pro Tag (letzte 7 Tage)
-                  _buildGlobalDurationGraph(context),
-                ],
+                  );
+                },
               );
             },
           ),
@@ -2309,10 +2253,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       future: _globalActivity7dFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 220,
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const SkeletonCard(height: 220);
         }
         
         if (snapshot.hasError || !snapshot.hasData) {
@@ -2500,10 +2441,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       future: _globalDurationStacksFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 220,
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const SkeletonCard(height: 220);
         }
 
         if (snapshot.hasError || !snapshot.hasData) {
@@ -2896,6 +2834,73 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Color _parseColor(String hex) {
     return Color(int.parse(hex.replaceAll('#', '0xFF')));
+  }
+
+  Widget _buildImageGrid(List<Map<String, dynamic>> images) {
+    final crossAxisCount = 3;
+    final spacing = 8.0;
+    return GridView.builder(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        mainAxisSpacing: spacing,
+        crossAxisSpacing: spacing,
+        childAspectRatio: 1,
+      ),
+      itemCount: images.length,
+      itemBuilder: (context, index) {
+        final data = images[index];
+        final imageUrl = data['image_url'] as String;
+        return InkWell(
+          onTap: () => _showImageFullscreen(context, data, images, index),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: CachedNetworkImage(
+              imageUrl: _thumbUrl(imageUrl, width: 600, quality: 80),
+              fit: BoxFit.cover,
+              placeholder: (context, url) => Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              errorWidget: (context, url, error) => Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: const Icon(Icons.broken_image),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+typedef StreakBuilder = Widget Function(BuildContext context, int streak);
+
+class _StreakConsumer extends StatelessWidget {
+  final StreakBuilder builder;
+  final VoidCallback? onRetry;
+  const _StreakConsumer({required this.builder, this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    // Proper Riverpod Consumer that rebuilds when provider resolves/changes
+    return Consumer(
+      builder: (ctx, ref, _) {
+        final asyncStreak = ref.watch(streakNotifierProvider);
+        return asyncStreak.when(
+          loading: () => const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          error: (e, st) => Row(
+            children: [
+              Expanded(child: Text('Error: $e')),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 18),
+                tooltip: 'Retry',
+                onPressed: onRetry,
+              ),
+            ],
+          ),
+          data: (streak) => builder(ctx, streak),
+        );
+      },
+    );
   }
 }
 

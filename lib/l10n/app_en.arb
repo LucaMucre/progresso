@@ -1,0 +1,16 @@
+{
+  "appTitle": "Progresso",
+  "save": "Save",
+  "cancel": "Cancel",
+  "navDashboard": "Dashboard",
+  "navTemplates": "Templates",
+  "navLog": "Log",
+  "navChat": "Chat",
+  "navProfile": "Profile",
+  "navSettings": "Settings",
+  "chatTitle": "Chat",
+  "chatReindexTooltip": "Rebuild index",
+  "chatInputHint": "Ask about your data…",
+  "chatSend": "Send"
+}
+

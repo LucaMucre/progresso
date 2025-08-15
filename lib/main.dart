@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_gate.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'navigation.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,45 +28,54 @@ Future<void> main() async {
     if (supabaseUrl != null && supabaseAnonKey != null && 
         supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
       envLoaded = true;
-  print('✅ .env file loaded successfully');
-      print('📡 Supabase URL: ${supabaseUrl.substring(0, 30)}...');
-      print('🔑 Anon Key: ${supabaseAnonKey.substring(0, 20)}...');
+      if (kDebugMode) {
+        debugPrint('✅ .env file loaded successfully');
+      }
     } else {
       throw Exception('SUPABASE_URL oder SUPABASE_ANON_KEY fehlen in .env Datei');
     }
   } catch (e) {
-  print('❌ Error loading .env file: $e');
-    print('🔄 Verwende Fallback-Keys...');
-    
-    // Fallback zu den echten Supabase-Keys
-    supabaseUrl = 'https://xssuhovxkpgorjxvflwo.supabase.co';
-    supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzc3Vob3Z4a3Bnb3JqeHZmbHdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5ODY2NTEsImV4cCI6MjA2OTU2MjY1MX0.y1fXBKBAQkNL17AcBiBNMIOyVyBD8_fexQWeWqGz1UY';
+    if (kDebugMode) {
+      debugPrint('❌ Error loading .env file: $e');
+      debugPrint('🚫 Keine Fallback-Keys. Bitte .env konfigurieren.');
+    } else {
+      // In Release keine Fallback-Keys verwenden
+      supabaseUrl = null;
+      supabaseAnonKey = null;
+    }
   }
 
   try {
+    if (supabaseUrl == null || supabaseAnonKey == null) {
+      throw Exception('Supabase-Konfiguration fehlt (.env nicht geladen)');
+    }
     // Initialisiert Supabase mit den Keys
     await Supabase.initialize(
       url: supabaseUrl!,
       anonKey: supabaseAnonKey!,
     );
     
-    if (envLoaded) {
-      print('✅ Supabase erfolgreich mit .env Keys initialisiert');
-    } else {
-      print('✅ Supabase erfolgreich mit Fallback-Keys initialisiert');
+    if (kDebugMode) {
+      if (envLoaded) {
+        debugPrint('✅ Supabase erfolgreich mit .env Keys initialisiert');
+      } else {
+        debugPrint('✅ Supabase erfolgreich mit Fallback-Keys initialisiert');
+      }
     }
     
     // Teste die Verbindung
     final client = Supabase.instance.client;
-    final response = await client.from('users').select('count').limit(1);
-    print('✅ Supabase Verbindung getestet - erfolgreich');
+    await client.from('users').select('count').limit(1);
+    if (kDebugMode) debugPrint('✅ Supabase Verbindung getestet - erfolgreich');
     
   } catch (e) {
-    print('❌ Supabase Initialisierung fehlgeschlagen: $e');
-    print('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
+    if (kDebugMode) {
+      debugPrint('❌ Supabase Initialisierung fehlgeschlagen: $e');
+      debugPrint('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
+    }
   }
 
-  runApp(const ProgressoApp());
+  runApp(const ProviderScope(child: ProgressoApp()));
 }
 
 class ProgressoApp extends StatelessWidget {
@@ -263,6 +275,7 @@ class ProgressoApp extends StatelessWidget {
         ),
       ),
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

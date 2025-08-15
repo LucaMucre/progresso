@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../profile_edit_page.dart';
 import '../services/avatar_sync_service.dart';
@@ -47,7 +49,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
             .eq('id', user.id)
             .single();
         
-        if (mounted) {
+          if (mounted) {
           setState(() {
             _userName = res['name'] ?? user.email?.split('@')[0] ?? 'User';
             _userBio = res['bio'] ?? '';
@@ -55,7 +57,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
             _isLoading = false;
             _cacheBust = DateTime.now().millisecondsSinceEpoch;
           });
-          print('DEBUG: ProfileHeaderWidget - Loaded avatar_url: $_userAvatarUrl');
+            if (kDebugMode) debugPrint('DEBUG: ProfileHeaderWidget - Loaded avatar_url: $_userAvatarUrl');
         }
       }
     } catch (e) {
@@ -66,7 +68,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           _isLoading = false;
         });
       }
-    print('Error loading user profile: $e');
+    if (kDebugMode) debugPrint('Error loading user profile: $e');
     }
   }
 
@@ -178,21 +180,21 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                     color: Colors.white.withOpacity(0.15),
                   ),
                   child: _userAvatarUrl != null
-                      ? Image.network(
-                          '${_userAvatarUrl!}?cb=$_cacheBust',
-                          key: ValueKey('${_userAvatarUrl!}?cb=$_cacheBust'),
+                      ? CachedNetworkImage(
+                          imageUrl: '${_userAvatarUrl!}?cb=$_cacheBust',
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) => const Icon(Icons.person, color: Colors.white, size: 22),
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(
-                              child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                          fadeInDuration: const Duration(milliseconds: 200),
+                          placeholder: (context, url) => const Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
-                            );
-                          },
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => const Icon(Icons.person, color: Colors.white, size: 22),
                         )
                       : const Icon(Icons.person, color: Colors.white, size: 22),
                 ),

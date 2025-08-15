@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_page.dart';
-import 'dashboard_page.dart';
+import 'home_shell.dart';
+import 'services/achievement_service.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({Key? key}) : super(key: key);
@@ -27,6 +28,12 @@ class _AuthGateState extends State<AuthGate> {
         if ((event == AuthChangeEvent.passwordRecovery || event == AuthChangeEvent.userUpdated) && !_resetDialogShown) {
           _resetDialogShown = true;
           await _showInAppPasswordReset();
+        }
+        // Nach erfolgreichem Login Achievements des Users früh laden
+        if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.userUpdated) {
+          try {
+            await AchievementService.loadUnlockedAchievements();
+          } catch (_) {}
         }
         if (mounted) setState(() {}); // beim Ein-/Ausloggen neu rendern
       });
@@ -144,7 +151,7 @@ class _AuthGateState extends State<AuthGate> {
       final session = Supabase.instance.client.auth.currentSession;
       return session == null
         ? const AuthPage()
-        : const DashboardPage();
+        : const HomeShell();
     } catch (e) {
       return Scaffold(
         appBar: AppBar(title: const Text('Progresso')),

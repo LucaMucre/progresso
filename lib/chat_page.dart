@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'l10n/app_localizations.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -112,12 +113,13 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat'),
+        title: Text(t?.chatTitle ?? 'Chat'),
         actions: [
           IconButton(
-            tooltip: 'Index neu aufbauen',
+            tooltip: t?.chatReindexTooltip ?? 'Index neu aufbauen',
             icon: const Icon(Icons.refresh),
             onPressed: _sending ? null : _reindex,
           ),
@@ -139,7 +141,7 @@ class _ChatPageState extends State<ChatPage> {
                   decoration: BoxDecoration(
                     color: isUser
                         ? Theme.of(context).colorScheme.primaryContainer
-                        : Theme.of(context).colorScheme.surfaceContainerHigh,
+                        : Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -183,9 +185,9 @@ class _ChatPageState extends State<ChatPage> {
                 Expanded(
                   child: TextField(
                     controller: _inputCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'Frage zu deinen Daten…',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: t?.chatInputHint ?? 'Frage zu deinen Daten…',
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     onSubmitted: (_) => _send(),
@@ -195,7 +197,7 @@ class _ChatPageState extends State<ChatPage> {
                 ElevatedButton.icon(
                   onPressed: _sending ? null : _send,
                   icon: const Icon(Icons.send, size: 16),
-                  label: const Text('Senden'),
+                  label: Text(t?.chatSend ?? 'Senden'),
                 ),
               ],
             ),
@@ -210,14 +212,13 @@ class _ChatMessage {
   final String role; // 'user' | 'assistant'
   final String content;
   final List<_Source> sources;
-  _ChatMessage({required this.role, required this.content, List<_Source>? sources})
-      : sources = sources ?? const [];
+  _ChatMessage({required this.role, required this.content, this.sources = const []});
 }
 
 class _Source {
   final String id;
   final String title;
   final String occurredAt;
-  const _Source({required this.id, required this.title, required this.occurredAt});
+  _Source({required this.id, required this.title, required this.occurredAt});
 }
 

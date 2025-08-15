@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+// Web-only localStorage access via conditional imports
+import '../utils/web_storage_stub.dart'
+    if (dart.library.html) '../utils/web_storage_web.dart' as web_store;
 
 class Achievement {
   final String id;
@@ -39,6 +42,8 @@ class AchievementService {
   static Set<String> _unlockedAchievements = {};
   static Function(Achievement)? _onAchievementUnlocked;
   static bool _loadedFromStorage = false;
+  // Track for which userId the achievements were loaded to avoid cross-user leakage
+  static String? _loadedUserId;
   
   static void setOnAchievementUnlocked(Function(Achievement) callback) {
     _onAchievementUnlocked = callback;
@@ -286,39 +291,139 @@ class AchievementService {
   }
 
   static Future<void> loadUnlockedAchievements() async {
+    print('DEBUG: Loading achievements...');
     try {
       final prefs = await SharedPreferences.getInstance();
+      final currentUid = _supabase.auth.currentUser?.id;
+      print('DEBUG: Current user ID: $currentUid');
+      if (currentUid == null) {
+        _unlockedAchievements = {};
+        _loadedFromStorage = true;
+        _loadedUserId = null;
+        print('DEBUG: No user - cleared achievements');
+        return;
+      }
+      
+      // FORCE clear memory state if user changed
+      if (_loadedUserId != currentUid) {
+        _unlockedAchievements = {};
+        _loadedFromStorage = false;
+        print('DEBUG: User changed, forcing reload');
+      }
+      
       // Migrate from legacy global key if present and user-specific key missing
       final userKey = _prefsKeyForUser();
+      print('DEBUG: Using key: $userKey');
       String? unlockedJson = prefs.getString(userKey);
+      print('DEBUG: Local JSON: $unlockedJson');
       if (unlockedJson == null) {
         final legacy = prefs.getString('unlocked_achievements');
         if (legacy != null) {
           unlockedJson = legacy;
           await prefs.setString(userKey, legacy);
           await prefs.remove('unlocked_achievements');
+          print('DEBUG: Migrated from legacy key');
         }
       }
       if (unlockedJson != null) {
         final List<dynamic> unlocked = jsonDecode(unlockedJson);
         _unlockedAchievements = unlocked.cast<String>().toSet();
+        print('DEBUG: Loaded from local: $_unlockedAchievements');
+      } else {
+        // FALLBACK: Try browser localStorage for web
+        try {
+          final localStorageData = await web_store.readLocalStorage(userKey);
+          if (localStorageData != null) {
+            final List<dynamic> unlocked = jsonDecode(localStorageData);
+            _unlockedAchievements = unlocked.cast<String>().toSet();
+            print('DEBUG: Loaded from localStorage fallback: $_unlockedAchievements');
+            // Restore to SharedPreferences
+            await prefs.setString(userKey, localStorageData);
+          } else {
+            _unlockedAchievements = {};
+            print('DEBUG: No local data or localStorage - empty set');
+          }
+        } catch (e) {
+          _unlockedAchievements = {};
+          print('DEBUG: localStorage fallback failed: $e');
+        }
+      }
+
+      // Try to load from remote (if table exists). Remote is source of truth.
+      try {
+        final remote = await _supabase
+            .from('user_achievements')
+            .select('achievement_id')
+            .eq('user_id', currentUid)
+            .then((rows) => (rows as List)
+                .map((r) => r['achievement_id'] as String)
+                .toSet());
+        print('DEBUG: Remote achievements: $remote');
+        if (remote.isNotEmpty) {
+          _unlockedAchievements = remote;
+          // Mirror to local for offline
+          await prefs.setString(_prefsKeyForUser(), jsonEncode(_unlockedAchievements.toList()));
+          print('DEBUG: Updated from remote and saved locally');
+        }
+      } catch (e) {
+        print('DEBUG: Remote load failed (table may not exist): $e');
       }
       _loadedFromStorage = true;
+      _loadedUserId = currentUid; // remember which user's data is in memory
+      print('DEBUG: Final unlocked achievements: $_unlockedAchievements');
+      
+      // VERIFY: Read back what was actually saved
+      final verifyKey = _prefsKeyForUser();
+      final verifyData = prefs.getString(verifyKey);
+      print('DEBUG: VERIFICATION - Key: $verifyKey, Data: $verifyData');
     } catch (e) {
       print('Error loading achievements: $e');
     }
   }
 
   static Future<void> _ensureLoaded() async {
+    // If user changed (login/logout), force reload for the new user
+    final currentUid = _supabase.auth.currentUser?.id;
+    print('DEBUG: _ensureLoaded - currentUid: $currentUid, _loadedUserId: $_loadedUserId, _loadedFromStorage: $_loadedFromStorage');
+    if (_loadedUserId != currentUid) {
+      _loadedFromStorage = false;
+      print('DEBUG: User changed or first load, reloading achievements');
+    }
     if (!_loadedFromStorage) {
+      print('DEBUG: Not loaded from storage yet, loading achievements');
       await loadUnlockedAchievements();
     }
   }
   
   static Future<void> _saveUnlockedAchievements() async {
+    print('DEBUG: Saving achievements: $_unlockedAchievements');
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKeyForUser(), jsonEncode(_unlockedAchievements.toList()));
+      final key = _prefsKeyForUser();
+      final json = jsonEncode(_unlockedAchievements.toList());
+      final success = await prefs.setString(key, json);
+      print('DEBUG: Saved to key $key: $json (success: $success)');
+      
+      // BACKUP: Also save to browser localStorage for web persistence
+      try {
+        await web_store.writeLocalStorage(key, json);
+        print('DEBUG: Saved to localStorage as backup (if available)');
+      } catch (e) {
+        print('DEBUG: localStorage save failed: $e');
+      }
+      
+      // IMMEDIATE VERIFICATION
+      final verify = prefs.getString(key);
+      print('DEBUG: IMMEDIATE VERIFY - Read back: $verify');
+      
+      if (verify != json) {
+        print('ERROR: Save verification failed! Expected: $json, Got: $verify');
+        // Try alternative approach with explicit commit
+        await prefs.reload();
+        await prefs.setString(key, json);
+        final verify2 = prefs.getString(key);
+        print('DEBUG: RETRY VERIFY - Read back: $verify2');
+      }
     } catch (e) {
       print('Error saving achievements: $e');
     }
@@ -385,7 +490,25 @@ class AchievementService {
     }
     
     if (newlyUnlocked.isNotEmpty) {
+      print('DEBUG: Newly unlocked achievements: ${newlyUnlocked.map((a) => a.id).toList()}');
       await _saveUnlockedAchievements();
+      // Also push to remote table if available
+      try {
+        final uid = _supabase.auth.currentUser?.id;
+        if (uid != null) {
+          final rows = newlyUnlocked
+              .map((a) => {
+                    'user_id': uid,
+                    'achievement_id': a.id,
+                    'unlocked_at': DateTime.now().toIso8601String(),
+                  })
+              .toList();
+          await _supabase.from('user_achievements').upsert(rows);
+          print('DEBUG: Achievements pushed to server: ${rows.length}');
+        }
+      } catch (e) {
+        // ignore if table missing; local storage still works
+      }
     }
   }
   
