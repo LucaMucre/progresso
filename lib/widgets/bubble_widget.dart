@@ -297,7 +297,8 @@ class _BubblesGridState extends State<BubblesGrid> {
                   // Switch to the HomeShell Profile tab via global notifier
                   // (works on Web without private type references)
                   try {
-                    goToHomeTab(4);
+                    // Profile tab index changed after removing Chat: now 3
+                    goToHomeTab(3);
                     refreshProfileTab();
                   } catch (_) {
                     Navigator.of(context).push(

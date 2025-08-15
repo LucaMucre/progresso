@@ -169,6 +169,21 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox.shrink(),
                 const Divider(),
                 ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('Logout'),
+                  onTap: () async {
+                    try {
+                      await Supabase.instance.client.auth.signOut();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out')));
+                      Navigator.of(context).pop();
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    }
+                  },
+                ),
+                ListTile(
                   leading: const Icon(Icons.lock_reset),
                   title: const Text('Change password'),
                   onTap: _changePassword,

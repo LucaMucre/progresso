@@ -43,7 +43,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onExternalProfileRefresh() {
     if (!mounted) return;
     setState(() {
-      _currentIndex = 4;
+      _currentIndex = 3;
     });
   }
 
