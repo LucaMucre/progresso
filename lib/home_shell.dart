@@ -16,15 +16,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
-
-  late final List<Widget> _pages = [
-    const DashboardPage(),
-    const TemplatesList(),
-    const LogActionPage(),
-    const ChatPage(),
-    const ProfilePage(),
-    const SettingsPage(),
-  ];
+  int _profileNonce = 0; // forces ProfilePage to rebuild/refresh when selected
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +28,15 @@ class _HomeShellState extends State<HomeShell> {
       body: SafeArea(
         child: IndexedStack(
           index: _currentIndex,
-          children: _pages,
+          children: [
+            const DashboardPage(),
+            const TemplatesList(),
+            const LogActionPage(),
+            const ChatPage(),
+            // Rebuild ProfilePage when its tab is selected by bumping the key
+            ProfilePage(key: ValueKey(_profileNonce)),
+            const SettingsPage(),
+          ],
         ),
       ),
       bottomNavigationBar: NavigationBarTheme(
@@ -46,7 +46,13 @@ class _HomeShellState extends State<HomeShell> {
         ),
         child: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          onDestinationSelected: (i) => setState(() {
+            _currentIndex = i;
+            if (i == 4) {
+              // Force a fresh ProfilePage so initState runs and statistics reload
+              _profileNonce++;
+            }
+          }),
           destinations: [
             NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: t?.navDashboard ?? 'Dashboard'),
             NavigationDestination(icon: const Icon(Icons.view_list_outlined), selectedIcon: const Icon(Icons.view_list), label: t?.navTemplates ?? 'Templates'),
