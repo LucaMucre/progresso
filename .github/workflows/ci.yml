@@ -1,3 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+      - name: Pub get
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Build runner (if needed)
+        run: flutter packages pub run build_runner build --delete-conflicting-outputs || true
+      - name: Tests
+        run: flutter test
+      - name: Build Android APKs (split per ABI)
+        run: flutter build apk --release --split-per-abi --dart-define=FLAVOR=staging
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: build/app/outputs/flutter-apk/*.apk
 name: CI/CD Pipeline
 
 on:
