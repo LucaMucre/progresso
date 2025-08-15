@@ -7,6 +7,7 @@ import '../services/life_areas_service.dart';
 import '../services/character_service.dart';
 import '../services/avatar_sync_service.dart';
 import '../profile_page.dart';
+import '../navigation.dart';
 
 // Separate Character Widget to prevent rebuilding on hover
 class CharacterWidget extends StatefulWidget {
