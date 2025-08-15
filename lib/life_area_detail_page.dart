@@ -158,8 +158,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
               // Falls area einem Subnamen entspricht, ebenfalls ausschließen
               if (nArea != null && subKeys.contains(nArea)) return false;
             }
-            // parent: match own area/category
-            if (nArea == areaName || nCat == category) return true;
+            // parent: match only own area (avoid counting sibling areas with same category)
+            if (nArea == areaName) return true;
             // optional: Subareas mitzählen
             if (includeSubareasForParent) {
               if (nArea != null && subKeys.contains(nArea)) return true;
@@ -180,7 +180,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                   if (plain.contains(s)) return false;
                 }
               }
-              if (plain.contains(areaName) || plain.contains(category)) return true;
+              if (plain.contains(areaName)) return true;
               if (includeSubareasForParent) {
                 for (final s in subKeys) {
                   if (plain.contains(s)) return true;
@@ -201,7 +201,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
             if (text.contains(s)) return false;
           }
         }
-        if (text.contains(areaName) || text.contains(category)) return true;
+        if (text.contains(areaName)) return true;
         if (includeSubareasForParent) {
           for (final s in subKeys) {
             if (text.contains(s)) return true;
