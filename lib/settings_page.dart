@@ -192,9 +192,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('Contact support'),
-                  subtitle: const Text('support@yourdomain.tld'),
+                  subtitle: const Text('support@progresso.app'),
                   onTap: () async {
-                    final uri = Uri(scheme: 'mailto', path: 'support@yourdomain.tld', query: 'subject=Progresso Support');
+                    final uri = Uri(scheme: 'mailto', path: 'support@progresso.app', query: 'subject=Progresso Support');
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri);
                     }
@@ -204,7 +204,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   leading: const Icon(Icons.file_download_outlined),
                   title: const Text('Request data export'),
                   onTap: () async {
-                    final uri = Uri(scheme: 'mailto', path: 'support@yourdomain.tld', query: 'subject=GDPR Data Export Request');
+                    final uri = Uri(scheme: 'mailto', path: 'support@progresso.app', query: 'subject=GDPR Data Export Request');
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri);
                     }
