@@ -250,8 +250,8 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         final areaToCount = <String, int>{};
         for (final area in areas) {
-          final canonical = LifeAreasService.canonicalCategory(area.category);
-          areaToCount[area.id] = countsByKey[canonical] ?? 0;
+          final nameKey = LifeAreasService.canonicalAreaName(area.name);
+          areaToCount[area.id] = countsByKey[nameKey] ?? 0;
         }
         areas.sort((a, b) {
           final cb = areaToCount[b.id] ?? 0;
