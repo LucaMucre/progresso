@@ -272,6 +272,9 @@ class _BubblesGridState extends State<BubblesGrid> {
   bool _contextMenuOpen = false;
   Map<String, double> _minutesByKey = {};
   bool _loadingDurations = false;
+  // Stable layout cache to avoid jitter/teleport on hover
+  final Map<String, Rect> _layoutByAreaId = {};
+  String _layoutSignature = '';
 
   @override
   void initState() {
@@ -370,44 +373,72 @@ class _BubblesGridState extends State<BubblesGrid> {
     final double maxMin = (minutes.values.isEmpty ? 0.0 : minutes.values.reduce(max)).clamp(0.0, double.infinity);
     // Bigger lead bubble ~32% of canvas; allow larger upper bound on wide screens
     final double maxSize = (canvasSize * 0.32).clamp(54.0, 240.0);
-    // Ensure a minimum of 20% of the biggest bubble for tiny/zero-minute areas
-    final double minSize = maxSize * 0.20;
+    // Ensure a minimum of 30% of the biggest bubble
+    final double minSize = maxSize * 0.30;
 
     final ordered = minutes.keys.toList()
       ..sort((a, b) => (minutes[b] ?? 0).compareTo(minutes[a] ?? 0));
-    final List<Rect> placed = [];
-    // Use almost the whole canvas for placement
-    final double radiusBound = canvasSize * 0.90;
-    final Offset center = Offset(canvasSize / 2, canvasSize / 2);
+
+    // Pre-compute base size per area
+    final Map<String, double> sizeById = {
+      for (final a in ordered)
+        a.id: max(minSize, maxSize * (maxMin > 0 ? (minutes[a]! / maxMin).clamp(0.0, 1.0) : 0.5))
+    };
+
+    // Build a signature so we only place when inputs changed
+    final sig = StringBuffer()
+      ..write(canvasSize.toStringAsFixed(0))
+      ..write('|');
+    for (final a in ordered) {
+      sig
+        ..write(a.id)
+        ..write(':')
+        ..write(sizeById[a.id]!.toStringAsFixed(1))
+        ..write(',');
+    }
+    final signature = sig.toString();
+
+    if (_layoutSignature != signature) {
+      _layoutByAreaId.clear();
+      final List<Rect> placed = [];
+      final double radiusBound = canvasSize * 0.90; // use almost full canvas
+      final Offset center = Offset(canvasSize / 2, canvasSize / 2);
+
+      for (final area in ordered) {
+        final double size = sizeById[area.id]!;
+        final rnd = Random(area.id.hashCode);
+        Offset? pos;
+        for (int attempt = 0; attempt < 240; attempt++) {
+          final angle = rnd.nextDouble() * 2 * pi;
+          final r = rnd.nextDouble() * (radiusBound - size * 0.6);
+          final x = center.dx + r * cos(angle);
+          final y = center.dy + r * sin(angle);
+          final rect = Rect.fromLTWH(x - size / 2, y - size / 2, size, size);
+          final safe = rect.left >= 0 && rect.top >= 0 && rect.right <= canvasSize && rect.bottom <= canvasSize;
+          if (!safe) continue;
+          bool overlaps = false;
+          for (final placedRect in placed) {
+            if (rect.overlaps(placedRect.inflate(6))) { overlaps = true; break; }
+          }
+          if (!overlaps) { pos = Offset(x, y); placed.add(rect); _layoutByAreaId[area.id] = rect; break; }
+        }
+        // Fallback to center if no non-overlapping position was found
+        _layoutByAreaId.putIfAbsent(area.id, () => Rect.fromCenter(center: center, width: size, height: size));
+      }
+      _layoutSignature = signature;
+    }
 
     for (int idx = 0; idx < ordered.length; idx++) {
       final area = ordered[idx];
+      final rect = _layoutByAreaId[area.id]!;
+      final size = rect.width;
       final mins = minutes[area] ?? 0.0;
-      final factor = maxMin > 0 ? (mins / maxMin).clamp(0.0, 1.0) : 0.5;
-      final double bubbleSize = max(minSize, maxSize * factor);
       final isHovered = _hoveredIndex == idx;
-      final hoverScale = isHovered ? 1.15 : 1.0;
-      final double size = bubbleSize * hoverScale;
-      final rnd = Random(area.id.hashCode);
-      Offset? pos;
-      for (int attempt = 0; attempt < 200; attempt++) {
-        final angle = rnd.nextDouble() * 2 * pi;
-        final r = rnd.nextDouble() * (radiusBound - size * 0.6);
-        final x = center.dx + r * cos(angle);
-        final y = center.dy + r * sin(angle);
-        final rect = Rect.fromLTWH(x - size / 2, y - size / 2, size, size);
-        final safe = rect.left >= 0 && rect.top >= 0 && rect.right <= canvasSize && rect.bottom <= canvasSize;
-        if (!safe) continue;
-        bool overlaps = false;
-        for (final placedRect in placed) {
-          if (rect.overlaps(placedRect.inflate(6))) { overlaps = true; break; }
-        }
-        if (!overlaps) { pos = Offset(x, y); placed.add(rect); break; }
-      }
-      pos ??= Offset(center.dx, center.dy);
+      final hoverScale = isHovered ? 1.10 : 1.0; // scale visual only, keep position stable
+
       widgets.add(Positioned(
-        left: pos.dx - (size / 2),
-        top: pos.dy - (size / 2),
+        left: rect.left,
+        top: rect.top,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           onEnter: (_) {
@@ -433,40 +464,43 @@ class _BubblesGridState extends State<BubblesGrid> {
             child: Tooltip(
               message: '${area.name} • ${mins.toInt()} min',
               waitDuration: const Duration(milliseconds: 400),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isHovered 
-                      ? _parseColor(area.color).withOpacity(0.9)
-                      : _parseColor(area.color),
-                  border: Border.all(
+              child: Transform.scale(
+                scale: hoverScale,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeInOut,
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     color: isHovered 
-                        ? Colors.white.withOpacity(0.6)
-                        : Colors.white.withOpacity(0.3),
-                    width: isHovered ? 3 : 2,
+                        ? _parseColor(area.color).withOpacity(0.9)
+                        : _parseColor(area.color),
+                    border: Border.all(
+                      color: isHovered 
+                          ? Colors.white.withOpacity(0.6)
+                          : Colors.white.withOpacity(0.3),
+                      width: isHovered ? 3 : 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _parseColor(area.color).withOpacity(isHovered ? 0.6 : 0.4),
+                        blurRadius: isHovered ? 16 : 12,
+                        offset: const Offset(0, 4),
+                        spreadRadius: isHovered ? 2 : 1,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isHovered ? 0.15 : 0.1),
+                        blurRadius: isHovered ? 6 : 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _parseColor(area.color).withOpacity(isHovered ? 0.6 : 0.4),
-                      blurRadius: isHovered ? 16 : 12,
-                      offset: const Offset(0, 4),
-                      spreadRadius: isHovered ? 2 : 1,
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isHovered ? 0.15 : 0.1),
-                      blurRadius: isHovered ? 6 : 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  _getIconData(area.icon),
-                  color: Colors.white,
-                  size: max(16.0, size * 0.35),
+                  child: Icon(
+                    _getIconData(area.icon),
+                    color: Colors.white,
+                    size: max(16.0, size * 0.35),
+                  ),
                 ),
               ),
             ),
