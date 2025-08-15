@@ -33,9 +33,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('assist_opt_in', false);
     _crashOptIn = prefs.getBool('crash_opt_in') ?? true;
     try {
-      // lazy import to avoid hard dep
-      final info = await (await importPackageInfo()).call();
-      _appVersion = info;
+      _appVersion = await getPackageVersion();
     } catch (_) {}
     setState(() {
       _assistOptIn = false;
@@ -43,17 +41,13 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  Future<String Function()> importPackageInfo() async {
-    // simple wrapper using package_info_plus
-    return () async {
-      try {
-        // late import to keep file lightweight
-        final info = await PackageInfo.fromPlatform();
-        return '${info.version}+${info.buildNumber}';
-      } catch (_) {
-        return '';
-      }
-    };
+  Future<String> getPackageVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return '${info.version}+${info.buildNumber}';
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<void> _changePassword() async {
