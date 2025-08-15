@@ -194,32 +194,64 @@ class _ProfilePageState extends State<ProfilePage> {
         // nicht nach einem Re-Login wie "reset" wirkt.
         _xpSinceBaseline = _totalXP;
 
-        // Rank life areas by activity count (desc)
-        int countForArea(Map<String, dynamic> log, LifeArea area) {
+        // Count each log exactly once by rolling it up to a single parent area key
+        String _resolveAreaKeyForLog(Map<String, dynamic> log) {
           final raw = log['notes'];
-          if (raw == null) return 0;
-          try {
-            final obj = jsonDecode(raw);
-            if (obj is Map<String, dynamic>) {
-              final a = (obj['area'] as String?)?.toLowerCase();
-              final c = (obj['category'] as String?)?.toLowerCase();
-              if (a == area.name.toLowerCase() || c == area.category.toLowerCase()) return 1;
-            } else if (obj is List) {
-              // quill delta → plaintext contains name/category
-              final text = obj.map((op) => (op is Map && op['insert'] is String) ? op['insert'] as String : '').join().toLowerCase();
-              if (text.contains(area.name.toLowerCase()) || text.contains(area.category.toLowerCase())) return 1;
-            }
-          } catch (_) {
-            final text = raw.toString().toLowerCase();
-            if (text.contains(area.name.toLowerCase()) || text.contains(area.category.toLowerCase())) return 1;
+          String? areaFromNotes;
+          String? categoryFromNotes;
+          if (raw != null) {
+            try {
+              final obj = jsonDecode(raw);
+              if (obj is Map<String, dynamic>) {
+                areaFromNotes = (obj['area'] as String?)?.trim().toLowerCase();
+                final lifeAreaFromNotes = (obj['life_area'] as String?)?.trim().toLowerCase();
+                areaFromNotes ??= lifeAreaFromNotes;
+                categoryFromNotes = (obj['category'] as String?)?.trim().toLowerCase();
+              }
+            } catch (_) {}
           }
-          return 0;
+          bool isKnownParent(String? v) => const {
+            'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
+          }.contains(v);
+          // Prefer explicit area if already a known parent
+          if (isKnownParent(areaFromNotes)) return areaFromNotes!;
+          // Map subcategories to parents
+          switch (categoryFromNotes) {
+            case 'inner':
+              return 'spirituality';
+            case 'social':
+              return 'relationships';
+            case 'work':
+              return 'career';
+            case 'development':
+              return 'learning';
+            case 'finance':
+              return 'finance';
+            case 'health':
+              return 'health';
+            case 'fitness':
+              return 'fitness';
+            case 'nutrition':
+              return 'nutrition';
+            case 'art':
+              return 'art';
+          }
+          // Fallback to area name if provided (custom names): use canonical category mapping
+          if (areaFromNotes != null && areaFromNotes!.isNotEmpty) {
+            return areaFromNotes!;
+          }
+          return 'unknown';
         }
 
+        final countsByKey = <String, int>{};
+        for (final log in logs) {
+          final key = _resolveAreaKeyForLog(log as Map<String, dynamic>);
+          countsByKey[key] = (countsByKey[key] ?? 0) + 1;
+        }
         final areaToCount = <String, int>{};
         for (final area in areas) {
-          final n = logs.fold<int>(0, (sum, log) => sum + countForArea(log as Map<String, dynamic>, area));
-          areaToCount[area.id] = n;
+          final canonical = LifeAreasService.canonicalCategory(area.category);
+          areaToCount[area.id] = countsByKey[canonical] ?? 0;
         }
         areas.sort((a, b) {
           final cb = areaToCount[b.id] ?? 0;
@@ -228,7 +260,6 @@ class _ProfilePageState extends State<ProfilePage> {
           return a.orderIndex.compareTo(b.orderIndex);
         });
         _areaActivityCounts = areaToCount;
-      }
       
       // Check achievements after loading statistics
       await _checkAchievements();
