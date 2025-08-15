@@ -38,16 +38,20 @@ Dabei sol die APp im Layout sein, wie ein Inventar in einem video spiel. Der cha
    flutter packages pub run build_runner build --delete-conflicting-outputs
    ```
 
-3. **Environment-Variablen setzen:**
-   Erstelle eine `.env` Datei mit:
+3. **Environments (.env) setzen:**
+   Erstelle `.env` (dev), optional `.env.staging` und `.env.prod`:
    ```
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_URL=...
+   SUPABASE_ANON_KEY=...
+   SENTRY_DSN=... # optional
    ```
 
 4. **App starten:**
    ```bash
-   flutter run
+   flutter run --dart-define=FLAVOR=dev
+   # oder
+   flutter run --dart-define=FLAVOR=staging
+   flutter run --dart-define=FLAVOR=prod
    ```
 
 ## Testing

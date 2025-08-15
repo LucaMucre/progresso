@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'auth_gate.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
@@ -16,10 +17,16 @@ Future<void> main() async {
   bool envLoaded = false;
   String? supabaseUrl;
   String? supabaseAnonKey;
+  final flavor = const String.fromEnvironment('FLAVOR', defaultValue: 'dev');
 
   try {
-    // Versuche die .env Datei zu laden
-    await dotenv.load();
+    // .env nach Flavor laden (.env.dev / .env.staging / .env.prod)
+    final envFile = switch (flavor) {
+      'prod' => '.env.prod',
+      'staging' => '.env.staging',
+      _ => '.env',
+    };
+    await dotenv.load(fileName: envFile);
     
     // Validiere die Umgebungsvariablen
     supabaseUrl = dotenv.env['SUPABASE_URL'];
@@ -45,37 +52,50 @@ Future<void> main() async {
     }
   }
 
-  try {
-    if (supabaseUrl == null || supabaseAnonKey == null) {
-      throw Exception('Supabase-Konfiguration fehlt (.env nicht geladen)');
-    }
-    // Initialisiert Supabase mit den Keys
-    await Supabase.initialize(
-      url: supabaseUrl!,
-      anonKey: supabaseAnonKey!,
-    );
-    
-    if (kDebugMode) {
-      if (envLoaded) {
-        debugPrint('✅ Supabase erfolgreich mit .env Keys initialisiert');
-      } else {
-        debugPrint('✅ Supabase erfolgreich mit Fallback-Keys initialisiert');
+  Future<Widget> bootstrap() async {
+    try {
+      if (supabaseUrl == null || supabaseAnonKey == null) {
+        throw Exception('Supabase-Konfiguration fehlt (.env nicht geladen)');
+      }
+      await Supabase.initialize(
+        url: supabaseUrl!,
+        anonKey: supabaseAnonKey!,
+      );
+      if (kDebugMode) {
+        if (envLoaded) {
+          debugPrint('✅ Supabase erfolgreich mit .env Keys initialisiert');
+        } else {
+          debugPrint('✅ Supabase erfolgreich mit Fallback-Keys initialisiert');
+        }
+      }
+      final client = Supabase.instance.client;
+      await client.from('users').select('count').limit(1);
+      if (kDebugMode) debugPrint('✅ Supabase Verbindung getestet - erfolgreich');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ Supabase Initialisierung fehlgeschlagen: $e');
+        debugPrint('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
       }
     }
-    
-    // Teste die Verbindung
-    final client = Supabase.instance.client;
-    await client.from('users').select('count').limit(1);
-    if (kDebugMode) debugPrint('✅ Supabase Verbindung getestet - erfolgreich');
-    
-  } catch (e) {
-    if (kDebugMode) {
-      debugPrint('❌ Supabase Initialisierung fehlgeschlagen: $e');
-      debugPrint('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
-    }
+    return const ProviderScope(child: ProgressoApp());
   }
 
-  runApp(const ProviderScope(child: ProgressoApp()));
+  // Optional Sentry nur aktivieren, wenn DSN vorhanden ist
+  final sentryDsn = dotenv.env['SENTRY_DSN'];
+  final enableSentry = (sentryDsn != null && sentryDsn.isNotEmpty && kReleaseMode);
+  if (enableSentry) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        options.tracesSampleRate = 0.2; // adjust later
+        options.enableAutoNativeBreadcrumbs = true;
+        options.environment = flavor;
+      },
+      appRunner: () async => runApp(await bootstrap()),
+    );
+  } else {
+    runApp(await bootstrap());
+  }
 }
 
 class ProgressoApp extends StatelessWidget {

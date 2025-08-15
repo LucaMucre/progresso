@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Runtime permissions are requested by plugins; declare feature for camera if used -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Android 13+ photo access; older versions fall back to READ_EXTERNAL_STORAGE via plugin -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <application
         android:label="progresso"
         android:name="${applicationName}"
