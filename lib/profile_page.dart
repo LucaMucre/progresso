@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
+import 'services/offline_cache.dart';
 import 'services/avatar_sync_service.dart';
 import 'services/achievement_service.dart';
 // Popups are orchestrated centrally via LevelUpService; do not import dialogs directly here
