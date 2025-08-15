@@ -15,10 +15,10 @@ void main() {
     });
 
     test('xpForLevel should calculate correct XP requirements (linear scale)', () {
-      expect(xpForLevel(1), 50);   // 1 * 50
-      expect(xpForLevel(2), 100);  // 2 * 50
-      expect(xpForLevel(3), 150);  // 3 * 50
-      expect(xpForLevel(4), 200);  // 4 * 50
+      expect(xpForLevel(1), 100);  // 1 * 100
+      expect(xpForLevel(2), 200);  // 2 * 100
+      expect(xpForLevel(3), 300);  // 3 * 100
+      expect(xpForLevel(4), 400);  // 4 * 100
     });
   });
 } 

@@ -440,21 +440,21 @@ Future<Map<DateTime, List<Map<String, dynamic>>>> fetchDailyAreaTotalsDetailed({
   return out;
 }
 
-/// XP-Schwelle für Level n (lineares System: 50 XP pro Level)
-int xpForLevel(int level) => level * 50;
+/// XP-Schwelle für Level n (lineares System: 100 XP pro Level)
+int xpForLevel(int level) => level * 100;
 
-/// Level aus Gesamt-XP berechnen (lineares System: 50 XP pro Level)
+/// Level aus Gesamt-XP berechnen (lineares System: 100 XP pro Level)
 int calculateLevel(int totalXp) {
   if (totalXp <= 0) return 1;
-  return (totalXp / 50).floor() + 1;
+  return (totalXp / 100).floor() + 1;
 }
 
 /// Ausführliche Level-Progress-Infos: aktuelles Level, XP seit Levelstart, XP bis nächstes Level
 Map<String, int> calculateLevelDetailed(int totalXp) {
   final level = calculateLevel(totalXp);
-  // 50 XP pro Level
-  final xpInto = totalXp % 50; // XP im aktuellen Level (Rest der Division)
-  final xpNeeded = 50; // Jedes Level benötigt 50 XP
+  // 100 XP pro Level
+  final xpInto = totalXp % 100; // XP im aktuellen Level (Rest der Division)
+  final xpNeeded = 100; // Jedes Level benötigt 100 XP
   
   return {
     'level': level,

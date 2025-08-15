@@ -15,18 +15,18 @@ void main() {
     });
 
     test('xpForLevel function works correctly', () {
-      expect(xpForLevel(1), 50);   // 1 * 50
-      expect(xpForLevel(2), 100);  // 2 * 50
-      expect(xpForLevel(3), 150);  // 3 * 50
-      expect(xpForLevel(4), 200);  // 4 * 50
+      expect(xpForLevel(1), 100);  // 1 * 100
+      expect(xpForLevel(2), 200);  // 2 * 100
+      expect(xpForLevel(3), 300);  // 3 * 100
+      expect(xpForLevel(4), 400);  // 4 * 100
     });
 
     test('level calculation works correctly', () {
-      expect(calculateLevel(25), 1);  // 0-49 XP = Level 1
-      expect(calculateLevel(49), 1);  // 0-49 XP = Level 1
-      expect(calculateLevel(50), 2);  // 50-99 XP = Level 2
-      expect(calculateLevel(75), 2);  // 50-99 XP = Level 2
-      expect(calculateLevel(100), 3); // 100-149 XP = Level 3
+      expect(calculateLevel(25), 1);   // 0-99 XP = Level 1
+      expect(calculateLevel(99), 1);   // 0-99 XP = Level 1
+      expect(calculateLevel(100), 2);  // 100-199 XP = Level 2
+      expect(calculateLevel(175), 2);  // 100-199 XP = Level 2
+      expect(calculateLevel(200), 3);  // 200-299 XP = Level 3
     });
   });
 } 
