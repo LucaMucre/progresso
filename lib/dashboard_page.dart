@@ -1597,26 +1597,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                  actions: [
 
 
-            IconButton(
-              icon: const Icon(Icons.chat),
-              tooltip: 'Chat (Beta)',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ChatPage()),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: 'Einstellungen',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsPage()),
-              ),
-            ),
-           // Avatar Debug entfernt
-           IconButton(
-             icon: const Icon(Icons.exit_to_app),
-             tooltip: 'Abmelden',
-             onPressed: _signOut,
-           ),
+            // Chat/Settings/Logout controls removed; settings and logout available via Settings tab
          ],
       ),
       body: SingleChildScrollView(

@@ -3,7 +3,7 @@ import 'dashboard_page.dart';
 import 'l10n/app_localizations.dart';
 import 'templates_page.dart';
 import 'log_action_page.dart';
-import 'chat_page.dart';
+// import 'chat_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart';
 import 'navigation.dart';
@@ -61,7 +61,7 @@ class _HomeShellState extends State<HomeShell> {
             DashboardPage(),
             TemplatesList(),
             LogActionPage(),
-            ChatPage(),
+            // ChatPage(), // removed by request
             ProfilePage(),
             SettingsPage(),
           ],
@@ -81,7 +81,6 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: t?.navDashboard ?? 'Dashboard'),
             NavigationDestination(icon: const Icon(Icons.view_list_outlined), selectedIcon: const Icon(Icons.view_list), label: t?.navTemplates ?? 'Templates'),
             NavigationDestination(icon: const Icon(Icons.add_circle_outline), selectedIcon: const Icon(Icons.add_circle), label: t?.navLog ?? 'Log'),
-            NavigationDestination(icon: const Icon(Icons.chat_bubble_outline), selectedIcon: const Icon(Icons.chat_bubble), label: t?.navChat ?? 'Chat'),
             NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: t?.navProfile ?? 'Profile'),
             NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: t?.navSettings ?? 'Settings'),
           ],
