@@ -40,7 +40,7 @@ as $$
       (
         case
           when coalesce(area_from_notes, life_area_from_notes) in (
-            'spirituality','finance','career','learning','relationships','health','creativity'
+            'spirituality','finance','career','learning','relationships','health','creativity','art'
           ) then coalesce(area_from_notes, life_area_from_notes)
 
           when category_from_notes in ('inner') then 'spirituality'
@@ -49,6 +49,7 @@ as $$
           when category_from_notes in ('development') then 'learning'
           when category_from_notes in ('finance') then 'finance'
           when category_from_notes in ('health') then 'health'
+          when category_from_notes in ('creativity') then 'art'
 
           when category_from_template in ('inner') then 'spirituality'
           when category_from_template in ('social') then 'relationships'
@@ -56,9 +57,10 @@ as $$
           when category_from_template in ('development') then 'learning'
           when category_from_template in ('finance') then 'finance'
           when category_from_template in ('health') then 'health'
+          when category_from_template in ('creativity') then 'art'
 
           when category_from_template in (
-            'spirituality','finance','career','learning','relationships','health','creativity'
+            'spirituality','finance','career','learning','relationships','health','creativity','art'
           ) then category_from_template
 
           else 'unknown'

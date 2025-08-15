@@ -1163,6 +1163,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return Colors.pink;
       case 'health':
         return Colors.green;
+      case 'creativity':
+      case 'art':
+        return Colors.purple;
       default:
         return Colors.grey;
     }

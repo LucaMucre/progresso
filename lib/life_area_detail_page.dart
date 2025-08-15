@@ -285,7 +285,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   }
 
   String _formatDuration(double minutes) {
-    if (minutes <= 0) return '0 min';
+    if (minutes <= 0) return '0 m';
     
     final totalMinutes = minutes.round();
     
@@ -316,19 +316,11 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       final remainingMinutes = totalMinutes - (days * 1440);
       final hours = (remainingMinutes / 60).floor();
       
-      if (days == 1) {
-        if (hours > 0) {
-          return hours == 1 ? '1 day, 1 hr' : '1 day, $hours hrs';
-        } else {
-          return '1 day';
-        }
-      } else {
-        if (hours > 0) {
-          return hours == 1 ? '$days days, 1 hr' : '$days days, $hours hrs';
-        } else {
-          return '$days days';
-        }
+      final d = days == 1 ? '1 day' : '$days days';
+      if (hours > 0) {
+        return '$d, ${hours} h';
       }
+      return d;
     }
     
     // Hours (60 minutes)
@@ -336,23 +328,15 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       final hours = (totalMinutes / 60).floor();
       final remainingMinutes = totalMinutes - (hours * 60);
       
-      if (hours == 1) {
-        if (remainingMinutes > 0) {
-          return remainingMinutes == 1 ? '1 hr, 1 min' : '1 hr, $remainingMinutes min';
-        } else {
-          return '1 hr';
-        }
-      } else {
-        if (remainingMinutes > 0) {
-          return remainingMinutes == 1 ? '$hours hrs, 1 min' : '$hours hrs, $remainingMinutes min';
-        } else {
-          return '$hours hrs';
-        }
+      final h = '$hours h';
+      if (remainingMinutes > 0) {
+        return '$h, ${remainingMinutes} m';
       }
+      return h;
     }
     
     // Minutes
-    return '$totalMinutes min';
+    return '$totalMinutes m';
   }
 
   String _getActivityName(ActionLog log) {
@@ -1437,7 +1421,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
               Expanded(
                 child: _buildStatCard(
                   icon: Icons.timer,
-                  title: 'Ø Dauer',
+                  title: 'Time',
                   value: _formatDuration(_averageDuration),
                   color: Colors.blue,
                 ),
