@@ -6,6 +6,7 @@ import 'level_up_service.dart';
 import 'achievement_service.dart';
 import 'life_areas_service.dart';
 import '../models/action_models.dart' as models;
+import '../navigation.dart';
 
 final _db = Supabase.instance.client;
 
