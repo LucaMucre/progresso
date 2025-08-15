@@ -4,7 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'dart:html' as html;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html show window; // only used on web via conditional checks
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/db_service.dart';
