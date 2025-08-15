@@ -257,26 +257,44 @@ Future<void> _checkAchievementsAfterLogInsert() async {
     // Streak serverseitig berechnen (bestehende Funktion)
     final currentStreak = await calculateStreak();
 
-    // Anzahl aktiver Lebensbereiche: Bereiche, in denen mindestens eine Aktivität existiert
+    // Anzahl aktiver Lebensbereiche: parent-rollup wie im Kalender/Profil
     int lifeAreaCount = 0;
     try {
-      final logsByArea = <String>{};
+      final rolledParents = <String>{};
       for (final l in logs) {
         try {
           if (l.notes == null) continue;
           final obj = jsonDecode(l.notes!);
           if (obj is Map<String, dynamic>) {
-            final name = (obj['area'] as String?)?.trim();
-            final category = (obj['category'] as String?)?.trim();
-            if (name != null && name.isNotEmpty) {
-              logsByArea.add('n:$name');
-            } else if (category != null && category.isNotEmpty) {
-              logsByArea.add('c:$category');
+            String? area = (obj['area'] as String?)?.trim().toLowerCase();
+            String? lifeArea = (obj['life_area'] as String?)?.trim().toLowerCase();
+            area ??= lifeArea;
+            final category = (obj['category'] as String?)?.trim().toLowerCase();
+            String key;
+            bool isKnownParent(String? v) => const {
+              'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
+            }.contains(v);
+            if (isKnownParent(area)) {
+              key = area!;
+            } else {
+              switch (category) {
+                case 'inner': key = 'spirituality'; break;
+                case 'social': key = 'relationships'; break;
+                case 'work': key = 'career'; break;
+                case 'development': key = 'learning'; break;
+                case 'finance': key = 'finance'; break;
+                case 'health': key = 'health'; break;
+                case 'fitness': key = 'fitness'; break;
+                case 'nutrition': key = 'nutrition'; break;
+                case 'art': key = 'art'; break;
+                default: key = area ?? 'unknown';
+              }
             }
+            rolledParents.add(key);
           }
         } catch (_) {}
       }
-      lifeAreaCount = logsByArea.length;
+      lifeAreaCount = rolledParents.where((k) => k != 'unknown').length;
     } catch (_) {}
 
     // Heutige Aktionen für Tages-Achievements
@@ -285,6 +303,7 @@ Future<void> _checkAchievementsAfterLogInsert() async {
     final end = start.add(const Duration(days: 1));
     int dailyActions = logs.where((l) => l.occurredAt.isAfter(start) && l.occurredAt.isBefore(end)).length;
 
+    await AchievementService.reconcileLifeAreaAchievements(lifeAreaCount);
     await AchievementService.checkAndUnlockAchievements(
       currentStreak: currentStreak,
       totalActions: totalActions,
