@@ -242,7 +242,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final user = client.auth.currentUser;
     if (user == null) return [];
 
-    final start = DateTime(day.year, day.month, day.day);
+    // Use UTC boundaries to avoid off-by-one due to local timezone
+    final localStart = DateTime(day.year, day.month, day.day);
+    final start = DateTime.utc(localStart.year, localStart.month, localStart.day);
     final end = start.add(const Duration(days: 1));
 
     try {
@@ -475,8 +477,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     if (user == null) return {};
 
     // Build range for the month [start, nextMonthStart)
-    final startOfMonth = DateTime(month.year, month.month, 1);
-    final startOfNextMonth = DateTime(month.year, month.month + 1, 1);
+    final startOfMonthLocal = DateTime(month.year, month.month, 1);
+    final startOfMonth = DateTime.utc(startOfMonthLocal.year, startOfMonthLocal.month, startOfMonthLocal.day);
+    final startOfNextMonthLocal = DateTime(month.year, month.month + 1, 1);
+    final startOfNextMonth = DateTime.utc(startOfNextMonthLocal.year, startOfNextMonthLocal.month, startOfNextMonthLocal.day);
 
     // Fetch templates once to resolve template_id to names
     final templatesRes = await client

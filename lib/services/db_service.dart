@@ -366,6 +366,7 @@ Future<Map<DateTime, Map<String, int>>> fetchDailyAreaTotals({
     'uid': uid,
     'start_date': '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}',
     'end_date': '${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}',
+    'tz_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
   });
   final out = <DateTime, Map<String, int>>{};
   if (res is List) {
@@ -395,6 +396,7 @@ Future<Map<DateTime, List<Map<String, dynamic>>>> fetchDailyAreaTotalsDetailed({
     'uid': uid,
     'start_date': '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}',
     'end_date': '${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}',
+    'tz_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
   });
   final out = <DateTime, List<Map<String, dynamic>>>{};
   if (res is List) {
