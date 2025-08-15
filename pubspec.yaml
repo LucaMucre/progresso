@@ -27,6 +27,7 @@ dependencies:
   cached_network_image: ^3.4.1
   sentry_flutter: ^8.7.0
   url_launcher: ^6.3.0
+  package_info_plus: ^8.0.2
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as frp;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 class ErrorService {
   static void showErrorSnackBar(BuildContext context, String message) {
@@ -109,6 +112,26 @@ class ErrorService {
     
     // Unbekannte Fehler
     return 'An unexpected error occurred. Please try again.';
+  }
+
+  static void logError(Object error, [StackTrace? st]) {
+    if (kDebugMode) {
+      // In Debug: direkte Ausgabe zur Konsole
+      print('Error: $error');
+      if (st != null) print(st);
+    }
+    _maybeCapture(error, st);
+  }
+
+  static Future<void> _maybeCapture(Object error, StackTrace? st) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final optIn = prefs.getBool('crash_opt_in') ?? true;
+      if (!optIn) return;
+      if (Sentry.isEnabled) {
+        await Sentry.captureException(error, stackTrace: st);
+      }
+    } catch (_) {}
   }
 
   // Globale Fehlerbehandlung

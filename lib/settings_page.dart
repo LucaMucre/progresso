@@ -17,6 +17,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
   final _newPwCtrl = TextEditingController();
   final _newPw2Ctrl = TextEditingController();
+  bool _crashOptIn = true;
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -28,10 +30,30 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     // KI-Assistenz für alle Nutzer deaktivieren (Datenschutz: keine externen Aufrufe)
     await prefs.setBool('assist_opt_in', false);
+    _crashOptIn = prefs.getBool('crash_opt_in') ?? true;
+    try {
+      // lazy import to avoid hard dep
+      final info = await (await importPackageInfo()).call();
+      _appVersion = info;
+    } catch (_) {}
     setState(() {
       _assistOptIn = false;
       _loading = false;
     });
+  }
+
+  Future<String Function()> importPackageInfo() async {
+    // work around since we cannot import conditionally here
+    // actual implementation is simple wrapper
+    return () async {
+      try {
+        // ignore: avoid_dynamic_calls
+        final pkg = await PackageInfoShim.load();
+        return '${pkg.version}+${pkg.buildNumber}';
+      } catch (_) {
+        return '';
+      }
+    };
   }
 
   Future<void> _changePassword() async {
@@ -189,6 +211,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: const Text('Change password'),
                   onTap: _changePassword,
                 ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.privacy_tip),
+                  title: const Text('Share anonymous crash reports'),
+                  value: _crashOptIn,
+                  onChanged: (v) async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool('crash_opt_in', v);
+                    setState(() => _crashOptIn = v);
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('Contact support'),
@@ -223,6 +255,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const TermsPage()),
                   ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(_appVersion.isEmpty ? 'Licenses' : 'Licenses • v$_appVersion'),
+                  onTap: () => showLicensePage(context: context, applicationName: 'Progresso', applicationVersion: _appVersion),
                 ),
                 const SizedBox(height: 24),
                 ListTile(
