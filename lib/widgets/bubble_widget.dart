@@ -280,6 +280,14 @@ class _BubblesGridState extends State<BubblesGrid> {
   void initState() {
     super.initState();
     _loadAreaDurations();
+    // Reload sizes when logs change globally
+    logsChangedTick.addListener(_loadAreaDurations);
+  }
+
+  @override
+  void dispose() {
+    logsChangedTick.removeListener(_loadAreaDurations);
+    super.dispose();
   }
 
   Future<void> _loadAreaDurations() async {
@@ -401,7 +409,6 @@ class _BubblesGridState extends State<BubblesGrid> {
     if (_layoutSignature != signature) {
       _layoutByAreaId.clear();
       final List<Rect> placed = [];
-      final double radiusBound = canvasSize * 0.90; // use almost full canvas
       final Offset center = Offset(canvasSize / 2, canvasSize / 2);
 
       for (final area in ordered) {
@@ -410,7 +417,11 @@ class _BubblesGridState extends State<BubblesGrid> {
         Offset? pos;
         for (int attempt = 0; attempt < 240; attempt++) {
           final angle = rnd.nextDouble() * 2 * pi;
-          final r = rnd.nextDouble() * (radiusBound - size * 0.6);
+          // Use almost the entire canvas; compute max radius per bubble size
+          final double padding = 4.0;
+          final double availableRadius = (canvasSize / 2) - (size / 2) - padding;
+          // Uniform distribution over area: sqrt(random)
+          final r = sqrt(rnd.nextDouble()) * availableRadius;
           final x = center.dx + r * cos(angle);
           final y = center.dy + r * sin(angle);
           final rect = Rect.fromLTWH(x - size / 2, y - size / 2, size, size);
