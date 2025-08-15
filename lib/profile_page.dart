@@ -319,12 +319,16 @@ class _ProfilePageState extends State<ProfilePage> {
           lastActionTime = DateTime.parse(lastActionResponse.first['occurred_at']);
         }
         
+        // Count only areas with at least one activity
+        final activeLifeAreaCount = _areaActivityCounts.values.where((n) => n > 0).length;
+        // Correct any mistakenly unlocked life-area achievements from earlier bug
+        await AchievementService.reconcileLifeAreaAchievements(activeLifeAreaCount);
         await AchievementService.checkAndUnlockAchievements(
           currentStreak: _currentStreak,
           totalActions: _totalActions,
           totalXP: _totalXP,
           level: _character!.level,
-          lifeAreaCount: _lifeAreas.length,
+          lifeAreaCount: activeLifeAreaCount,
           dailyActions: dailyActions,
           lastActionTime: lastActionTime,
         );

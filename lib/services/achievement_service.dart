@@ -511,6 +511,28 @@ class AchievementService {
       }
     }
   }
+
+  // Reconcile wrongly unlocked life-area achievements when count drops below thresholds
+  static Future<void> reconcileLifeAreaAchievements(int activeLifeAreaCount) async {
+    await _ensureLoaded();
+    final Set<String> toRemove = {};
+    if (activeLifeAreaCount < 8 && _unlockedAchievements.contains('balanced')) toRemove.add('balanced');
+    if (activeLifeAreaCount < 5 && _unlockedAchievements.contains('versatile')) toRemove.add('versatile');
+    if (activeLifeAreaCount < 3 && _unlockedAchievements.contains('organized')) toRemove.add('organized');
+    if (toRemove.isEmpty) return;
+    _unlockedAchievements.removeAll(toRemove);
+    await _saveUnlockedAchievements();
+    try {
+      final uid = _supabase.auth.currentUser?.id;
+      if (uid != null) {
+        await _supabase
+            .from('user_achievements')
+            .delete()
+            .eq('user_id', uid)
+            .in_('achievement_id', toRemove.toList());
+      }
+    } catch (_) {}
+  }
   
   static bool _checkSpecialAchievement(Achievement achievement, DateTime? actionTime) {
     if (actionTime == null) return false;
