@@ -129,7 +129,7 @@ class ProgressoApp extends StatelessWidget {
           centerTitle: true,
           surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardThemeData(
+        cardTheme: CardTheme(
           color: lightScheme.surface,
           elevation: 0.5,
           shape: RoundedRectangleBorder(
@@ -167,7 +167,7 @@ class ProgressoApp extends StatelessWidget {
           labelStyle: TextStyle(color: lightScheme.onSurfaceVariant),
           hintStyle: TextStyle(color: lightScheme.onSurfaceVariant),
         ),
-        dialogTheme: DialogThemeData(
+        dialogTheme: DialogTheme(
           backgroundColor: lightScheme.surface,
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
@@ -218,7 +218,7 @@ class ProgressoApp extends StatelessWidget {
           centerTitle: true,
           surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardThemeData(
+        cardTheme: CardTheme(
           color: darkScheme.surface,
           elevation: 0.5,
           shape: RoundedRectangleBorder(
@@ -256,7 +256,7 @@ class ProgressoApp extends StatelessWidget {
           labelStyle: TextStyle(color: darkScheme.onSurfaceVariant),
           hintStyle: TextStyle(color: darkScheme.onSurfaceVariant),
         ),
-        dialogTheme: DialogThemeData(
+        dialogTheme: DialogTheme(
           backgroundColor: darkScheme.surface,
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
