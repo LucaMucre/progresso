@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'legal/privacy_page.dart';
 import 'legal/terms_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -187,6 +188,27 @@ class _SettingsPageState extends State<SettingsPage> {
                   leading: const Icon(Icons.lock_reset),
                   title: const Text('Change password'),
                   onTap: _changePassword,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.email_outlined),
+                  title: const Text('Contact support'),
+                  subtitle: const Text('support@yourdomain.tld'),
+                  onTap: () async {
+                    final uri = Uri(scheme: 'mailto', path: 'support@yourdomain.tld', query: 'subject=Progresso Support');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.file_download_outlined),
+                  title: const Text('Request data export'),
+                  onTap: () async {
+                    final uri = Uri(scheme: 'mailto', path: 'support@yourdomain.tld', query: 'subject=GDPR Data Export Request');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    }
+                  },
                 ),
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),
