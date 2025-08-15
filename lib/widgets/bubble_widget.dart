@@ -347,30 +347,34 @@ class _BubblesGridState extends State<BubblesGrid> {
       return const SizedBox.shrink();
     }
 
-    // Responsive Canvas: skaliert nach Bildschirmgröße
+    // Responsive: occupy full width; compute height from constraints
     final screenSize = MediaQuery.of(context).size;
-    double canvasSize = min(screenSize.width * 0.6, screenSize.height * 0.55);
-    canvasSize = canvasSize.clamp(320.0, 800.0);
-    const double baseCanvas = 300.0;
-    final double scale = canvasSize / baseCanvas;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double canvasWidth = constraints.maxWidth;
+        // Height: responsive (60% of width), bounded by screen height
+        double canvasHeight = canvasWidth * 0.6;
+        canvasHeight = canvasHeight.clamp(300.0, screenSize.height * 0.70);
+        const double baseCanvas = 300.0;
+        final double scale = min(canvasWidth, canvasHeight) / baseCanvas;
 
-    return Center(
-      child: SizedBox(
-        height: canvasSize,
-        width: canvasSize,
-        child: Stack(
-          children: [
-            if (_loadingDurations)
-              const Center(child: CircularProgressIndicator())
-            else
-              ..._buildRandomBubbles(canvasSize, scale),
-          ],
-        ),
-      ),
+        return SizedBox(
+          width: canvasWidth,
+          height: canvasHeight,
+          child: Stack(
+            children: [
+              if (_loadingDurations)
+                const Center(child: CircularProgressIndicator())
+              else
+                ..._buildRandomBubbles(canvasWidth, canvasHeight, scale),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  List<Widget> _buildRandomBubbles(double canvasSize, double scale) {
+  List<Widget> _buildRandomBubbles(double canvasWidth, double canvasHeight, double scale) {
     final List<Widget> widgets = [];
     if (widget.areas.isEmpty) return widgets;
     final Map<LifeArea, double> minutes = {};
@@ -379,23 +383,26 @@ class _BubblesGridState extends State<BubblesGrid> {
       minutes[area] = _minutesByKey[key] ?? 0.0;
     }
     final double maxMin = (minutes.values.isEmpty ? 0.0 : minutes.values.reduce(max)).clamp(0.0, double.infinity);
-    // Bigger lead bubble ~32% of canvas; allow larger upper bound on wide screens
-    final double maxSize = (canvasSize * 0.32).clamp(54.0, 240.0);
+    final double minSide = min(canvasWidth, canvasHeight);
+    // Bigger lead bubble ~32% of min side
+    final double maxSize = (minSide * 0.32).clamp(54.0, 240.0);
     // Ensure a minimum of 30% of the biggest bubble
     final double minSize = maxSize * 0.30;
 
     final ordered = minutes.keys.toList()
       ..sort((a, b) => (minutes[b] ?? 0).compareTo(minutes[a] ?? 0));
 
-    // Pre-compute base size per area
+    // Base size per area
     final Map<String, double> sizeById = {
       for (final a in ordered)
         a.id: max(minSize, maxSize * (maxMin > 0 ? (minutes[a]! / maxMin).clamp(0.0, 1.0) : 0.5))
     };
 
-    // Build a signature so we only place when inputs changed
+    // Build signature incl. width/height
     final sig = StringBuffer()
-      ..write(canvasSize.toStringAsFixed(0))
+      ..write(canvasWidth.toStringAsFixed(0))
+      ..write('x')
+      ..write(canvasHeight.toStringAsFixed(0))
       ..write('|');
     for (final a in ordered) {
       sig
@@ -409,32 +416,24 @@ class _BubblesGridState extends State<BubblesGrid> {
     if (_layoutSignature != signature) {
       _layoutByAreaId.clear();
       final List<Rect> placed = [];
-      final Offset center = Offset(canvasSize / 2, canvasSize / 2);
+      const double padding = 4.0;
 
       for (final area in ordered) {
         final double size = sizeById[area.id]!;
         final rnd = Random(area.id.hashCode);
         Offset? pos;
         for (int attempt = 0; attempt < 240; attempt++) {
-          final angle = rnd.nextDouble() * 2 * pi;
-          // Use almost the entire canvas; compute max radius per bubble size
-          final double padding = 4.0;
-          final double availableRadius = (canvasSize / 2) - (size / 2) - padding;
-          // Uniform distribution over area: sqrt(random)
-          final r = sqrt(rnd.nextDouble()) * availableRadius;
-          final x = center.dx + r * cos(angle);
-          final y = center.dy + r * sin(angle);
+          // Uniform over rectangle with safe margins
+          final x = padding + size / 2 + rnd.nextDouble() * (canvasWidth - size - padding * 2);
+          final y = padding + size / 2 + rnd.nextDouble() * (canvasHeight - size - padding * 2);
           final rect = Rect.fromLTWH(x - size / 2, y - size / 2, size, size);
-          final safe = rect.left >= 0 && rect.top >= 0 && rect.right <= canvasSize && rect.bottom <= canvasSize;
-          if (!safe) continue;
           bool overlaps = false;
           for (final placedRect in placed) {
             if (rect.overlaps(placedRect.inflate(6))) { overlaps = true; break; }
           }
           if (!overlaps) { pos = Offset(x, y); placed.add(rect); _layoutByAreaId[area.id] = rect; break; }
         }
-        // Fallback to center if no non-overlapping position was found
-        _layoutByAreaId.putIfAbsent(area.id, () => Rect.fromCenter(center: center, width: size, height: size));
+        _layoutByAreaId.putIfAbsent(area.id, () => Rect.fromLTWH((canvasWidth - size) / 2, (canvasHeight - size) / 2, size, size));
       }
       _layoutSignature = signature;
     }
@@ -445,7 +444,7 @@ class _BubblesGridState extends State<BubblesGrid> {
       final size = rect.width;
       final mins = minutes[area] ?? 0.0;
       final isHovered = _hoveredIndex == idx;
-      final hoverScale = isHovered ? 1.10 : 1.0; // scale visual only, keep position stable
+      final hoverScale = isHovered ? 1.10 : 1.0;
 
       widgets.add(Positioned(
         left: rect.left,
