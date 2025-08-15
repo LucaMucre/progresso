@@ -181,10 +181,15 @@ class _ProfilePageState extends State<ProfilePage> {
       final areas = results[1] as List<LifeArea>;
       final actionResponse = results[2] as List;
         
+        // Ensure deduplication and correct counting of all user logs
         final logs = actionResponse;
-        final dates = logs.map((log) => DateTime.parse(log['occurred_at'])).toList();
+        final dates = logs
+            .map((log) => DateTime.parse(log['occurred_at'] as String))
+            .map((dt) => DateTime(dt.year, dt.month, dt.day))
+            .toList();
         
-        _totalActions = dates.length;
+        // Count ALL activities (logs), not unique dates
+        _totalActions = logs.length;
         _currentStreak = _calculateCurrentStreak(dates);
         _longestStreak = _calculateLongestStreak(dates);
         // Gesamt-XP anhand der Logs berechnen (nicht aus Character.total_xp, da dies evtl. nicht synchron ist)
