@@ -164,6 +164,8 @@ Future<ActionLog> createLog({
 
   // Achievements nach erfolgreichem Insert prüfen
   _checkAchievementsAfterLogInsert();
+  // Global notification for UI to refresh profile/dashboard stats
+  try { notifyLogsChanged(); } catch (_) {}
   // Level-Up check and notification
   try {
     final totalXp = await fetchTotalXp();
@@ -237,6 +239,7 @@ Future<ActionLog> createQuickLog({
   
   // Achievements NACH Level-Up-Berechnung prüfen (damit Level-Up-Flag gesetzt ist, falls nötig)
   await _checkAchievementsAfterLogInsert();
+  try { notifyLogsChanged(); } catch (_) {}
 
   return ActionLog.fromJson(out);
 }

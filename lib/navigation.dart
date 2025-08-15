@@ -17,3 +17,10 @@ void refreshProfileTab() {
   homeShellProfileRefreshTick.value++;
 }
 
+/// Global signal when action_logs changed (insert/update/delete)
+final ValueNotifier<int> logsChangedTick = ValueNotifier<int>(0);
+
+void notifyLogsChanged() {
+  logsChangedTick.value++;
+}
+

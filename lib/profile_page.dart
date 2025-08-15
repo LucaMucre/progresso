@@ -14,6 +14,7 @@ import 'services/achievement_service.dart';
 // Popups are orchestrated centrally via LevelUpService; do not import dialogs directly here
 import 'services/level_up_service.dart';
 import 'life_area_detail_page.dart';
+import 'navigation.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -46,6 +47,8 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _primeFromCacheThenReload();
+    // react to global log changes
+    logsChangedTick.addListener(_onExternalLogsChanged);
     _subscribeToUserChanges();
     _subscribeToActivityChanges();
     _initializeAchievements();
@@ -62,6 +65,11 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
     AvatarSyncService.avatarVersion.addListener(_loadProfile);
+  }
+
+  void _onExternalLogsChanged() {
+    // lightweight refresh of statistics
+    _loadStatistics();
   }
 
   Future<void> _primeFromCacheThenReload() async {
@@ -1099,6 +1107,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _usersChannel?.unsubscribe();
     AvatarSyncService.avatarVersion.removeListener(_loadProfile);
+    logsChangedTick.removeListener(_onExternalLogsChanged);
     // Cleanup optionaler Callback
     // Da wir eine anonyme Closure registriert haben, ist hier kein Remove möglich
     super.dispose();
