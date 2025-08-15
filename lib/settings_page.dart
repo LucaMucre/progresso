@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'legal/privacy_page.dart';
 import 'legal/terms_page.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -43,13 +44,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<String Function()> importPackageInfo() async {
-    // work around since we cannot import conditionally here
-    // actual implementation is simple wrapper
+    // simple wrapper using package_info_plus
     return () async {
       try {
-        // ignore: avoid_dynamic_calls
-        final pkg = await PackageInfoShim.load();
-        return '${pkg.version}+${pkg.buildNumber}';
+        // late import to keep file lightweight
+        final info = await PackageInfo.fromPlatform();
+        return '${info.version}+${info.buildNumber}';
       } catch (_) {
         return '';
       }
