@@ -66,6 +66,14 @@ curl -X POST 'https://xssuhovxkpgorjxvflwo.supabase.co/functions/v1/calculate-xp
   -d '{"action_log_id": "ACTION_LOG_ID"}'
 ```
 
+### CORS/Origins konfigurieren
+Setze in der Function-Umgebung eine Variable `ALLOWED_ORIGINS` mit einer kommagetrennten Liste deiner erlaubten Origins, z. B.:
+
+```
+ALLOWED_ORIGINS=https://app.progresso.dev,https://progresso.app
+```
+Ohne Konfiguration fällt die Function auf `*` zurück (nur für lokale Tests geeignet).
+
 ### **Integration in der App:**
 Die App verwendet bereits die Edge Function über den `db_service.dart`:
 ```dart

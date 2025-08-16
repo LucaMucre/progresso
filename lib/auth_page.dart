@@ -56,6 +56,12 @@ class _AuthPageState extends State<AuthPage> {
     final pass = _passCtrl.text;
 
     try {
+      if (email.isEmpty || pass.isEmpty) {
+        setState(() {
+          _error = 'Please enter email and password.';
+        });
+        return;
+      }
       if (_isLogin) {
         // Echter Login mit Supabase
         final res = await Supabase.instance.client.auth.signInWithPassword(
@@ -90,7 +96,12 @@ class _AuthPageState extends State<AuthPage> {
       }
     } on AuthException catch (err) {
       setState(() {
-        _error = err.message;
+        final msg = (err.message.trim().isEmpty)
+            ? (_isLogin
+                ? 'Login failed. Please check your credentials or confirm your email.'
+                : 'Sign up failed. Please try again.')
+            : err.message;
+        _error = msg;
       });
     } catch (err) {
       setState(() {

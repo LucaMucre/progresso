@@ -15,40 +15,52 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   bool envLoaded = false;
+  bool dartDefineLoaded = false;
   String? supabaseUrl;
   String? supabaseAnonKey;
   final flavor = const String.fromEnvironment('FLAVOR', defaultValue: 'dev');
 
-  try {
-    // .env nach Flavor laden (.env.dev / .env.staging / .env.prod)
-    final envFile = switch (flavor) {
-      'prod' => '.env.prod',
-      'staging' => '.env.staging',
-      _ => '.env',
-    };
-    await dotenv.load(fileName: envFile);
-    
-    // Validiere die Umgebungsvariablen
-    supabaseUrl = dotenv.env['SUPABASE_URL'];
-    supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
-    
-    if (supabaseUrl != null && supabaseAnonKey != null && 
-        supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-      envLoaded = true;
-      if (kDebugMode) {
-        debugPrint('✅ .env file loaded successfully');
-      }
-    } else {
-      throw Exception('SUPABASE_URL oder SUPABASE_ANON_KEY fehlen in .env Datei');
-    }
-  } catch (e) {
+  // 1) Prod/CI bevorzugt --dart-define
+  final ddSupabaseUrl = const String.fromEnvironment('SUPABASE_URL');
+  final ddSupabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY');
+  if (ddSupabaseUrl.isNotEmpty && ddSupabaseAnonKey.isNotEmpty) {
+    supabaseUrl = ddSupabaseUrl;
+    supabaseAnonKey = ddSupabaseAnonKey;
+    dartDefineLoaded = true;
     if (kDebugMode) {
-      debugPrint('❌ Error loading .env file: $e');
-      debugPrint('🚫 Keine Fallback-Keys. Bitte .env konfigurieren.');
-    } else {
-      // In Release keine Fallback-Keys verwenden
-      supabaseUrl = null;
-      supabaseAnonKey = null;
+      debugPrint('✅ Loaded Supabase config from --dart-define');
+    }
+  }
+
+  // 2) Nur in Nicht-Release zusätzlich .env lesen (Dev‑Bequemlichkeit)
+  if (!kReleaseMode && !dartDefineLoaded) {
+    try {
+      // .env nach Flavor laden (.env / .env.staging / .env.prod)
+      final envFile = switch (flavor) {
+        'prod' => '.env.prod',
+        'staging' => '.env.staging',
+        _ => '.env',
+      };
+      await dotenv.load(fileName: envFile);
+
+      // Validiere die Umgebungsvariablen
+      supabaseUrl = dotenv.env['SUPABASE_URL'];
+      supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+      if (supabaseUrl != null && supabaseAnonKey != null &&
+          supabaseUrl!.isNotEmpty && supabaseAnonKey!.isNotEmpty) {
+        envLoaded = true;
+        if (kDebugMode) {
+          debugPrint('✅ .env file loaded successfully');
+        }
+      } else {
+        throw Exception('SUPABASE_URL oder SUPABASE_ANON_KEY fehlen in .env Datei');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ Error loading .env file: $e');
+        debugPrint('ℹ️  Verwende --dart-define oder konfiguriere eine lokale .env für Dev.');
+      }
     }
   }
 
@@ -62,15 +74,25 @@ Future<void> main() async {
         anonKey: supabaseAnonKey!,
       );
       if (kDebugMode) {
-        if (envLoaded) {
-          debugPrint('✅ Supabase erfolgreich mit .env Keys initialisiert');
-        } else {
-          debugPrint('✅ Supabase erfolgreich mit Fallback-Keys initialisiert');
-        }
+        final source = dartDefineLoaded
+            ? '--dart-define'
+            : (envLoaded ? '.env' : 'unknown source');
+        debugPrint('✅ Supabase initialisiert (Quelle: $source)');
       }
-      final client = Supabase.instance.client;
-      await client.from('users').select('count').limit(1);
-      if (kDebugMode) debugPrint('✅ Supabase Verbindung getestet - erfolgreich');
+      // Nicht blockierend testen, damit der App-Start nicht hängt (z. B. bei CORS/Netzwerkproblemen)
+      Future(() async {
+        try {
+          final client = Supabase.instance.client;
+          await client
+              .from('users')
+              .select('count')
+              .limit(1)
+              .timeout(const Duration(seconds: 3));
+          if (kDebugMode) debugPrint('✅ Supabase Verbindung getestet - erfolgreich');
+        } catch (e) {
+          if (kDebugMode) debugPrint('ℹ️  Supabase Test-Query übersprungen/fehlgeschlagen: $e');
+        }
+      });
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ Supabase Initialisierung fehlgeschlagen: $e');
@@ -81,7 +103,11 @@ Future<void> main() async {
   }
 
   // Optional Sentry nur aktivieren, wenn DSN vorhanden ist
-  final sentryDsn = dotenv.env['SENTRY_DSN'];
+  // Sentry DSN ebenfalls bevorzugt via --dart-define
+  final ddSentryDsn = const String.fromEnvironment('SENTRY_DSN');
+  final sentryDsn = (ddSentryDsn.isNotEmpty)
+      ? ddSentryDsn
+      : (envLoaded ? dotenv.env['SENTRY_DSN'] : null);
   final enableSentry = (sentryDsn != null && sentryDsn.isNotEmpty && kReleaseMode);
   if (enableSentry) {
     await SentryFlutter.init(
@@ -129,7 +155,7 @@ class ProgressoApp extends StatelessWidget {
           centerTitle: true,
           surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: lightScheme.surface,
           elevation: 0.5,
           shape: RoundedRectangleBorder(
@@ -167,7 +193,7 @@ class ProgressoApp extends StatelessWidget {
           labelStyle: TextStyle(color: lightScheme.onSurfaceVariant),
           hintStyle: TextStyle(color: lightScheme.onSurfaceVariant),
         ),
-        dialogTheme: DialogTheme(
+        dialogTheme: DialogThemeData(
           backgroundColor: lightScheme.surface,
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
@@ -218,7 +244,7 @@ class ProgressoApp extends StatelessWidget {
           centerTitle: true,
           surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: darkScheme.surface,
           elevation: 0.5,
           shape: RoundedRectangleBorder(
@@ -256,7 +282,7 @@ class ProgressoApp extends StatelessWidget {
           labelStyle: TextStyle(color: darkScheme.onSurfaceVariant),
           hintStyle: TextStyle(color: darkScheme.onSurfaceVariant),
         ),
-        dialogTheme: DialogTheme(
+        dialogTheme: DialogThemeData(
           backgroundColor: darkScheme.surface,
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(

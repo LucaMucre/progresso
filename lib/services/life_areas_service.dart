@@ -84,6 +84,7 @@ class LifeAreasService {
     'Wirtschaft': 'Finance',
     'Entwicklung': 'Development',
     'Gesundheit': 'Health',
+    'Vitalität': 'Vitality',
     'Allgemein': 'General',
   };
 

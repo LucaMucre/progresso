@@ -61,6 +61,8 @@ class _CalendarGridState extends State<CalendarGrid> {
     for (int i = 0; i < firstWeekday - 1; i++) {
       cells.add(const SizedBox.shrink());
     }
+    final now = DateTime.now();
+    final todayKey = DateTime(now.year, now.month, now.day);
     for (int d = 1; d <= daysInMonth; d++) {
       final date = DateTime(widget.month.year, widget.month.month, d);
       final key = DateTime(date.year, date.month, date.day);
@@ -97,10 +99,15 @@ class _CalendarGridState extends State<CalendarGrid> {
             margin: const EdgeInsets.all(4),
             clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
-              color: dominantColor?.withOpacity(0.10),
+              color: key == todayKey
+                  ? Theme.of(context).colorScheme.primary.withOpacity(0.14)
+                  : dominantColor?.withOpacity(0.10),
               border: Border.all(
-                color: (dominantColor ?? Theme.of(context).dividerColor)
-                    .withOpacity(0.25),
+                color: key == todayKey
+                    ? Theme.of(context).colorScheme.primary
+                    : (dominantColor ?? Theme.of(context).dividerColor)
+                        .withOpacity(0.25),
+                width: key == todayKey ? 1.4 : 1.0,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -120,7 +127,15 @@ class _CalendarGridState extends State<CalendarGrid> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.max,
                   children: [
-                    Text('$d', style: Theme.of(context).textTheme.labelSmall),
+                    Text(
+                      '$d',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: key == todayKey ? FontWeight.w700 : null,
+                            color: key == todayKey
+                                ? Theme.of(context).colorScheme.onPrimaryContainer
+                                : null,
+                          ),
+                    ),
                     if (entries.isNotEmpty && maxEntries > 0)
                       Expanded(
                         child: ListView.builder(

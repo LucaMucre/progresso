@@ -260,6 +260,15 @@ class _LogActionPageState extends State<LogActionPage> {
       }
     }
     setState(() { _loading = true; _error = null; });
+    final messenger = ScaffoldMessenger.of(context);
+    if (mounted) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Speichere… XP wird berechnet'),
+          duration: Duration(milliseconds: 900),
+        ),
+      );
+    }
 
     try {
       // Upload image if selected
@@ -325,8 +334,16 @@ class _LogActionPageState extends State<LogActionPage> {
 
       // Auf Erfolg hinweisen und zuverlässig zur Liste zurück
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Log created: +${log.earnedXp} XP')),
+      // Wenn XP noch 0 (Edge Function evtl. asynchron) → Hinweis anzeigen
+      final xpText = (log.earnedXp > 0)
+          ? '+${log.earnedXp} XP'
+          : 'XP wird berechnet…';
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Log created: $xpText'),
+          duration: const Duration(milliseconds: 1600),
+        ),
       );
       // Tastatur schließen und Pop sicher durchführen
       FocusScope.of(context).unfocus();

@@ -4,12 +4,9 @@ import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'auth_page.dart';
-import 'dashboard_page.dart';
 
 import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
-import 'profile_page.dart';
 import 'services/db_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/avatar_sync_service.dart';
@@ -281,7 +278,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final logs = await _fetchLogsForDay(day);
     final templatesRes = await client
         .from('action_templates')
-        .select('id,name')
+        .select('id,name,category')
         .eq('user_id', user.id);
     final lifeAreasRes = await client
         .from('life_areas')
@@ -291,11 +288,20 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final templateMap = {
       for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
     };
+    final templateIdToCategory = {
+      for (final t in (templatesRes as List)) (t['id'] as String): LifeAreasService.canonicalCategory((t['category'] as String?) ?? '')
+    };
     final List<_AreaTag> areaTags = (lifeAreasRes as List).map((m) => _AreaTag(
-      name: (m['name'] as String).trim(),
-      category: (m['category'] as String).trim(),
+      // Nutze kanonische Schlüssel (englisch, lowercase) für stabilen Match
+      name: LifeAreasService.canonicalAreaName((m['name'] as String).trim()),
+      category: LifeAreasService.canonicalCategory((m['category'] as String).trim()),
       color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
     )).toList();
+    
+    print('AREA TAGS DEBUG: Loaded ${areaTags.length} area tags');
+    for (final tag in areaTags) {
+      print('  - ${tag.name} (${tag.category}) -> ${tag.color}');
+    }
 
     String titleForLog(ActionLog log) {
       if (log.activityName != null && log.activityName!.trim().isNotEmpty) {
@@ -311,15 +317,94 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
     Color? tagColorForLog(ActionLog log) {
       try {
-        if (log.notes == null || log.notes!.isEmpty) return null;
-        final obj = jsonDecode(log.notes!);
-        if (obj is Map<String, dynamic>) {
-          final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
-          final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
-          final match = _matchAreaTag(areaTags, areaName, category);
-          return match?.color;
+        if (log.notes != null && log.notes!.isNotEmpty) {
+          final obj = jsonDecode(log.notes!);
+          if (obj is Map<String, dynamic>) {
+            final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
+            final lifeArea = LifeAreasService.canonicalAreaName(obj['life_area'] as String?);
+            final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
+            
+            // Verwende den präzisesten verfügbaren Area-Namen für Match
+            final effectiveAreaName = areaName.isNotEmpty ? areaName : lifeArea;
+            final match = _matchAreaTag(areaTags, effectiveAreaName, category);
+            if (match != null) {
+              return match.color;
+            }
+            
+            // Direkte Area-Ableitung falls kein Tag-Match
+            String areaKey = effectiveAreaName;
+            if (areaKey.isEmpty) {
+              switch (category) {
+                case 'inner':
+                  areaKey = 'spirituality';
+                  break;
+                case 'social':
+                  areaKey = 'relationships';
+                  break;
+                case 'work':
+                  areaKey = 'career';
+                  break;
+                case 'development':
+                  areaKey = 'learning';
+                  break;
+                case 'finance':
+                  areaKey = 'finance';
+                  break;
+                case 'health':
+                  areaKey = 'health';
+                  break;
+                case 'vitality':
+                  areaKey = 'vitality';
+                  break;
+                case 'creativity':
+                  areaKey = 'art';
+                  break;
+              }
+            }
+            if (areaKey.isNotEmpty) {
+              return _colorForAreaKey(areaKey);
+            }
+          }
         }
       } catch (_) {}
+      
+      // Template-Kategorie Fallback
+      if (log.templateId != null) {
+        final cat = templateIdToCategory[log.templateId!];
+        if (cat != null && cat.isNotEmpty) {
+          String areaKey = '';
+          switch (cat) {
+            case 'inner':
+              areaKey = 'spirituality';
+              break;
+            case 'social':
+              areaKey = 'relationships';
+              break;
+            case 'work':
+              areaKey = 'career';
+              break;
+            case 'development':
+              areaKey = 'learning';
+              break;
+            case 'finance':
+              areaKey = 'finance';
+              break;
+            case 'health':
+              areaKey = 'health';
+              break;
+            case 'vitality':
+              areaKey = 'vitality';
+              break;
+            case 'creativity':
+              areaKey = 'art';
+              break;
+          }
+          if (areaKey.isNotEmpty) {
+            return _colorForAreaKey(areaKey);
+          }
+        }
+      }
+      
       return null;
     }
 
@@ -353,17 +438,61 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   ],
                 ),
                 const SizedBox(height: 8),
-                FutureBuilder<Map<DateTime, List<Map<String, dynamic>>>>(
-                  future: fetchDailyAreaTotalsDetailed(month: DateTime(day.year, day.month, 1)),
-                  builder: (context, snap) {
-                    if (snap.connectionState != ConnectionState.done || snap.data == null) {
-                      return const SizedBox.shrink();
+                Builder(
+                  builder: (context) {
+                    // Aggregation basierend auf den tatsächlich angezeigten Logs
+                    final List<Map<String, dynamic>> acc = [];
+                    final Map<String, Map<String, int>> tmp = {};
+                    for (final log in logs) {
+                      // Bestimme Area-Key analog zur Tag-Farbe
+                      String areaKey = 'unknown';
+                      try {
+                        if (log.notes != null && log.notes!.isNotEmpty) {
+                          final obj = jsonDecode(log.notes!);
+                          if (obj is Map<String, dynamic>) {
+                            final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
+                            final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
+                            final match = _matchAreaTag(areaTags, areaName, category);
+                            if (match != null) areaKey = match.name.toLowerCase();
+                            // Fallbacks wie in der RPC-Logik
+                            if (areaKey == 'unknown' || areaKey.isEmpty) {
+                              switch (category) {
+                                case 'inner':
+                                  areaKey = 'spirituality';
+                                  break;
+                                case 'social':
+                                  areaKey = 'relationships';
+                                  break;
+                                case 'work':
+                                  areaKey = 'career';
+                                  break;
+                                case 'development':
+                                  areaKey = 'learning';
+                                  break;
+                                case 'finance':
+                                  areaKey = 'finance';
+                                  break;
+                                case 'health':
+                                  areaKey = 'health';
+                                  break;
+                                case 'creativity':
+                                  areaKey = 'art';
+                                  break;
+                              }
+                            }
+                          }
+                        }
+                      } catch (_) {}
+                      final bucket = tmp.putIfAbsent(areaKey, () => {'total': 0, 'sum_duration': 0, 'sum_xp': 0});
+                      bucket['total'] = (bucket['total'] ?? 0) + 1;
+                      bucket['sum_duration'] = (bucket['sum_duration'] ?? 0) + (log.durationMin ?? 0);
+                      bucket['sum_xp'] = (bucket['sum_xp'] ?? 0) + (log.earnedXp);
                     }
-                    final rows = snap.data![DateTime(day.year, day.month, day.day)] ?? const [];
-                    if (rows.isEmpty) return const SizedBox.shrink();
-                    final known = rows.where((r) => (r['area_key'] as String?) != 'unknown').toList();
-                    final list = known.isNotEmpty ? known : rows;
-                    list.sort((a, b) {
+                    tmp.forEach((k, v) {
+                      acc.add({'area_key': k, 'total': v['total'] ?? 0, 'sum_duration': v['sum_duration'] ?? 0, 'sum_xp': v['sum_xp'] ?? 0});
+                    });
+                    if (acc.isEmpty) return const SizedBox.shrink();
+                    acc.sort((a, b) {
                       final c = (b['total'] as int).compareTo(a['total'] as int);
                       if (c != 0) return c;
                       final d = (b['sum_duration'] as int).compareTo(a['sum_duration'] as int);
@@ -377,7 +506,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: list.map((r) {
+                        children: acc.map((r) {
                           final String area = (r['area_key'] as String?) ?? 'unknown';
                           final int total = (r['total'] as num?)?.toInt() ?? 0;
                           final int mins = (r['sum_duration'] as num?)?.toInt() ?? 0;
@@ -418,7 +547,77 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       itemBuilder: (_, i) {
                         final log = logs[i];
                         final t = titleForLog(log);
-                        final c = tagColorForLog(log) ?? Theme.of(context).colorScheme.primary;
+                        final c = tagColorForLog(log) ?? (() {
+                          // Deterministische Farbe ableiten, kein Theme-Fallback
+                          String areaKey = '';
+                          try {
+                            if (log.notes != null && log.notes!.isNotEmpty) {
+                              final obj = jsonDecode(log.notes!);
+                              if (obj is Map<String, dynamic>) {
+                                final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
+                                final lifeArea = LifeAreasService.canonicalAreaName(obj['life_area'] as String?);
+                                final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
+                                final match = _matchAreaTag(areaTags, areaName.isNotEmpty ? areaName : lifeArea, category);
+                                if (match != null) return match.color;
+                                areaKey = areaName.isNotEmpty ? areaName : lifeArea;
+                                if (areaKey.isEmpty) {
+                                  switch (category) {
+                                    case 'inner':
+                                      areaKey = 'spirituality';
+                                      break;
+                                    case 'social':
+                                      areaKey = 'relationships';
+                                      break;
+                                    case 'work':
+                                      areaKey = 'career';
+                                      break;
+                                    case 'development':
+                                      areaKey = 'learning';
+                                      break;
+                                    case 'finance':
+                                      areaKey = 'finance';
+                                      break;
+                                    case 'health':
+                                      areaKey = 'health';
+                                      break;
+                                    case 'creativity':
+                                      areaKey = 'art';
+                                      break;
+                                  }
+                                }
+                              }
+                            }
+                          } catch (_) {}
+                          if (areaKey.isEmpty && log.templateId != null) {
+                            final cat = templateIdToCategory[log.templateId!];
+                            if (cat != null && cat.isNotEmpty) {
+                              switch (cat) {
+                                case 'inner':
+                                  areaKey = 'spirituality';
+                                  break;
+                                case 'social':
+                                  areaKey = 'relationships';
+                                  break;
+                                case 'work':
+                                  areaKey = 'career';
+                                  break;
+                                case 'development':
+                                  areaKey = 'learning';
+                                  break;
+                                case 'finance':
+                                  areaKey = 'finance';
+                                  break;
+                                case 'health':
+                                  areaKey = 'health';
+                                  break;
+                                case 'creativity':
+                                  areaKey = 'art';
+                                  break;
+                              }
+                            }
+                          }
+                          return _colorForAreaKey(areaKey.isNotEmpty ? areaKey : 'unknown');
+                        })();
                         return ListTile(
                           dense: true,
                           leading: Container(
@@ -1069,38 +1268,27 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   data.forEach((k, v) {
                     mapped[k] = v.map((e) => CalendarDayEntry(title: e.title, color: e.color)).toList();
                   });
-                  return FutureBuilder<Map<DateTime, List<Map<String, dynamic>>>>(
-                    future: fetchDailyAreaTotalsDetailed(month: _calendarMonth),
-                    builder: (context, snap) {
-                      final Map<DateTime, Color> dominant = {};
-                      final agg = snap.data;
-                      if (agg != null) {
-                        agg.forEach((day, rows) {
-                          // Optional: ignoriere 'unknown', wenn es bekannte Bereiche gibt
-                          final known = rows.where((r) => (r['area_key'] as String?) != 'unknown').toList();
-                          final list = known.isNotEmpty ? known : rows;
-                          list.sort((a, b) {
-                            final c = (b['total'] as int).compareTo(a['total'] as int);
-                            if (c != 0) return c;
-                            final d = (b['sum_duration'] as int).compareTo(a['sum_duration'] as int);
-                            if (d != 0) return d;
-                            final x = (b['sum_xp'] as int).compareTo(a['sum_xp'] as int);
-                            if (x != 0) return x;
-                            return ((a['area_key'] as String?) ?? '').compareTo(((b['area_key'] as String?) ?? ''));
-                          });
-                          final top = list.isNotEmpty ? (list.first['area_key'] as String?) : null;
-                          if (top != null) {
-                            dominant[day] = _colorForAreaKey(top);
-                          }
-                        });
-                      }
-                      return CalendarGrid(
-                        month: _calendarMonth,
-                        dayEntries: mapped,
-                        dayDominantColors: dominant.isEmpty ? null : dominant,
-                        onOpenDay: _openDayDetails,
-                      );
-                    },
+                  // Dominante Farbe je Tag direkt aus den Einträgen ableiten (nutzt Nutzerfarben)
+                  final Map<DateTime, Color> dominant = {};
+                  mapped.forEach((day, entries) {
+                    final counts = <int, int>{};
+                    for (final e in entries) {
+                      final c = e.color?.value;
+                      if (c == null) continue;
+                      counts[c] = (counts[c] ?? 0) + 1;
+                    }
+                    if (counts.isNotEmpty) {
+                      int best = counts.entries.first.key;
+                      int bestCount = 0;
+                      counts.forEach((k,v){ if (v > bestCount) { bestCount = v; best = k; } });
+                      dominant[day] = Color(best);
+                    }
+                  });
+                  return CalendarGrid(
+                    month: _calendarMonth,
+                    dayEntries: mapped,
+                    dayDominantColors: dominant.isEmpty ? null : dominant,
+                    onOpenDay: _openDayDetails,
                   );
                 },
               );
@@ -1163,6 +1351,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return Colors.pink;
       case 'health':
         return Colors.green;
+      case 'vitality':
+        return Colors.orange;
       case 'creativity':
       case 'art':
         return Colors.purple;
@@ -3069,10 +3259,21 @@ Color _parseHexColor(String hex) {
 _AreaTag? _matchAreaTag(List<_AreaTag> tags, String? areaName, String? category) {
   final an = areaName?.toLowerCase();
   final cat = category?.toLowerCase();
-  for (final t in tags) {
-    if (an != null && an.isNotEmpty && t.name.toLowerCase() == an) return t;
-    if (cat != null && cat.isNotEmpty && t.category.toLowerCase() == cat) return t;
+  
+  // Priorität 1: Exakter Area-Name-Match
+  if (an != null && an.isNotEmpty) {
+    for (final t in tags) {
+      if (t.name.toLowerCase() == an) return t;
+    }
   }
+  
+  // Priorität 2: Kategorie-Match nur als Fallback, wenn kein Area-Name
+  if ((an == null || an.isEmpty) && cat != null && cat.isNotEmpty) {
+    for (final t in tags) {
+      if (t.category.toLowerCase() == cat) return t;
+    }
+  }
+  
   return null;
 }
 

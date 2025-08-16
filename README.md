@@ -38,13 +38,16 @@ Dabei sol die APp im Layout sein, wie ein Inventar in einem video spiel. Der cha
    flutter packages pub run build_runner build --delete-conflicting-outputs
    ```
 
-3. **Environments (.env) setzen:**
-   Erstelle `.env` (dev), optional `.env.staging` und `.env.prod`:
-   ```
-   SUPABASE_URL=...
-   SUPABASE_ANON_KEY=...
-   SENTRY_DSN=... # optional
-   ```
+3. **Secrets/Env Variablen setzen:**
+   Für Production und CI/CD werden Secrets via `--dart-define` übergeben. Für lokales Development kannst du optional `.env` verwenden (siehe `.env.example`).
+   - Beispiel Run (Dev):
+     ```bash
+     flutter run --dart-define=FLAVOR=dev \
+       --dart-define=SUPABASE_URL=... \
+       --dart-define=SUPABASE_ANON_KEY=... \
+       --dart-define=SENTRY_DSN=...
+     ```
+   - Optional: `.env` nur für Nicht‑Release Builds nutzen.
 
 4. **App starten:**
    ```bash

@@ -11,13 +11,42 @@ const OPENAI_CHAT_MODEL = Deno.env.get("OPENAI_CHAT_MODEL") ?? "gpt-4o-mini";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// Basic CORS headers for browser calls
-const corsHeaders: HeadersInit = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// CORS: restrict by env ALLOWED_ORIGINS (comma-separated). Fallback to '*'
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "*")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => s.length > 0);
+
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.includes("*")) return true;
+  try {
+    const o = new URL(origin);
+    return ALLOWED_ORIGINS.some((p) => {
+      try {
+        const u = new URL(p);
+        return u.origin === o.origin;
+      } catch {
+        // allow bare host matches
+        return p === origin || p === o.origin;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+function makeCorsHeaders(origin: string | null): HeadersInit {
+  const allowed = isOriginAllowed(origin);
+  return {
+    "Access-Control-Allow-Origin": allowed ? (origin ?? "") : "",
+    "Vary": "Origin",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  } as const;
+}
 
 async function embedQuery(q: string): Promise<number[]> {
   const res = await fetch(`${OPENAI_BASE_URL}/embeddings`, {
@@ -79,11 +108,23 @@ function quillToPlaintext(notes?: string | null): string {
   }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = makeCorsHeaders(origin);
   // Preflight support
   if (req.method === "OPTIONS") {
+    // Only acknowledge allowed origins to avoid reflecting arbitrary origins
+    if (!isOriginAllowed(origin)) {
+      return new Response("Forbidden", { status: 403, headers: { ...corsHeaders, "Content-Type": "text/plain" } });
+    }
     return new Response("ok", { headers: corsHeaders });
   }
   try {
+    if (!isOriginAllowed(origin)) {
+      return new Response(JSON.stringify({ error: "origin_forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const { query, top_k = 8, min_similarity = 0.0 } = await req.json();
     if (typeof query === 'string' && query.length > 2000) {
       return new Response(JSON.stringify({ error: 'Query too long' }), {
@@ -98,8 +139,15 @@ serve(async (req) => {
       });
     }
 
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "missing_bearer" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
+      global: { headers: { Authorization: authHeader } },
     });
     const { data: user } = await supabase.auth.getUser();
     const userId = user.user?.id;

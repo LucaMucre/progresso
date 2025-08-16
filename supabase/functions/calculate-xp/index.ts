@@ -1,18 +1,56 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Restrictive CORS with ALLOWED_ORIGINS (comma-separated). Falls back to '*'
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false
+  if (ALLOWED_ORIGINS.includes('*')) return true
+  try {
+    const o = new URL(origin)
+    return ALLOWED_ORIGINS.some(p => {
+      try {
+        const u = new URL(p)
+        return u.origin === o.origin
+      } catch {
+        return p === origin || p === o.origin
+      }
+    })
+  } catch {
+    return false
+  }
+}
+
+function makeCorsHeaders(origin: string | null): HeadersInit {
+  const allowed = isOriginAllowed(origin)
+  return {
+    'Access-Control-Allow-Origin': allowed ? (origin ?? '') : '',
+    'Vary': 'Origin',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
 }
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const corsHeaders = makeCorsHeaders(origin)
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    if (!isOriginAllowed(origin)) return new Response('Forbidden', { status: 403, headers: corsHeaders })
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Reject untrusted origins
+    if (!isOriginAllowed(origin)) {
+      return new Response(JSON.stringify({ error: 'origin_forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // Create a Supabase client with the Auth context of the logged in user.
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -31,19 +69,13 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser()
 
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const { action_log_id } = await req.json()
 
     if (!action_log_id) {
-      return new Response(
-        JSON.stringify({ error: 'action_log_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'action_log_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // Get the action log
@@ -63,13 +95,10 @@ serve(async (req) => {
       .single()
 
     if (logError || !actionLog) {
-      return new Response(
-        JSON.stringify({ error: 'Action log not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'Action log not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Neue XP-Formel: Zeit + Textlänge + 10% bei Bild (Kategorie/Vorlage neutral)
+    // Neue XP-Formel: Zeit + Textlänge + 2 XP bei Bild (Kategorie/Vorlage neutral)
     const durationMin: number = actionLog.duration_min ?? 0
     let earnedXp = Math.floor(durationMin / 5) // 1 XP je 5 Minuten
 
@@ -100,7 +129,7 @@ serve(async (req) => {
     earnedXp += Math.floor(textLen / 100) // 1 XP je 100 Zeichen
 
     const hasImage = !!actionLog.image_url && String(actionLog.image_url).trim().length > 0
-    if (hasImage) earnedXp = Math.round(earnedXp * 1.1)
+    if (hasImage) earnedXp += 2
 
     if (earnedXp <= 0 && (durationMin > 0 || textLen > 0 || hasImage)) earnedXp = 1
 
@@ -112,25 +141,12 @@ serve(async (req) => {
       .eq('user_id', user.id)
 
     if (updateError) {
-      return new Response(
-        JSON.stringify({ error: 'Failed to update action log' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'Failed to update action log' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        earned_xp: earnedXp,
-        action_log_id: action_log_id 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ success: true, earned_xp: earnedXp, action_log_id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 }) 

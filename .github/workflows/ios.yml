@@ -25,7 +25,16 @@ jobs:
       - name: Tests
         run: flutter test --reporter expanded
       - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign --dart-define=FLAVOR=staging
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=FLAVOR=staging \
+            --dart-define=SUPABASE_URL=$SUPABASE_URL \
+            --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+            --dart-define=SENTRY_DSN=$SENTRY_DSN
       - name: Upload iOS build
         uses: actions/upload-artifact@v4
         with:
