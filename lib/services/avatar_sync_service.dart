@@ -12,7 +12,7 @@ class AvatarSyncService {
       final user = _client.auth.currentUser;
       if (user == null) throw Exception('User nicht angemeldet');
 
-      print('DEBUG: Syncing avatar URL: $avatarUrl');
+      if (kDebugMode) debugPrint('DEBUG: Syncing avatar URL: $avatarUrl');
 
       // 1. Update users table
       await _client
@@ -26,11 +26,11 @@ class AvatarSyncService {
           .update({'avatar_url': avatarUrl})
           .eq('user_id', user.id);
 
-      print('DEBUG: Avatar sync completed successfully');
+      if (kDebugMode) debugPrint('DEBUG: Avatar sync completed successfully');
       // UI-Update auslösen
       avatarVersion.value++;
     } catch (e) {
-      print('DEBUG: Error syncing avatar: $e');
+      if (kDebugMode) debugPrint('DEBUG: Error syncing avatar: $e');
       rethrow;
     }
   }
@@ -49,7 +49,7 @@ class AvatarSyncService {
 
       return res['avatar_url'];
     } catch (e) {
-      print('DEBUG: Error getting current avatar URL: $e');
+      if (kDebugMode) debugPrint('DEBUG: Error getting current avatar URL: $e');
       return null;
     }
   }
@@ -78,7 +78,7 @@ class AvatarSyncService {
         'characters': characterRes['avatar_url'],
       };
     } catch (e) {
-      print('DEBUG: Error checking avatar sync: $e');
+      if (kDebugMode) debugPrint('DEBUG: Error checking avatar sync: $e');
       return {};
     }
   }
@@ -95,10 +95,10 @@ class AvatarSyncService {
       // Synchronisiere mit der aktuellen URL
       await syncAvatar(currentAvatarUrl);
 
-      print('DEBUG: Force sync completed');
+      if (kDebugMode) debugPrint('DEBUG: Force sync completed');
       avatarVersion.value++;
     } catch (e) {
-      print('DEBUG: Error in force sync: $e');
+      if (kDebugMode) debugPrint('DEBUG: Error in force sync: $e');
       rethrow;
     }
   }

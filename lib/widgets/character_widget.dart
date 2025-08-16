@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/character_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,7 +13,6 @@ class CharacterWidget extends StatefulWidget {
 
 class _CharacterWidgetState extends State<CharacterWidget> {
   String? _userAvatarUrl;
-  bool _isLoadingAvatar = true;
   RealtimeChannel? _usersChannel;
   int _cacheBust = 0;
 
@@ -37,7 +37,6 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         if (mounted) {
           setState(() {
             _userAvatarUrl = res['avatar_url'];
-            _isLoadingAvatar = false;
             _cacheBust = DateTime.now().millisecondsSinceEpoch;
           });
         }
@@ -45,10 +44,9 @@ class _CharacterWidgetState extends State<CharacterWidget> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoadingAvatar = false;
         });
       }
-  print('Error loading user avatar: $e');
+  if (kDebugMode) debugPrint('Error loading user avatar: $e');
     }
   }
 
@@ -115,7 +113,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: percentage,
-            backgroundColor: color.withOpacity(0.2),
+            backgroundColor: color.withValues(alpha: 0.2),
             valueColor: AlwaysStoppedAnimation<Color>(color),
             minHeight: 6,
           ),
@@ -128,7 +126,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(icon, color: color, size: 16),
@@ -145,12 +143,12 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         }
 
         if (snapshot.hasError) {
-          return Center(
+          return const Center(
             child: Column(
               children: [
                 Icon(Icons.error, color: Colors.red, size: 48),
-                const SizedBox(height: 8),
-  Text('Error loading character'),
+                SizedBox(height: 8),
+                Text('Error loading character'),
               ],
             ),
           );
@@ -168,15 +166,15 @@ class _CharacterWidgetState extends State<CharacterWidget> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
               width: 2,
             ),
           ),
@@ -202,7 +200,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                           blurRadius: 15,
                           offset: const Offset(0, 5),
                         ),
@@ -215,7 +213,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
                               key: ValueKey(avatarUrl),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
-                                print('Avatar load error: $error');
+                                if (kDebugMode) debugPrint('Avatar load error: $error');
                                 return const Icon(
                                   Icons.person,
                                   size: 60,
@@ -242,7 +240,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),

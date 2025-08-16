@@ -13,7 +13,7 @@ class GalleryFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final areas = const [
+    const areas = [
       'General',
       'Fitness',
       'Nutrition',

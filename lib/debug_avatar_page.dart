@@ -151,9 +151,9 @@ class _DebugAvatarPageState extends State<DebugAvatarPage> {
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         'Fehler: $_error',
@@ -181,13 +181,13 @@ class _DebugAvatarPageState extends State<DebugAvatarPage> {
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: _syncStatus['users'] == _syncStatus['characters'] 
-                                    ? Colors.green.withOpacity(0.1)
-                                    : Colors.red.withOpacity(0.1),
+                                    ? Colors.green.withValues(alpha: 0.1)
+                                    : Colors.red.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: _syncStatus['users'] == _syncStatus['characters'] 
-                                      ? Colors.green.withOpacity(0.3)
-                                      : Colors.red.withOpacity(0.3),
+                                      ? Colors.green.withValues(alpha: 0.3)
+                                      : Colors.red.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Text(
@@ -229,7 +229,7 @@ class _DebugAvatarPageState extends State<DebugAvatarPage> {
                             Text('Avatar URL: ${_userData!['avatar_url'] ?? 'null'}'),
                             const SizedBox(height: 8),
                             if (_userAvatarUrl != null) ...[
-                              Text('User Avatar Image:'),
+                              const Text('User Avatar Image:'),
                               const SizedBox(height: 4),
                               Container(
                                 width: 100,
@@ -279,7 +279,7 @@ class _DebugAvatarPageState extends State<DebugAvatarPage> {
                             Text('Avatar URL: ${_characterData!['avatar_url'] ?? 'null'}'),
                             const SizedBox(height: 8),
                             if (_characterAvatarUrl != null) ...[
-                              Text('Character Avatar Image:'),
+                              const Text('Character Avatar Image:'),
                               const SizedBox(height: 4),
                               Container(
                                 width: 100,

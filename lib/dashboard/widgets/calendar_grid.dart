@@ -100,13 +100,13 @@ class _CalendarGridState extends State<CalendarGrid> {
             clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
               color: key == todayKey
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.14)
-                  : dominantColor?.withOpacity(0.10),
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.14)
+                  : dominantColor?.withValues(alpha: 0.10),
               border: Border.all(
                 color: key == todayKey
                     ? Theme.of(context).colorScheme.primary
                     : (dominantColor ?? Theme.of(context).dividerColor)
-                        .withOpacity(0.25),
+                        .withValues(alpha: 0.25),
                 width: key == todayKey ? 1.4 : 1.0,
               ),
               borderRadius: BorderRadius.circular(8),

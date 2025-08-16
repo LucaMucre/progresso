@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 class CharacterStats {
   final int strength;
@@ -137,7 +138,7 @@ class CharacterService {
         avatarUrl = userProfile['avatar_url'];
       } catch (e) {
         // User Profil existiert noch nicht oder hat kein Avatar
-        print('Kein User-Profil oder Avatar gefunden: $e');
+        if (kDebugMode) debugPrint('Kein User-Profil oder Avatar gefunden: $e');
       }
 
       // Erstelle Character mit Avatar aus User-Profil
@@ -161,7 +162,7 @@ class CharacterService {
         avatarUrl = userProfile['avatar_url'];
       } catch (e) {
         // User Profil existiert noch nicht oder hat kein Avatar
-        print('Kein User-Profil oder Avatar gefunden: $e');
+        if (kDebugMode) debugPrint('Kein User-Profil oder Avatar gefunden: $e');
       }
 
       final newCharacter = {
@@ -282,7 +283,7 @@ class CharacterService {
       // Aktualisiere das Character-Avatar (auch wenn null)
       await updateAvatar(avatarUrl);
     } catch (e) {
-  print('Error syncing avatar: $e');
+  if (kDebugMode) debugPrint('Error syncing avatar: $e');
     }
   }
 } 

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
@@ -141,7 +141,7 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     } catch (e) {
-    print('Error loading profile: $e');
+    if (kDebugMode) debugPrint('Error loading profile: $e');
       // Erstelle Standard-Profil wenn noch nicht vorhanden
       _nameCtrl.text = _supabase.auth.currentUser?.email?.split('@')[0] ?? 'User';
       _bioCtrl.text = 'Das ist meine Bio.';
@@ -282,7 +282,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _lifeAreas = areas;
       });
     } catch (e) {
-    print('Error loading statistics: $e');
+    if (kDebugMode) debugPrint('Error loading statistics: $e');
     }
   }
   
@@ -334,7 +334,7 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
     } catch (e) {
-      print('Error checking achievements: $e');
+      if (kDebugMode) debugPrint('Error checking achievements: $e');
     }
   }
 
@@ -412,15 +412,15 @@ class _ProfilePageState extends State<ProfilePage> {
         final path = '${currentUser.id}/avatar_${timestamp}.$ext';
         final bytes = await _avatarFile!.readAsBytes();
         
-        print('DEBUG: Uploading avatar to path: $path');
-        print('DEBUG: File size: ${bytes.length} bytes');
+        if (kDebugMode) debugPrint('DEBUG: Uploading avatar to path: $path');
+        if (kDebugMode) debugPrint('DEBUG: File size: ${bytes.length} bytes');
         
         await _supabase.storage
             .from('avatars')
             .uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
         avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
         
-        print('DEBUG: Avatar URL: $avatarUrl');
+        if (kDebugMode) debugPrint('DEBUG: Avatar URL: $avatarUrl');
       }
 
       // Only include avatar_url in upsert if a new one was chosen; avoid overwriting
@@ -434,7 +434,7 @@ class _ProfilePageState extends State<ProfilePage> {
         profile['avatar_url'] = avatarUrl;
       }
       
-      print('DEBUG: Saving profile with avatar_url: $avatarUrl');
+      if (kDebugMode) debugPrint('DEBUG: Saving profile with avatar_url: $avatarUrl');
       
       await _supabase
           .from('users')
@@ -451,7 +451,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     } catch (err) {
-      print('DEBUG: Error saving profile: $err');
+      if (kDebugMode) debugPrint('DEBUG: Error saving profile: $err');
       setState(() {
         _error = err.toString();
       });
@@ -466,9 +466,9 @@ class _ProfilePageState extends State<ProfilePage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -488,7 +488,7 @@ class _ProfilePageState extends State<ProfilePage> {
             title,
             style: TextStyle(
               fontSize: 12,
-              color: color.withOpacity(0.8),
+              color: color.withValues(alpha: 0.8),
             ),
             textAlign: TextAlign.center,
           ),
@@ -512,7 +512,7 @@ class _ProfilePageState extends State<ProfilePage> {
         Container(
           height: 6,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(3),
           ),
           child: ClipRRect(
@@ -520,7 +520,7 @@ class _ProfilePageState extends State<ProfilePage> {
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
             ),
           ),
         ),
@@ -528,7 +528,7 @@ class _ProfilePageState extends State<ProfilePage> {
         Text(
           '$xpInto / $xpNext XP',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             fontSize: 10,
             fontWeight: FontWeight.w500,
           ),
@@ -541,10 +541,10 @@ class _ProfilePageState extends State<ProfilePage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: unlocked ? color.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+        color: unlocked ? color.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: unlocked ? color.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
+          color: unlocked ? color.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -577,7 +577,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   description,
                   style: TextStyle(
                     fontSize: 12,
-                    color: unlocked ? color.withOpacity(0.8) : Colors.grey.withOpacity(0.8),
+                    color: unlocked ? color.withValues(alpha: 0.8) : Colors.grey.withValues(alpha: 0.8),
                   ),
                 ),
               ],
@@ -603,12 +603,12 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: areaColor.withOpacity(0.08),
+            color: areaColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: areaColor.withOpacity(0.4)),
+            border: Border.all(color: areaColor.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
@@ -630,23 +630,23 @@ class _ProfilePageState extends State<ProfilePage> {
                 area.name,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: areaColor.withOpacity(0.9),
+                  color: areaColor.withValues(alpha: 0.9),
                 ),
               ),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: areaColor.withOpacity(0.12),
+                  color: areaColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: areaColor.withOpacity(0.3)),
+                  border: Border.all(color: areaColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   '$count',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: areaColor.withOpacity(0.9),
+                    color: areaColor.withValues(alpha: 0.9),
                   ),
                 ),
               ),
@@ -688,7 +688,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 gradient: LinearGradient(
                   colors: [
                     Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -696,7 +696,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                     blurRadius: 15,
                     offset: const Offset(0, 8),
                   ),
@@ -712,7 +712,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         border: Border.all(color: Colors.white, width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -753,7 +753,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         Text(
                           _supabase.auth.currentUser?.email ?? 'user@example.com',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 14,
                           ),
                         ),
@@ -764,7 +764,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
@@ -789,7 +789,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(width: 12),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
@@ -861,18 +861,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.05),
+                  color: Colors.grey.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                  border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.add_circle_outline, size: 28, color: Colors.grey.withOpacity(0.6)),
+                    Icon(Icons.add_circle_outline, size: 28, color: Colors.grey.withValues(alpha: 0.6)),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'No activities yet. Tap the + button to add your first activity.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.withOpacity(0.8)),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.withValues(alpha: 0.8)),
                       ),
                     ),
                   ],
@@ -982,7 +982,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
@@ -1002,7 +1002,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
@@ -1051,13 +1051,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     '${AchievementService.getUnlockedCount()}/${AchievementService.getTotalCount()}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
@@ -1080,7 +1080,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: LinearProgressIndicator(
                   value: AchievementService.getProgressPercentage(),
                   backgroundColor: Colors.transparent,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
                 ),
               ),
             ),

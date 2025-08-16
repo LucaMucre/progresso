@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_page.dart';
@@ -51,7 +52,7 @@ class _AuthGateState extends State<AuthGate> {
         });
       }
     } catch (e) {
-  print('AuthGate error: $e');
+      if (kDebugMode) debugPrint('AuthGate error: $e');
       setState(() {
         _hasError = true;
       });
@@ -100,12 +101,16 @@ class _AuthGateState extends State<AuthGate> {
                 await Supabase.instance.client.auth.updateUser(UserAttributes(password: a));
                 if (mounted) {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort aktualisiert. Bitte neu einloggen.')));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort aktualisiert. Bitte neu einloggen.')));
+                  }
                 }
                 // Optional: Session invalidieren
                 await Supabase.instance.client.auth.signOut();
               } catch (e) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               }
             },
             child: const Text('Speichern'),

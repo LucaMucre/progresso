@@ -18,11 +18,11 @@ Future<void> main() async {
   bool dartDefineLoaded = false;
   String? supabaseUrl;
   String? supabaseAnonKey;
-  final flavor = const String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+  const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
 
   // 1) Prod/CI bevorzugt --dart-define
-  final ddSupabaseUrl = const String.fromEnvironment('SUPABASE_URL');
-  final ddSupabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY');
+  const ddSupabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const ddSupabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   if (ddSupabaseUrl.isNotEmpty && ddSupabaseAnonKey.isNotEmpty) {
     supabaseUrl = ddSupabaseUrl;
     supabaseAnonKey = ddSupabaseAnonKey;
@@ -104,7 +104,7 @@ Future<void> main() async {
 
   // Optional Sentry nur aktivieren, wenn DSN vorhanden ist
   // Sentry DSN ebenfalls bevorzugt via --dart-define
-  final ddSentryDsn = const String.fromEnvironment('SENTRY_DSN');
+  const ddSentryDsn = String.fromEnvironment('SENTRY_DSN');
   final sentryDsn = (ddSentryDsn.isNotEmpty)
       ? ddSentryDsn
       : (envLoaded ? dotenv.env['SENTRY_DSN'] : null);
@@ -129,7 +129,7 @@ class ProgressoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color seedColor = const Color(0xFF2563EB);
+    const Color seedColor = Color(0xFF2563EB);
     final ColorScheme lightScheme = ColorScheme.fromSeed(
       seedColor: seedColor,
       brightness: Brightness.light,

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'db_service.dart';
@@ -175,7 +176,7 @@ class UserProfileNotifier extends _$UserProfileNotifier {
       if (cachedProfile != null) {
         return cachedProfile;
       }
-      print('Error loading profile: $e');
+      if (kDebugMode) debugPrint('Error loading profile: $e');
       return null;
     }
   }
@@ -193,7 +194,7 @@ class UserProfileNotifier extends _$UserProfileNotifier {
       await OfflineCache.cacheProfile(profile);
       await refresh();
     } catch (e) {
-      print('Error updating profile: $e');
+      if (kDebugMode) debugPrint('Error updating profile: $e');
     }
   }
 

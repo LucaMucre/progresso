@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'achievement_service.dart';
 import 'package:flutter/services.dart';
 import '../widgets/achievement_unlock_widget.dart';
@@ -31,7 +32,7 @@ class LevelUpService {
   }
 
   static void notifyLevelUp(int level) {
-    print('DEBUG LevelUpService: notifyLevelUp($level) called');
+    if (kDebugMode) debugPrint('DEBUG LevelUpService: notifyLevelUp($level) called');
     // Mark that a level-up is coming so achievements won't show prematurely
     _levelUpPending = true;
     _levelUpNotifier.value = level;
@@ -39,7 +40,7 @@ class LevelUpService {
     // from showing before the level-up.
     // (They will be shown by showLevelThenPending after level-up finishes.)
     _pendingDirty = true;
-    print('DEBUG LevelUpService: _levelUpPending=$_levelUpPending, achievements queued=${_pendingAchievements.length}');
+    if (kDebugMode) debugPrint('DEBUG LevelUpService: _levelUpPending=$_levelUpPending, achievements queued=${_pendingAchievements.length}');
   }
 
   /// Utility to show dialogs in order: first LevelUp, then Achievement(s)
@@ -77,7 +78,7 @@ class LevelUpService {
 
   /// Queue an achievement to be shown later (after any level-up)
   static void queueAchievement(Achievement achievement) {
-    print('DEBUG queueAchievement: Adding ${achievement.title}, _levelUpPending=$_levelUpPending');
+    if (kDebugMode) debugPrint('DEBUG queueAchievement: Adding ${achievement.title}, _levelUpPending=$_levelUpPending');
     // De-duplicate by id to avoid showing the same achievement repeatedly
     final alreadyQueued = _pendingAchievements.any((a) => a.id == achievement.id);
     if (!alreadyQueued) {
@@ -106,12 +107,12 @@ class LevelUpService {
   static Future<void> showPendingAchievements({
     required BuildContext context,
   }) async {
-    print('DEBUG showPendingAchievements: _isShowing=$_isShowing, _levelUpPending=$_levelUpPending, achievements=${_pendingAchievements.length}');
+    if (kDebugMode) debugPrint('DEBUG showPendingAchievements: _isShowing=$_isShowing, _levelUpPending=$_levelUpPending, achievements=${_pendingAchievements.length}');
     if (_isShowing) return;
     
     // If level-up is pending, trigger it now so level-up + achievements show in order
     if (_levelUpPending && _levelUpNotifier.value != null) {
-      print('DEBUG showPendingAchievements: Level-up pending, calling showLevelThenPending');
+      if (kDebugMode) debugPrint('DEBUG showPendingAchievements: Level-up pending, calling showLevelThenPending');
       await showLevelThenPending(context: context, level: _levelUpNotifier.value!);
       return;
     }
@@ -119,13 +120,13 @@ class LevelUpService {
     // Otherwise, just show achievements
     if (_pendingAchievements.isEmpty) return;
 
-    print('DEBUG showPendingAchievements: Showing ${_pendingAchievements.length} achievements only');
+    if (kDebugMode) debugPrint('DEBUG showPendingAchievements: Showing ${_pendingAchievements.length} achievements only');
     _isShowing = true;
     final toShow = List<Achievement>.from(_pendingAchievements);
     _pendingAchievements.clear();
     _pendingDirty = false;
     for (final a in toShow) {
-      print('DEBUG showPendingAchievements: Showing achievement ${a.title}');
+      if (kDebugMode) debugPrint('DEBUG showPendingAchievements: Showing achievement ${a.title}');
       await showDialog(
         context: context,
         barrierDismissible: true,

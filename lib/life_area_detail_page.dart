@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
 import 'log_action_page.dart';
@@ -35,6 +36,19 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   final Random _random = Random();
   bool _isBubbleView = true; // Toggle between bubble and table view
   List<LifeArea> _subAreas = [];
+  
+  // Stable layout cache for consistent bubble positioning
+  final Map<String, Rect> _layoutByLogId = {};
+  String _layoutSignature = '';
+  
+  // Hover state tracking
+  String? _hoveredLogId;
+  String? _hoveredAreaId;
+  
+  // Interactive viewer controls
+  late TransformationController _transformationController;
+  static const double _minScale = 0.3;
+  static const double _maxScale = 3.0;
 
   @override
   void initState() {
@@ -43,6 +57,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
     if (widget.parentArea != null) {
       _parentArea = widget.parentArea;
     }
+    _transformationController = TransformationController();
     _loadData();
   }
 
@@ -56,6 +71,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
+    _transformationController.dispose();
     super.dispose();
   }
 
@@ -117,11 +133,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         _averageDuration = averageDuration;
         _isLoading = false;
       });
+      
+      // Auto-fit bubbles after data is loaded and UI is built
+      if (filteredLogs.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _fitAllBubbles();
+          }
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
-      print('Fehler beim Laden der Daten: $e');
+      if (kDebugMode) debugPrint('Fehler beim Laden der Daten: $e');
     }
   }
 
@@ -239,6 +264,168 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
     return false;
   }
 
+  // Calculate optimal canvas size based on bubble count
+  Size _calculateCanvasSize(int bubbleCount) {
+    if (bubbleCount == 0) return const Size(800, 600);
+    
+    // Base size for small numbers of bubbles
+    const double baseSize = 800.0;
+    const double minSize = 600.0;
+    
+    // Scale factor based on bubble count
+    final double scaleFactor = (bubbleCount / 10.0).clamp(1.0, 4.0);
+    final double canvasWidth = (baseSize * scaleFactor).clamp(baseSize, 2400);
+    final double canvasHeight = (baseSize * scaleFactor * 0.75).clamp(minSize, 1800);
+    
+    return Size(canvasWidth, canvasHeight);
+  }
+
+  // Zoom control functions
+  void _resetZoom() {
+    _transformationController.value = Matrix4.identity();
+  }
+
+  void _fitAllBubbles() {
+    if (_logs.isEmpty) return;
+    
+    final canvasSize = _calculateCanvasSize(_logs.length);
+    final screenSize = MediaQuery.of(context).size;
+    
+    // Account for app bar, padding, and other UI elements
+    final availableWidth = screenSize.width - 80; // margins + padding
+    final availableHeight = 450; // bubble canvas container height minus padding
+    
+    // Calculate scale to fit all content with some padding
+    final scaleX = availableWidth / canvasSize.width;
+    final scaleY = availableHeight / canvasSize.height;
+    final scale = (min(scaleX, scaleY) * 0.9).clamp(_minScale, 1.0); // 0.9 for some margin
+    
+    // Center the content
+    final scaledWidth = canvasSize.width * scale;
+    final scaledHeight = canvasSize.height * scale;
+    final offsetX = (availableWidth - scaledWidth) / (2 * scale);
+    final offsetY = (availableHeight - scaledHeight) / (2 * scale);
+    
+    final matrix = Matrix4.identity()
+      ..scale(scale)
+      ..translate(max(0.0, offsetX), max(0.0, offsetY));
+    
+    _transformationController.value = matrix;
+  }
+
+  void _zoomIn() {
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    final newScale = (currentScale * 1.5).clamp(_minScale, _maxScale);
+    
+    final matrix = Matrix4.identity()..scale(newScale);
+    _transformationController.value = matrix;
+  }
+
+  void _zoomOut() {
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    final newScale = (currentScale / 1.5).clamp(_minScale, _maxScale);
+    
+    final matrix = Matrix4.identity()..scale(newScale);
+    _transformationController.value = matrix;
+  }
+
+  double get _currentZoomLevel {
+    return _transformationController.value.getMaxScaleOnAxis();
+  }
+
+  Widget _buildZoomControls() {
+    return Positioned(
+      top: 16,
+      right: 16,
+      child: Column(
+        children: [
+          // Zoom In
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.zoom_in),
+              onPressed: _zoomIn,
+              tooltip: 'Zoom In',
+            ),
+          ),
+          
+          // Zoom Out
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.zoom_out),
+              onPressed: _zoomOut,
+              tooltip: 'Zoom Out',
+            ),
+          ),
+          
+          // Fit All
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.fit_screen),
+              onPressed: _fitAllBubbles,
+              tooltip: 'Fit All Bubbles',
+            ),
+          ),
+          
+          // Reset Zoom
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.center_focus_strong),
+              onPressed: _resetZoom,
+              tooltip: 'Reset Zoom',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _logQuickAction() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -249,7 +436,17 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
           areaIcon: widget.area.icon,
         ),
       ),
-    ).then((_) => _loadData()); // Reload data after returning
+    ).then((_) {
+      _loadData(); // Reload data after returning
+      // Auto-fit after adding new activity
+      if (_isBubbleView) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _logs.isNotEmpty) {
+            _fitAllBubbles();
+          }
+        });
+      }
+    });
   }
 
   void _logTemplateAction(ActionTemplate template) {
@@ -263,18 +460,38 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
           areaIcon: widget.area.icon,
         ),
       ),
-    ).then((_) => _loadData()); // Reload data after returning
+    ).then((_) {
+      _loadData(); // Reload data after returning
+      // Auto-fit after adding new activity
+      if (_isBubbleView) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _logs.isNotEmpty) {
+            _fitAllBubbles();
+          }
+        });
+      }
+    });
   }
 
   void _showActivityDetails(ActionLog log) {
-    print('DEBUG: Showing activity details for log: ${log.id}');
-    print('DEBUG: Image URL: ${log.imageUrl}');
+    if (kDebugMode) debugPrint('DEBUG: Showing activity details for log: ${log.id}');
+    if (kDebugMode) debugPrint('DEBUG: Image URL: ${log.imageUrl}');
     
     showDialog(
       context: context,
       builder: (context) => ActivityDetailsDialog(
         log: log,
-        onUpdate: _loadData, // Reload data when log is updated
+        onUpdate: () {
+          _loadData(); // Reload data when log is updated
+          // Auto-fit after updating activity
+          if (_isBubbleView) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _logs.isNotEmpty) {
+                _fitAllBubbles();
+              }
+            });
+          }
+        },
       ),
     );
   }
@@ -398,7 +615,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.area.name),
-        backgroundColor: _parseColor(widget.area.color).withOpacity(0.1),
+        backgroundColor: _parseColor(widget.area.color).withValues(alpha: 0.1),
         foregroundColor: _parseColor(widget.area.color),
         actions: [
           IconButton(
@@ -419,10 +636,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: _parseColor(widget.area.color).withOpacity(0.1),
+                  color: _parseColor(widget.area.color).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: _parseColor(widget.area.color).withOpacity(0.3),
+                    color: _parseColor(widget.area.color).withValues(alpha: 0.3),
                     width: 2,
                   ),
                 ),
@@ -478,9 +695,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: parentColor.withOpacity(0.08),
+                                            color: parentColor.withValues(alpha: 0.08),
                                             borderRadius: BorderRadius.circular(16),
-                                            border: Border.all(color: parentColor.withOpacity(0.25)),
+                                            border: Border.all(color: parentColor.withValues(alpha: 0.25)),
                                           ),
                                           child: Text(
                                             _parentArea!.category,
@@ -561,9 +778,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: _parseColor(widget.area.color).withOpacity(0.08),
+                                    color: _parseColor(widget.area.color).withValues(alpha: 0.08),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: _parseColor(widget.area.color).withOpacity(0.25)),
+                                    border: Border.all(color: _parseColor(widget.area.color).withValues(alpha: 0.25)),
                                   ),
                                   child: Text(
                                     widget.area.category,
@@ -628,10 +845,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       return Container(
         height: 200,
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.05),
+          color: Colors.grey.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -642,20 +859,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
               Icon(
                 Icons.add_circle_outline,
                 size: 48,
-                color: Colors.grey.withOpacity(0.5),
+                color: Colors.grey.withValues(alpha: 0.5),
               ),
               const SizedBox(height: 16),
               Text(
                 'No activities yet',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.grey.withOpacity(0.7),
+                  color: Colors.grey.withValues(alpha: 0.7),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Start your first activity!',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.withOpacity(0.5),
+                  color: Colors.grey.withValues(alpha: 0.5),
                 ),
               ),
             ],
@@ -670,7 +887,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -680,7 +897,17 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                 icon: Icons.bubble_chart,
                 label: 'Bubbles',
                 isSelected: _isBubbleView,
-                onTap: () => setState(() => _isBubbleView = true),
+                onTap: () {
+                  setState(() => _isBubbleView = true);
+                  // Auto-fit when switching to bubble view
+                  if (_logs.isNotEmpty) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _fitAllBubbles();
+                      }
+                    });
+                  }
+                },
               ),
               const SizedBox(width: 8),
               _buildToggleButton(
@@ -738,21 +965,42 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   }
 
   Widget _buildBubbleCanvas() {
+    final canvasSize = _calculateCanvasSize(_logs.length);
+    
     return Container(
-      height: 350,
+      height: 500, // Fixed container height
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Stack(
-        children: _generateBubblePositions(),
+        children: [
+          // Interactive zoomable bubble area
+          InteractiveViewer(
+            transformationController: _transformationController,
+            minScale: _minScale,
+            maxScale: _maxScale,
+            constrained: false,
+            boundaryMargin: const EdgeInsets.all(100),
+            child: SizedBox(
+              width: canvasSize.width,
+              height: canvasSize.height,
+              child: Stack(
+                children: _generateBubblePositions(canvasSize),
+              ),
+            ),
+          ),
+          
+          // Zoom controls overlay
+          _buildZoomControls(),
+        ],
       ),
     );
   }
@@ -765,7 +1013,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -812,7 +1060,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                     shape: BoxShape.circle,
                     color: c,
                     boxShadow: [
-                      BoxShadow(color: c.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
+                      BoxShadow(color: c.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4)),
                     ],
                   ),
                   child: Center(
@@ -839,64 +1087,156 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   }
 
   Widget _buildCombinedBubbleCanvas() {
+    final canvasSize = _calculateCanvasSize(_logs.length + _subAreas.length);
+    
     return Container(
-      height: 350,
+      height: 500, // Fixed container height
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          const height = 300.0;
-          final rand = Random();
-          final placed = <Rect>[];
+      child: Stack(
+        children: [
+          // Interactive zoomable bubble area
+          InteractiveViewer(
+            transformationController: _transformationController,
+            minScale: _minScale,
+            maxScale: _maxScale,
+            constrained: false,
+            boundaryMargin: const EdgeInsets.all(100),
+            child: SizedBox(
+              width: canvasSize.width,
+              height: canvasSize.height,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = canvasSize.width;
+                  final height = canvasSize.height;
+                  final rand = Random();
+                  final placed = <Rect>[];
 
           List<Widget> bubbles = [];
 
-          void addBubble(Rect rect, Color c, Widget child, VoidCallback onTap) {
+          void addBubble(Rect rect, Color c, Widget child, VoidCallback onTap, {String? itemId, bool isActivity = false}) {
+            final isHovered = isActivity ? _hoveredLogId == itemId : _hoveredAreaId == itemId;
+            final hoverScale = isHovered ? 1.08 : 1.0;
+            
             bubbles.add(Positioned(
               left: rect.left,
               top: rect.top,
               child: GestureDetector(
                 onTap: onTap,
-                child: Container(
-                  width: rect.width,
-                  height: rect.height,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: c, boxShadow: [
-                    BoxShadow(color: c.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
-                  ]),
-                  child: Center(child: child),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) {
+                    if (!mounted) return;
+                    setState(() {
+                      if (isActivity) {
+                        _hoveredLogId = itemId;
+                      } else {
+                        _hoveredAreaId = itemId;
+                      }
+                    });
+                  },
+                  onExit: (_) {
+                    if (!mounted) return;
+                    setState(() {
+                      if (isActivity) {
+                        _hoveredLogId = null;
+                      } else {
+                        _hoveredAreaId = null;
+                      }
+                    });
+                  },
+                  child: Transform.scale(
+                    scale: hoverScale,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeInOut,
+                      width: rect.width,
+                      height: rect.height,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle, 
+                        color: isHovered ? c.withValues(alpha: 0.9) : c,
+                        border: Border.all(
+                          color: isHovered 
+                              ? Colors.white.withValues(alpha: 0.6)
+                              : Colors.white.withValues(alpha: 0.3),
+                          width: isHovered ? 3 : 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: c.withValues(alpha: isHovered ? 0.6 : 0.4), 
+                            blurRadius: isHovered ? 16 : 12, 
+                            offset: const Offset(0, 4),
+                            spreadRadius: isHovered ? 2 : 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isHovered ? 0.15 : 0.1),
+                            blurRadius: isHovered ? 6 : 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      ),
+                      child: Center(child: child),
+                    ),
+                  ),
                 ),
               ),
             ));
           }
 
-          Rect place(double size) {
+          Rect place(double size, Random rnd) {
             Rect? rect;
             int tries = 0;
-            while (rect == null && tries < 60) {
-              final x = rand.nextDouble() * (width - size);
-              final y = rand.nextDouble() * (height - size);
+            const double padding = 4.0;
+            
+            while (rect == null && tries < 100) {
+              final x = padding + rnd.nextDouble() * (width - size - padding * 2);
+              final y = padding + rnd.nextDouble() * (height - size - padding * 2);
               final r = Rect.fromLTWH(x, y, size, size);
-              if (!placed.any((p) => p.overlaps(r))) {
+              
+              // Check for overlaps with increased spacing
+              if (!placed.any((p) => p.overlaps(r.inflate(8)))) {
                 rect = r;
                 placed.add(r);
               }
               tries++;
             }
-            rect ??= Rect.fromLTWH(rand.nextDouble() * (width - size), rand.nextDouble() * (height - size), size, size);
+            
+            // Fallback positioning if no space found
+            rect ??= Rect.fromLTWH(
+              padding + rnd.nextDouble() * (width - size - padding * 2), 
+              padding + rnd.nextDouble() * (height - size - padding * 2), 
+              size, 
+              size
+            );
             return rect!;
           }
 
-          // 1) Activities (im Parent nur direkt zugeordnete)
+          // Use stable seed-based random for consistent positioning
+          final stableRand = Random(widget.area.id.hashCode);
+
+          // 1) Activities - size based on duration
           final sourceLogs = widget.area.parentId == null ? _logsForBubbles : _logs;
+          final Map<ActionLog, double> logMinutes = {};
           for (final log in sourceLogs) {
-            final size = 70.0 + rand.nextDouble() * 40.0;
-            final rect = place(size);
+            logMinutes[log] = (log.durationMin ?? 0).toDouble();
+          }
+          final double maxLogMin = logMinutes.values.isEmpty ? 0.0 : logMinutes.values.reduce(max);
+          
+          // Sort by duration for better placement
+          final orderedLogs = sourceLogs.toList()
+            ..sort((a, b) => (logMinutes[b] ?? 0).compareTo(logMinutes[a] ?? 0));
+          
+          for (final log in orderedLogs) {
+            final minutes = logMinutes[log] ?? 0.0;
+            // Size based on duration, 60-100px range
+            final size = 60.0 + (maxLogMin > 0 ? (minutes / maxLogMin) * 40.0 : 20.0);
+            final logRand = Random(log.id.hashCode);
+            final rect = place(size, logRand);
             final base = _parseColor(widget.area.color);
             final hsl = HSLColor.fromColor(base);
             final c = hsl.withLightness((hsl.lightness + 0.15).clamp(0.3, 0.8)).toColor();
@@ -914,13 +1254,16 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                 ),
               ),
               () => _showActivityDetails(log),
+              itemId: log.id,
+              isActivity: true,
             );
           }
 
-          // 2) Subareas (slightly larger hue)
+          // 2) Subareas - use consistent size based on area name hash
           for (final area in _subAreas) {
-            final size = 90.0 + rand.nextDouble() * 50.0;
-            final rect = place(size);
+            final areaRand = Random(area.id.hashCode);
+            final size = 80.0 + areaRand.nextDouble() * 30.0; // 80-110px range
+            final rect = place(size, areaRand);
             final c = _parseColor(area.color);
             addBubble(
               rect,
@@ -940,11 +1283,20 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                   MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area, parentArea: widget.area)),
                 );
               },
+              itemId: area.id,
+              isActivity: false,
             );
           }
 
-          return Stack(children: bubbles);
-        },
+                  return Stack(children: bubbles);
+                },
+              ),
+            ),
+          ),
+          
+          // Zoom controls overlay
+          _buildZoomControls(),
+        ],
       ),
     );
   }
@@ -991,9 +1343,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: c.withOpacity(0.08),
+                      color: c.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: c.withOpacity(0.3)),
+                      border: Border.all(color: c.withValues(alpha: 0.3)),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(_getIconData(a.icon), color: c, size: 16),
@@ -1060,7 +1412,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1072,7 +1424,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _parseColor(widget.area.color).withOpacity(0.1),
+              color: _parseColor(widget.area.color).withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -1126,10 +1478,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isEven ? Colors.grey.withOpacity(0.05) : Colors.white,
+                      color: isEven ? Colors.grey.withValues(alpha: 0.05) : Colors.white,
                       border: Border(
                         bottom: BorderSide(
-                          color: Colors.grey.withOpacity(0.1),
+                          color: Colors.grey.withValues(alpha: 0.1),
                           width: 1,
                         ),
                       ),
@@ -1155,7 +1507,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                                   '${log.durationMin} min',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey.withOpacity(0.7),
+                                    color: Colors.grey.withValues(alpha: 0.7),
                                   ),
                                 ),
                             ],
@@ -1166,7 +1518,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                             _formatDate(log.occurredAt),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.withOpacity(0.7),
+                              color: Colors.grey.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
@@ -1177,7 +1529,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: _parseColor(widget.area.color).withOpacity(0.1),
+                              color: _parseColor(widget.area.color).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -1205,162 +1557,289 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
 
 
 
-  List<Widget> _generateBubblePositions() {
+  List<Widget> _generateBubblePositions(Size canvasSize) {
     final List<Widget> bubbles = [];
-    final List<Rect> occupiedAreas = [];
+    if (_logs.isEmpty) return bubbles;
     
-    // Get the actual canvas width from the parent container
-    final canvasWidth = MediaQuery.of(context).size.width - 40; // Account for padding
-    final canvasHeight = 300.0; // Fixed height for the canvas
+    // Use dynamic canvas size
+    final canvasWidth = canvasSize.width;
+    final canvasHeight = canvasSize.height;
     
-    for (int i = 0; i < _logs.length; i++) {
-      final log = _logs[i];
+    // Calculate durations for each log to determine bubble sizes
+    final Map<ActionLog, double> logMinutes = {};
+    for (final log in _logs) {
+      logMinutes[log] = (log.durationMin ?? 0).toDouble();
+    }
+    
+    // Find max duration for scaling
+    final double maxMin = logMinutes.values.isEmpty ? 0.0 : logMinutes.values.reduce(max);
+    final double minSide = min(canvasWidth, canvasHeight);
+    
+    // Size range: bigger bubbles for longer activities, similar to main page
+    final double maxSize = (minSide * 0.32).clamp(54.0, 200.0);
+    final double minSize = maxSize * 0.30;
+    
+    // Sort logs by duration (biggest first for better placement)
+    final ordered = _logs.toList()
+      ..sort((a, b) => (logMinutes[b] ?? 0).compareTo(logMinutes[a] ?? 0));
+    
+    // Calculate size for each log based on duration
+    final Map<String, double> sizeByLogId = {
+      for (final log in ordered)
+        log.id: max(minSize, maxSize * (maxMin > 0 ? (logMinutes[log]! / maxMin).clamp(0.0, 1.0) : 0.5))
+    };
+    
+    // Build signature including canvas size and all log data
+    final sig = StringBuffer()
+      ..write(canvasWidth.toStringAsFixed(0))
+      ..write('x')
+      ..write(canvasHeight.toStringAsFixed(0))
+      ..write('|');
+    for (final log in ordered) {
+      sig
+        ..write(log.id)
+        ..write(':')
+        ..write(sizeByLogId[log.id]!.toStringAsFixed(1))
+        ..write(',');
+    }
+    final signature = sig.toString();
+    
+    // Only recalculate positions if signature changed
+    if (_layoutSignature != signature) {
+      _layoutByLogId.clear();
+      final List<Rect> placed = [];
+      const double padding = 4.0;
       
-      // Generate random size (75-120px for better readability)
-      final size = 75.0 + _random.nextDouble() * 45.0;
-      
-      // Try to find a position that doesn't overlap
-      Rect? position;
-      int attempts = 0;
-      const maxAttempts = 50;
-      
-      while (position == null && attempts < maxAttempts) {
-        // Generate random position within canvas bounds
-        final maxX = canvasWidth - size;
-        final maxY = canvasHeight - size;
-        final x = _random.nextDouble() * maxX;
-        final y = _random.nextDouble() * maxY;
+      for (final log in ordered) {
+        final double size = sizeByLogId[log.id]!;
+        // Use log ID as seed for consistent positioning
+        final rnd = Random(log.id.hashCode);
+        Rect? rect;
         
-        final candidateRect = Rect.fromLTWH(x, y, size, size);
+        // More attempts for larger canvas, but use intelligent placement
+        final maxAttempts = min(500, (canvasWidth * canvasHeight / 10000).round());
         
-        // Check if this position overlaps with any existing bubble
-        bool overlaps = false;
-        for (final occupied in occupiedAreas) {
-          if (candidateRect.overlaps(occupied)) {
-            overlaps = true;
-            break;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+          double x, y;
+          
+          if (attempt < maxAttempts * 0.7) {
+            // First 70% of attempts: try intelligent spiral placement
+            final angle = attempt * 0.5; // Spiral angle
+            final radius = sqrt(attempt) * 25; // Spiral radius
+            x = canvasWidth / 2 + cos(angle) * radius - size / 2;
+            y = canvasHeight / 2 + sin(angle) * radius - size / 2;
+          } else {
+            // Last 30% of attempts: random placement
+            x = padding + rnd.nextDouble() * (canvasWidth - size - padding * 2);
+            y = padding + rnd.nextDouble() * (canvasHeight - size - padding * 2);
+          }
+          
+          // Ensure within bounds
+          x = x.clamp(padding, canvasWidth - size - padding);
+          y = y.clamp(padding, canvasHeight - size - padding);
+          
+          final candidateRect = Rect.fromLTWH(x, y, size, size);
+          
+          bool overlaps = false;
+          for (final placedRect in placed) {
+            // Spacing based on canvas size - larger canvas allows tighter packing
+            final spacing = (canvasWidth > 1200) ? 8.0 : 12.0;
+            if (candidateRect.overlaps(placedRect.inflate(spacing))) { 
+              overlaps = true; 
+              break; 
+            }
+          }
+          
+          if (!overlaps) { 
+            rect = candidateRect; 
+            placed.add(candidateRect); 
+            _layoutByLogId[log.id] = candidateRect; 
+            break; 
           }
         }
         
-        if (!overlaps) {
-          position = candidateRect;
-          occupiedAreas.add(candidateRect);
-        }
-        
-        attempts++;
+        // Fallback positioning if no space found
+        _layoutByLogId.putIfAbsent(log.id, () => 
+          Rect.fromLTWH((canvasWidth - size) / 2, (canvasHeight - size) / 2, size, size));
       }
+      _layoutSignature = signature;
+    }
+    
+    // Generate widgets using cached positions
+    for (final log in ordered) {
+      final rect = _layoutByLogId[log.id]!;
+      final size = rect.width;
+      final minutes = logMinutes[log] ?? 0.0;
+      final isHovered = _hoveredLogId == log.id;
+      final hoverScale = isHovered ? 1.08 : 1.0;
       
-      // If we couldn't find a non-overlapping position, use the last attempt
-      if (position == null) {
-        final maxX = canvasWidth - size;
-        final maxY = canvasHeight - size;
-        final x = _random.nextDouble() * maxX;
-        final y = _random.nextDouble() * maxY;
-        position = Rect.fromLTWH(x, y, size, size);
-      }
+      // Responsive content based on zoom level
+      final zoomLevel = _currentZoomLevel;
+      final showText = zoomLevel > 0.6; // Hide text at low zoom levels
+      final showIcon = zoomLevel > 0.4; // Hide icons at very low zoom levels
+      final showDetails = zoomLevel > 1.2; // Show extra details at high zoom
       
-      // Generate random color variation
+      // Generate stable color variation based on log ID
       final baseColor = _parseColor(widget.area.color);
       final hsl = HSLColor.fromColor(baseColor);
-      final hue = (hsl.hue + (_random.nextDouble() - 0.5) * 30).clamp(0.0, 360.0);
-      final saturation = (hsl.saturation + _random.nextDouble() * 0.2).clamp(0.3, 1.0);
-      final lightness = (hsl.lightness + _random.nextDouble() * 0.2).clamp(0.4, 0.8);
+      final rnd = Random(log.id.hashCode);
+      final hue = (hsl.hue + (rnd.nextDouble() - 0.5) * 30).clamp(0.0, 360.0);
+      final saturation = (hsl.saturation + rnd.nextDouble() * 0.2).clamp(0.3, 1.0);
+      final lightness = (hsl.lightness + rnd.nextDouble() * 0.2).clamp(0.4, 0.8);
       final color = HSLColor.fromAHSL(1.0, hue, saturation, lightness).toColor();
       
       bubbles.add(
         Positioned(
-          left: position!.left,
-          top: position.top,
+          left: rect.left,
+          top: rect.top,
           child: GestureDetector(
             onTap: () => _showActivityDetails(log),
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: position.width,
-                height: position.height,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withOpacity(0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // Background image if available
-                    if (log.imageUrl != null)
-                      Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(position.width / 2),
-                          child: Image.network(
-                            log.imageUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(); // Fallback to icon
-                            },
-                          ),
-                        ),
+              onEnter: (_) {
+                if (!mounted) return;
+                setState(() => _hoveredLogId = log.id);
+              },
+              onExit: (_) {
+                if (!mounted) return;
+                setState(() => _hoveredLogId = null);
+              },
+              child: Tooltip(
+                message: '${_getActivityName(log)} • ${minutes.toInt()} min',
+                waitDuration: const Duration(milliseconds: 400),
+                child: Transform.scale(
+                  scale: hoverScale,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeInOut,
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isHovered 
+                          ? color.withValues(alpha: 0.9)
+                          : color,
+                      border: Border.all(
+                        color: isHovered 
+                            ? Colors.white.withValues(alpha: 0.6)
+                            : Colors.white.withValues(alpha: 0.3),
+                        width: isHovered ? 3 : 2,
                       ),
-                    
-                    // Icon and text overlay
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.star,
-                            color: log.imageUrl != null ? Colors.white : Colors.white,
-                            size: position.width * 0.25,
-                          ),
-                          const SizedBox(height: 4),
-                          Flexible(
-                            child: Text(
-                              _getActivityName(log),
-                              style: TextStyle(
-                                color: log.imageUrl != null ? Colors.white : Colors.white,
-                                fontSize: position.width * 0.15,
-                                fontWeight: FontWeight.bold,
-                                shadows: log.imageUrl != null ? [
-                                  const Shadow(
-                                    offset: Offset(1, 1),
-                                    blurRadius: 2,
-                                    color: Colors.black54,
-                                  ),
-                                ] : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: isHovered ? 0.6 : 0.4),
+                          blurRadius: isHovered ? 16 : 12,
+                          offset: const Offset(0, 4),
+                          spreadRadius: isHovered ? 2 : 1,
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isHovered ? 0.15 : 0.1),
+                          blurRadius: isHovered ? 6 : 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+                        // Background image if available
+                        if (log.imageUrl != null)
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(size / 2),
+                              child: Image.network(
+                                log.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(); // Fallback to icon
+                                },
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ],
-                      ),
+                        
+                        // Icon and text overlay (responsive to zoom)
+                        if (showIcon || showText)
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Icon (only show if zoom > 0.4 and no image)
+                                  if (showIcon && log.imageUrl == null)
+                                    Icon(
+                                      Icons.star,
+                                      color: Colors.white,
+                                      size: max(12.0, size * 0.25),
+                                    ),
+                                  if (showIcon && showText && log.imageUrl == null) 
+                                    const SizedBox(height: 4),
+                                  
+                                  // Text (only show if zoom > 0.6)
+                                  if (showText)
+                                    Flexible(
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            _getActivityName(log),
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: max(8.0, size * 0.12),
+                                              fontWeight: FontWeight.bold,
+                                              shadows: log.imageUrl != null ? [
+                                                const Shadow(
+                                                  offset: Offset(1, 1),
+                                                  blurRadius: 2,
+                                                  color: Colors.black54,
+                                                ),
+                                              ] : null,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: showDetails ? 3 : 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          // Show duration details at high zoom
+                                          if (showDetails && minutes > 0)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 2),
+                                              child: Text(
+                                                '${minutes.toInt()}min',
+                                                style: TextStyle(
+                                                  color: Colors.white.withValues(alpha: 0.8),
+                                                  fontSize: max(6.0, size * 0.08),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        
+                        // Image indicator
+                        if (log.imageUrl != null)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.image,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    
-                    // Image indicator
-                    if (log.imageUrl != null)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.image,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1380,7 +1859,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1450,10 +1929,10 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -1471,7 +1950,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
           Text(
             title,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: color.withOpacity(0.7),
+              color: color.withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -1555,7 +2034,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                       '$value',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontSize: 10,
-                        color: Colors.grey.withOpacity(0.7),
+                        color: Colors.grey.withValues(alpha: 0.7),
                       ),
                     );
                   }).reversed.toList(),
@@ -1594,7 +2073,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                             right: 0,
                             child: Container(
                               height: 1,
-                              color: Colors.grey.withOpacity(0.2),
+                              color: Colors.grey.withValues(alpha: 0.2),
                             ),
                           );
                         }),
@@ -1661,7 +2140,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       fontSize: 10,
-                                      color: Colors.grey.withOpacity(0.7),
+                                      color: Colors.grey.withValues(alpha: 0.7),
                                     ),
                               ),
                             ),
@@ -1727,7 +2206,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: ticks.reversed
-                        .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))))
+                        .map((v) => Text('$v', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withValues(alpha: 0.7))))
                         .toList(),
                   );
                 }),
@@ -1742,7 +2221,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                   return Stack(children: [
                     ...List.generate(4, (i) {
                       final y = topPad + ((i + 1) / 4.0) * usableHeight;
-                      return Positioned(top: y, left: 0, right: 0, child: Container(height: 1, color: Colors.grey.withOpacity(0.2)));
+                      return Positioned(top: y, left: 0, right: 0, child: Container(height: 1, color: Colors.grey.withValues(alpha: 0.2)));
                     }),
                     CustomPaint(
                       size: Size(chartWidth, chartHeight),
@@ -1783,7 +2262,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                         left: (center - 12).clamp(0.0, chartWidth - 24),
                         child: SizedBox(
                           width: 24,
-                          child: Text('${date.day}/${date.month}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withOpacity(0.7))),
+                          child: Text('${date.day}/${date.month}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey.withValues(alpha: 0.7))),
                         ),
                       );
                     }).toList(),
@@ -1920,7 +2399,7 @@ class _GlobalBarChartPainter extends CustomPainter {
     final double barWidth = slotWidth * 0.6;
 
     final paint = Paint()
-      ..color = color.withOpacity(0.85)
+      ..color = color.withValues(alpha: 0.85)
       ..style = PaintingStyle.fill;
 
     for (int i = 0; i < data.length; i++) {

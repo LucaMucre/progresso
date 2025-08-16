@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +15,9 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'services/level_up_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_state.dart';
+import 'services/offline_cache.dart';
+import 'navigation.dart';
+import 'home_shell.dart';
 
 class LogActionPage extends StatefulWidget {
   final ActionTemplate? template;
@@ -48,7 +52,6 @@ class _LogActionPageState extends State<LogActionPage> {
   String? _error;
   File? _selectedImage;
   String? _selectedImageUrl;
-  String? _uploadedImageUrl;
 
   @override
   void initState() {
@@ -199,9 +202,9 @@ class _LogActionPageState extends State<LogActionPage> {
           }
           bytes = fetched;
           
-          print('Web image size: ${bytes.length} bytes');
+          if (kDebugMode) debugPrint('Web image size: ${bytes.length} bytes');
         } catch (e) {
-          print('Error converting web image: $e');
+          if (kDebugMode) debugPrint('Error converting web image: $e');
           // Fallback to placeholder if conversion fails
           return 'https://via.placeholder.com/400x300/FF0000/FFFFFF?text=Upload+Failed';
         }
@@ -219,13 +222,13 @@ class _LogActionPageState extends State<LogActionPage> {
             if (result.isNotEmpty) bytes = Uint8List.fromList(result);
           } catch (_) {}
         }
-        print('Image size: ${bytes.length} bytes');
+        if (kDebugMode) debugPrint('Image size: ${bytes.length} bytes');
       } else {
         throw Exception('Kein Bild ausgewählt');
       }
 
       final filePath = '${user.id}/$fileName';
-      print('Uploading to path: $filePath');
+      if (kDebugMode) debugPrint('Uploading to path: $filePath');
 
       await Supabase.instance.client.storage
           .from('activity-images')
@@ -235,10 +238,10 @@ class _LogActionPageState extends State<LogActionPage> {
           .from('activity-images')
           .getPublicUrl(filePath);
 
-      print('Image uploaded successfully: $imageUrl');
+      if (kDebugMode) debugPrint('Image uploaded successfully: $imageUrl');
       return imageUrl;
     } catch (e) {
-      print('Detailed upload error: $e');
+      if (kDebugMode) debugPrint('Detailed upload error: $e');
       throw Exception('Fehler beim Hochladen des Bildes: $e');
     }
   }
@@ -278,7 +281,7 @@ class _LogActionPageState extends State<LogActionPage> {
           imageUrl = await _uploadImage();
         } catch (e) {
           // If image upload fails, continue without image but show a warning
-          print('Image upload failed: $e');
+          if (kDebugMode) debugPrint('Image upload failed: $e');
           setState(() {
             _error = 'Image upload failed: $e\n\nThe activity will be saved without an image.';
           });
@@ -345,20 +348,34 @@ class _LogActionPageState extends State<LogActionPage> {
           duration: const Duration(milliseconds: 1600),
         ),
       );
-      // Tastatur schließen und Pop sicher durchführen
+      // Tastatur schließen und zur Dashboard zurücknavigieren
       FocusScope.of(context).unfocus();
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+      
+      // Zurück zur Startseite (Dashboard) navigieren
+      if (mounted) {
+        // Zum Dashboard-Tab wechseln
+        goToHomeTab(0);
+        // Zurück zum tab system navigieren (alle routes entfernen bis HomeShell)
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomeShell()),
+          (route) => false,
+        );
       }
 
-      // Provider invalidieren, damit Dashboard-Header/Charts/Streak/XP aktualisieren
+      // Cache löschen und Provider invalidieren, damit Dashboard-Header/Charts/Streak/XP aktualisieren
       try {
-        final container = ProviderScope.containerOf(context, listen: false);
-        container.refresh(logsNotifierProvider);
-        container.refresh(xpNotifierProvider);
-        container.refresh(streakNotifierProvider);
-      } catch (_) {}
+        if (mounted) {
+          // Import und Cache löschen, um sicherzustellen, dass frische Daten geladen werden
+          await OfflineCache.clearCache();
+          final container = ProviderScope.containerOf(context, listen: false);
+          container.refresh(logsNotifierProvider);
+          container.refresh(xpNotifierProvider);
+          container.refresh(streakNotifierProvider);
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Error refreshing providers: $e');
+      }
 
       // Level-Up-Event SOFORT setzen (vor Achievement-Prüfung), damit Reihenfolge stimmt
       if (didLevelUp) {
@@ -545,7 +562,7 @@ class _LogActionPageState extends State<LogActionPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: focusColor.withOpacity(0.8), width: 1.6),
+        borderSide: BorderSide(color: focusColor.withValues(alpha: 0.8), width: 1.6),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     );
@@ -601,10 +618,10 @@ class _LogActionPageState extends State<LogActionPage> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: (areaColor ?? Theme.of(context).colorScheme.primary).withOpacity(0.2)),
+                  border: Border.all(color: (areaColor ?? Theme.of(context).colorScheme.primary).withValues(alpha: 0.2)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -615,7 +632,7 @@ class _LogActionPageState extends State<LogActionPage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: (areaColor ?? Theme.of(context).colorScheme.primary).withOpacity(0.1),
+                        color: (areaColor ?? Theme.of(context).colorScheme.primary).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
@@ -632,7 +649,7 @@ class _LogActionPageState extends State<LogActionPage> {
                           Text(
                             'Lebensbereich',
                             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: (areaColor ?? Theme.of(context).colorScheme.onSurface).withOpacity(0.6),
+                                  color: (areaColor ?? Theme.of(context).colorScheme.onSurface).withValues(alpha: 0.6),
                                 ),
                           ),
                           const SizedBox(height: 2),
@@ -750,7 +767,7 @@ class _LogActionPageState extends State<LogActionPage> {
                 width: double.infinity,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: accent.withOpacity(0.3)),
+                  border: Border.all(color: accent.withValues(alpha: 0.3)),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
@@ -783,7 +800,7 @@ class _LogActionPageState extends State<LogActionPage> {
                       label: const Text('Change Image'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: accent,
-                        side: BorderSide(color: accent.withOpacity(0.6)),
+                        side: BorderSide(color: accent.withValues(alpha: 0.6)),
                       ),
                     ),
                   ),
@@ -800,7 +817,7 @@ class _LogActionPageState extends State<LogActionPage> {
                       label: Text('Remove', style: TextStyle(color: accent)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: accent,
-                        side: BorderSide(color: accent.withOpacity(0.6)),
+                        side: BorderSide(color: accent.withValues(alpha: 0.6)),
                       ),
                     ),
                   ),
@@ -816,7 +833,7 @@ class _LogActionPageState extends State<LogActionPage> {
                     label: const Text('Add Image'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: accent,
-                      side: BorderSide(color: accent.withOpacity(0.6)),
+                      side: BorderSide(color: accent.withValues(alpha: 0.6)),
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
                   ),
@@ -932,7 +949,7 @@ class _MarkdownPreviewState extends State<_MarkdownPreview> {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
         ),
         child: SingleChildScrollView(
           child: RichText(text: TextSpan(children: spans)),

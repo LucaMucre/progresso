@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'services/character_service.dart';
 import 'services/avatar_sync_service.dart';
 
@@ -60,7 +60,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             _bioCtrl.text = res['bio'] ?? '';
             _isLoadingProfile = false;
           });
-          print('DEBUG: Loaded avatar_url: $_currentAvatarUrl');
+          if (kDebugMode) debugPrint('DEBUG: Loaded avatar_url: $_currentAvatarUrl');
         }
       }
     } catch (e) {
@@ -73,7 +73,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           _isLoadingProfile = false;
         });
       }
-      print('Fehler beim Laden des Profils: $e');
+      if (kDebugMode) debugPrint('Fehler beim Laden des Profils: $e');
     }
   }
 
@@ -106,20 +106,20 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     
     try {
       final currentUser = _supabase.auth.currentUser!;
-      final ext = 'jpg'; // Standard für Web
+      const ext = 'jpg'; // Standard für Web
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       // Versionierter Dateiname für hartes Cache-Busting über neue URL
       final path = '${currentUser.id}/avatar_${timestamp}.$ext';
       
-      print('DEBUG: Uploading avatar to path: $path');
-      print('DEBUG: File size: ${bytes.length} bytes');
+      if (kDebugMode) debugPrint('DEBUG: Uploading avatar to path: $path');
+      if (kDebugMode) debugPrint('DEBUG: File size: ${bytes.length} bytes');
       
       await _supabase.storage
           .from('avatars')
           .uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
       final avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
       
-      print('DEBUG: Avatar URL: $avatarUrl');
+      if (kDebugMode) debugPrint('DEBUG: Avatar URL: $avatarUrl');
       
       // Aktualisiere den State mit der neuen Avatar-URL
       setState(() {
@@ -130,7 +130,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       await _saveProfileWithAvatar(avatarUrl);
       
     } catch (err) {
-      print('DEBUG: Error uploading avatar: $err');
+      if (kDebugMode) debugPrint('DEBUG: Error uploading avatar: $err');
       setState(() {
         _error = err.toString();
         _loading = false;
@@ -171,8 +171,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         }
       } catch (_) {}
       
-      print('DEBUG: Uploading avatar to path: $path');
-      print('DEBUG: File size: ${bytes.length} bytes');
+      if (kDebugMode) debugPrint('DEBUG: Uploading avatar to path: $path');
+      if (kDebugMode) debugPrint('DEBUG: File size: ${bytes.length} bytes');
       
       await _supabase.storage
           .from('avatars')
@@ -188,12 +188,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           );
       final avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
       
-      print('DEBUG: Avatar URL: $avatarUrl');
+      if (kDebugMode) debugPrint('DEBUG: Avatar URL: $avatarUrl');
       
       await _saveProfileWithAvatar(avatarUrl);
       
     } catch (err) {
-      print('DEBUG: Error saving profile with file: $err');
+      if (kDebugMode) debugPrint('DEBUG: Error saving profile with file: $err');
       setState(() {
         _error = err.toString();
         _loading = false;
@@ -218,7 +218,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         'avatar_url': avatarUrl,
       };
       
-      print('DEBUG: Saving profile with avatar_url: $avatarUrl');
+      if (kDebugMode) debugPrint('DEBUG: Saving profile with avatar_url: $avatarUrl');
       
       await _supabase
           .from('users')
@@ -238,7 +238,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       // Force rebuild des Dashboards beim Zurückkehren
       Navigator.of(context).pop(true); // true = Profil wurde geändert
     } catch (err) {
-      print('DEBUG: Error saving profile: $err');
+      if (kDebugMode) debugPrint('DEBUG: Error saving profile: $err');
       setState(() {
         _error = err.toString();
       });
@@ -344,7 +344,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                             border: Border.all(color: Colors.white, width: 4),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 12,
                                 offset: const Offset(0, 6),
                               ),
@@ -442,9 +442,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   _error!,

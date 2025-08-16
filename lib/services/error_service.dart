@@ -117,8 +117,8 @@ class ErrorService {
   static void logError(Object error, [StackTrace? st]) {
     if (kDebugMode) {
       // In Debug: direkte Ausgabe zur Konsole
-      print('Error: $error');
-      if (st != null) print(st);
+      if (kDebugMode) debugPrint('Error: $error');
+      if (st != null && kDebugMode) debugPrint(st.toString());
     }
     _maybeCapture(error, st);
   }
@@ -139,9 +139,9 @@ class ErrorService {
     final message = getErrorMessage(error);
     
     // Log für Debugging
-    print('Global Error: $error');
+    if (kDebugMode) debugPrint('Global Error: $error');
     if (stackTrace != null) {
-      print('StackTrace: $stackTrace');
+      if (kDebugMode) debugPrint('StackTrace: $stackTrace');
     }
     
     // User-freundliche Nachricht anzeigen

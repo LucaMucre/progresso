@@ -129,13 +129,13 @@ class _AuthPageState extends State<AuthPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
+                color: Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.rocket_launch, size: 16, color: Colors.white70),
                   SizedBox(width: 8),
                   Text('Welcome to Progresso', style: TextStyle(color: Colors.white70)),
@@ -162,7 +162,7 @@ class _AuthPageState extends State<AuthPage> {
       'Understand what moves you forward. Track activities,\n'
               'gain insights, and build consistent routines.',
               style: theme.textTheme.titleMedium?.copyWith(
-                color: Colors.white.withOpacity(0.75),
+                color: Colors.white.withValues(alpha: 0.75),
                 height: 1.4,
               ),
             ),
@@ -195,7 +195,7 @@ class _AuthPageState extends State<AuthPage> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     foregroundColor: Colors.white,
-                    side: BorderSide(color: Colors.white.withOpacity(0.25)),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => setState(() => _isLogin = true),
@@ -218,12 +218,12 @@ class _AuthPageState extends State<AuthPage> {
               width: 440,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     offset: const Offset(0, 20),
                     blurRadius: 50,
                   ),
@@ -271,17 +271,17 @@ class _AuthPageState extends State<AuthPage> {
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.06),
+                      fillColor: Colors.white.withValues(alpha: 0.06),
                       prefixIcon: const Icon(Icons.email_outlined, color: Colors.white70),
                       hintText: 'Email',
                       hintStyle: const TextStyle(color: Colors.white54),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.14)),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.14)),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -296,17 +296,17 @@ class _AuthPageState extends State<AuthPage> {
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.06),
+                      fillColor: Colors.white.withValues(alpha: 0.06),
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
                       hintText: 'Password',
                       hintStyle: const TextStyle(color: Colors.white54),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.14)),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.14)),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -320,9 +320,9 @@ class _AuthPageState extends State<AuthPage> {
                       margin: const EdgeInsets.only(bottom: 6),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         _error!,

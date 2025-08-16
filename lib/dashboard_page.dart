@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
@@ -14,10 +15,10 @@ import 'widgets/bubble_widget.dart';
 import 'widgets/profile_header_widget.dart';
 import 'dashboard/widgets/dashboard_header.dart';
 import 'dashboard/widgets/gallery_filters.dart';
-import 'templates_page.dart';
 import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
+import 'models/action_models.dart' as models;
 import 'services/achievement_service.dart';
 import 'settings_page.dart';
 import 'navigation.dart';
@@ -42,7 +43,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   Future<Map<String, dynamic>>? _globalStatsFuture;
   Future<List<int>>? _globalActivity7dFuture;
   Future<Map<String, dynamic>>? _globalDurationStacksFuture;
-  // View mode for life areas container: 0 = bubbles, 1 = calendar, 2 = gallery
+  // View mode for life areas container: 0 = bubbles, 1 = calendar, 2 = gallery, 3 = table
   int _viewMode = 0;
   // Current month displayed in the calendar view
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -192,7 +193,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (e) {
-      print('SignOut Fehler: $e');
+      if (kDebugMode) debugPrint('SignOut Fehler: $e');
     }
   }
 
@@ -239,20 +240,29 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final user = client.auth.currentUser;
     if (user == null) return [];
 
-    // Use UTC boundaries to avoid off-by-one due to local timezone
-    final localStart = DateTime(day.year, day.month, day.day);
-    final start = DateTime.utc(localStart.year, localStart.month, localStart.day);
-    final end = start.add(const Duration(days: 1));
+    // Query a wider range and filter locally for precise timezone handling
+    final queryStart = day.subtract(const Duration(days: 1)).toUtc();
+    final queryEnd = day.add(const Duration(days: 2)).toUtc();
 
     try {
       final res = await client
           .from('action_logs')
           .select('id, occurred_at, duration_min, notes, earned_xp, template_id, activity_name, image_url')
           .eq('user_id', user.id)
-          .gte('occurred_at', start.toIso8601String())
-          .lt('occurred_at', end.toIso8601String())
+          .gte('occurred_at', queryStart.toIso8601String())
+          .lt('occurred_at', queryEnd.toIso8601String())
           .order('occurred_at');
-      return (res as List).map((m) => ActionLog.fromJson(m as Map<String, dynamic>)).toList();
+      
+      final allLogs = (res as List).map((m) => models.ActionLog.fromJson(m as Map<String, dynamic>)).toList();
+      
+      // Filter to only include logs that occurred on the specified day in local time
+      return allLogs.where((log) {
+        final localTime = log.occurredAt.toLocal();
+        final logDay = DateTime(localTime.year, localTime.month, localTime.day);
+        final targetDay = DateTime(day.year, day.month, day.day);
+        return logDay.isAtSameMomentAs(targetDay);
+      }).toList();
+      
     } on PostgrestException catch (e) {
       // Fallback when activity_name column doesn't exist
       if ((e.message ?? '').contains('activity_name')) {
@@ -260,10 +270,19 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             .from('action_logs')
             .select('id, occurred_at, duration_min, notes, earned_xp, template_id, image_url')
             .eq('user_id', user.id)
-            .gte('occurred_at', start.toIso8601String())
-            .lt('occurred_at', end.toIso8601String())
+            .gte('occurred_at', queryStart.toIso8601String())
+            .lt('occurred_at', queryEnd.toIso8601String())
             .order('occurred_at');
-        return (res as List).map((m) => ActionLog.fromJson(m as Map<String, dynamic>)).toList();
+        
+        final allLogs = (res as List).map((m) => models.ActionLog.fromJson(m as Map<String, dynamic>)).toList();
+        
+        // Filter to only include logs that occurred on the specified day in local time
+        return allLogs.where((log) {
+          final localTime = log.occurredAt.toLocal();
+          final logDay = DateTime(localTime.year, localTime.month, localTime.day);
+          final targetDay = DateTime(day.year, day.month, day.day);
+          return logDay.isAtSameMomentAs(targetDay);
+        }).toList();
       }
       rethrow;
     }
@@ -298,9 +317,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
     )).toList();
     
-    print('AREA TAGS DEBUG: Loaded ${areaTags.length} area tags');
-    for (final tag in areaTags) {
-      print('  - ${tag.name} (${tag.category}) -> ${tag.color}');
+    if (kDebugMode) {
+      debugPrint('AREA TAGS DEBUG: Loaded ${areaTags.length} area tags');
+      for (final tag in areaTags) {
+        debugPrint('  - ${tag.name} (${tag.category}) -> ${tag.color}');
+      }
     }
 
     String titleForLog(ActionLog log) {
@@ -333,6 +354,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             
             // Direkte Area-Ableitung falls kein Tag-Match
             String areaKey = effectiveAreaName;
+            // Normalize nutrition to health
+            if (areaKey == 'nutrition') areaKey = 'health';
             if (areaKey.isEmpty) {
               switch (category) {
                 case 'inner':
@@ -454,6 +477,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
                             final match = _matchAreaTag(areaTags, areaName, category);
                             if (match != null) areaKey = match.name.toLowerCase();
+                            // Normalize nutrition to health
+                            if (areaKey == 'nutrition') areaKey = 'health';
                             // Fallbacks wie in der RPC-Logik
                             if (areaKey == 'unknown' || areaKey.isEmpty) {
                               switch (category) {
@@ -486,7 +511,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       final bucket = tmp.putIfAbsent(areaKey, () => {'total': 0, 'sum_duration': 0, 'sum_xp': 0});
                       bucket['total'] = (bucket['total'] ?? 0) + 1;
                       bucket['sum_duration'] = (bucket['sum_duration'] ?? 0) + (log.durationMin ?? 0);
-                      bucket['sum_xp'] = (bucket['sum_xp'] ?? 0) + (log.earnedXp);
+                      bucket['sum_xp'] = (bucket['sum_xp'] ?? 0) + log.earnedXp;
                     }
                     tmp.forEach((k, v) {
                       acc.add({'area_key': k, 'total': v['total'] ?? 0, 'sum_duration': v['sum_duration'] ?? 0, 'sum_xp': v['sum_xp'] ?? 0});
@@ -515,9 +540,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: color.withOpacity(0.10),
+                              color: color.withValues(alpha: 0.10),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: color.withOpacity(0.25)),
+                              border: Border.all(color: color.withValues(alpha: 0.25)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -560,6 +585,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 final match = _matchAreaTag(areaTags, areaName.isNotEmpty ? areaName : lifeArea, category);
                                 if (match != null) return match.color;
                                 areaKey = areaName.isNotEmpty ? areaName : lifeArea;
+                                // Normalize nutrition to health
+                                if (areaKey == 'nutrition') areaKey = 'health';
                                 if (areaKey.isEmpty) {
                                   switch (category) {
                                     case 'inner':
@@ -643,7 +670,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                               onUpdate: () {
                                 // Entferne gelöschten/angepassten Eintrag aus der Tagesliste
                                 setDialogState(() {
-                                  logs.removeWhere((l) => l.id == log.id);
+                                  logs.removeWhere((l) => (l as dynamic).id == log.id);
                                 });
                                 // Triggere Rebuilds (Statistiken, Diagramme, Kalender)
                                 if (mounted) {
@@ -675,11 +702,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final user = client.auth.currentUser;
     if (user == null) return {};
 
-    // Build range for the month [start, nextMonthStart)
+    // Build range for the month [start, nextMonthStart) with timezone buffer
+    // Expand query range to cover potential timezone differences
     final startOfMonthLocal = DateTime(month.year, month.month, 1);
-    final startOfMonth = DateTime.utc(startOfMonthLocal.year, startOfMonthLocal.month, startOfMonthLocal.day);
+    final startOfMonth = startOfMonthLocal.subtract(const Duration(days: 1)).toUtc();
     final startOfNextMonthLocal = DateTime(month.year, month.month + 1, 1);
-    final startOfNextMonth = DateTime.utc(startOfNextMonthLocal.year, startOfNextMonthLocal.month, startOfNextMonthLocal.day);
+    final startOfNextMonth = startOfNextMonthLocal.add(const Duration(days: 1)).toUtc();
 
     // Fetch templates once to resolve template_id to names
     final templatesRes = await client
@@ -696,7 +724,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       // Preferred selection including activity_name (if the column exists)
       logsRes = await client
           .from('action_logs')
-          .select('occurred_at, template_id, activity_name, notes')
+          .select('occurred_at, template_id, activity_name, notes, duration_min')
           .eq('user_id', user.id)
           .gte('occurred_at', startOfMonth.toIso8601String())
           .lt('occurred_at', startOfNextMonth.toIso8601String())
@@ -706,7 +734,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       if ((e.message ?? '').contains('activity_name')) {
         logsRes = await client
             .from('action_logs')
-            .select('occurred_at, template_id, notes')
+            .select('occurred_at, template_id, notes, duration_min')
             .eq('user_id', user.id)
             .gte('occurred_at', startOfMonth.toIso8601String())
             .lt('occurred_at', startOfNextMonth.toIso8601String())
@@ -715,7 +743,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         rethrow;
       }
     } catch (e) {
-  print('Error loading calendar data: $e');
+  if (kDebugMode) debugPrint('Error loading calendar data: $e');
       return {};
     }
 
@@ -735,9 +763,15 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     for (final row in logsRes) {
       final occurredAt = DateTime.parse(row['occurred_at'] as String).toLocal();
       final dayKey = DateTime(occurredAt.year, occurredAt.month, occurredAt.day);
+      
+      // Filter: only include activities that are actually in the requested month (local time)
+      if (dayKey.year != month.year || dayKey.month != month.month) {
+        continue;
+      }
       final String? activityName = row['activity_name'] as String?; // may be null if not selected
       final String? templateId = row['template_id'] as String?;
       final String? notes = row['notes'] as String?;
+      final int? durationMin = row['duration_min'] as int?;
 
     String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Activity') : 'Activity');
       Color? tagColor;
@@ -767,12 +801,16 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         }
       }
 
-      final String? areaKey = matched != null
+      String? areaKey = matched != null
           ? '${matched!.name.toLowerCase()}|${matched!.category.toLowerCase()}'
           : null;
+      // Normalize nutrition to health in areaKey
+      if (areaKey != null && areaKey.startsWith('nutrition|')) {
+        areaKey = areaKey.replaceFirst('nutrition|', 'health|');
+      }
       dayToTitles
           .putIfAbsent(dayKey, () => <_DayEntry>[])
-          .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey));
+          .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey, durationMin: durationMin));
     }
 
     return dayToTitles;
@@ -794,10 +832,326 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
         return (res as List).cast<Map<String, dynamic>>();
       } catch (e) {
-        print('Error fetching images: $e');
+        if (kDebugMode) debugPrint('Error fetching images: $e');
         return [];
       }
     }
+
+  Widget _buildTableContainer(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.table_rows,
+                color: Theme.of(context).colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Activity Table',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          // Table with all activities
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _loadAllActivities(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+              
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Text('Error loading activities: ${snapshot.error}'),
+                  ),
+                );
+              }
+              
+              final activities = snapshot.data ?? [];
+              
+              if (activities.isEmpty) {
+                return Container(
+                  height: 200,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inbox_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No activities yet',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Start logging activities to see them here',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              
+              return _buildActivitiesTable(activities);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _loadAllActivities() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return <Map<String, dynamic>>[];
+
+      // Simple query without joins for now to avoid compilation issues
+      final res = await client
+          .from('action_logs')
+          .select('id, activity_name, occurred_at, duration_min, notes, image_url, earned_xp, template_id')
+          .eq('user_id', user.id)
+          .order('occurred_at', ascending: false)
+          .limit(500);
+
+      final List<Map<String, dynamic>> result = [];
+      for (final item in res as List) {
+        result.add(item as Map<String, dynamic>);
+      }
+      return result;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error loading all activities: $e');
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  Widget _buildActivitiesTable(List<Map<String, dynamic>> activities) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Table Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Activity',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'Life Area',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'Date',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'Duration',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Table Body
+          SizedBox(
+            height: 400, // Fixed height for scrolling
+            child: ListView.builder(
+              itemCount: activities.length,
+              itemBuilder: (context, index) {
+                final activity = activities[index];
+                final isEven = index % 2 == 0;
+                
+                final activityName = activity['activity_name'] as String? ?? 'Unknown';
+                final imageUrl = activity['image_url'] as String?;
+                final occurredAt = DateTime.parse(activity['occurred_at'] as String);
+                final durationMin = activity['duration_min'] as int?;
+                
+                // For now, show simplified info without life area details
+                const areaName = 'Activity';
+                const areaColor = '#6366f1';
+                
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isEven ? Colors.grey[50] : Colors.white,
+                  ),
+                  child: Row(
+                    children: [
+                      // Activity Name
+                      Expanded(
+                        flex: 2,
+                        child: Row(
+                          children: [
+                            if (imageUrl != null)
+                              Container(
+                                width: 32,
+                                height: 32,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  image: DecorationImage(
+                                    image: NetworkImage(imageUrl),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            Flexible(
+                              child: Text(
+                                activityName,
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Life Area
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: Color(int.parse(areaColor.replaceFirst('#', '0xFF'))),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Flexible(
+                              child: Text(
+                                areaName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Date
+                      Expanded(
+                        child: Text(
+                          _formatDate(occurredAt),
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ),
+                      
+                      // Duration
+                      Expanded(
+                        child: Text(
+                          durationMin != null 
+                              ? '${durationMin}min'
+                              : '-',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final activityDate = DateTime(date.year, date.month, date.day);
+
+    if (activityDate == today) {
+      return 'Today ${_formatTime(date)}';
+    } else if (activityDate == yesterday) {
+      return 'Yesterday ${_formatTime(date)}';
+    } else {
+      return '${date.day}.${date.month}.${date.year}';
+    }
+  }
+
+  String _formatTime(DateTime date) {
+    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
 
   Widget _buildGalleryContainer(BuildContext context) {
     return Container(
@@ -807,7 +1161,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -834,7 +1188,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               Text(
                 'All your memories',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
               ),
             ],
@@ -1030,7 +1384,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.8),
+                          color: Colors.black.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -1080,7 +1434,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             Text(
                               DateFormat('EEEE, MMMM d, y • h:mm a').format(date),
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                                 fontSize: 14,
                               ),
                             ),
@@ -1098,7 +1452,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               right: 20,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
@@ -1114,7 +1468,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -1140,7 +1494,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -1262,7 +1616,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         }
                       }
                     } catch (_) {}
-                    (data[key] ??= []).add(_DayEntry(title: title, color: color));
+                    (data[key] ??= []).add(_DayEntry(title: title, color: color, durationMin: l.durationMin));
                   }
                   final mapped = <DateTime, List<CalendarDayEntry>>{};
                   data.forEach((k, v) {
@@ -1305,7 +1659,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.brown.withOpacity(0.1),
+            color: Colors.brown.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.emoji_events, color: Colors.brown, size: 24),
@@ -1314,7 +1668,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.emoji_events, color: Colors.grey, size: 24),
@@ -1323,7 +1677,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.amber.withOpacity(0.1),
+            color: Colors.amber.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.emoji_events, color: Colors.amber, size: 24),
@@ -1350,6 +1704,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       case 'social':
         return Colors.pink;
       case 'health':
+      case 'nutrition':
         return Colors.green;
       case 'vitality':
         return Colors.orange;
@@ -1470,9 +1825,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: chipColor.withOpacity(0.12),
+                              color: chipColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: chipColor.withOpacity(0.5)),
+                              border: Border.all(color: chipColor.withValues(alpha: 0.5)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1535,7 +1890,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                               border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
                               boxShadow: isSelected ? [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
+                                  color: Colors.black.withValues(alpha: 0.3),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -1572,8 +1927,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             height: 60,
                             decoration: BoxDecoration(
                               color: isSelected 
-                                  ? Color(int.parse(selectedColor.replaceAll('#', '0xFF'))).withOpacity(0.2)
-                                  : Colors.grey.withOpacity(0.1),
+                                  ? Color(int.parse(selectedColor.replaceAll('#', '0xFF'))).withValues(alpha: 0.2)
+                                  : Colors.grey.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                               border: isSelected 
                                   ? Border.all(color: Color(int.parse(selectedColor.replaceAll('#', '0xFF'))), width: 2)
@@ -1747,7 +2102,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
       return streak;
     } catch (e) {
-  print('Error calculating streak: $e');
+  if (kDebugMode) debugPrint('Error calculating streak: $e');
       return 0;
     }
   }
@@ -1768,7 +2123,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
       return dates;
     } catch (e) {
-  print('Error loading log data: $e');
+  if (kDebugMode) debugPrint('Error loading log data: $e');
       return [];
     }
   }
@@ -1810,7 +2165,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -1926,11 +2281,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         borderRadius: BorderRadius.circular(12),
                         color: Theme.of(context).colorScheme.surface,
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
                         ),
                       ),
                       child: ToggleButtons(
-                        isSelected: [_viewMode == 0, _viewMode == 1, _viewMode == 2],
+                        isSelected: [_viewMode == 0, _viewMode == 1, _viewMode == 2, _viewMode == 3],
                         onPressed: (index) {
                           setState(() {
                             _viewMode = index;
@@ -1953,6 +2308,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 8),
                             child: Icon(Icons.photo_library),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Icon(Icons.table_rows),
                           ),
                         ],
                       ),
@@ -1977,19 +2336,21 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ),
             const SizedBox(height: 16),
 
-            // Life Areas content (Bubbles, Calendar, or Gallery)
+            // Life Areas content (Bubbles, Calendar, Gallery, or Table)
             _viewMode == 1
           ? _buildCalendarContainer(context)
                 : _viewMode == 2
                     ? _buildGalleryContainer(context)
-                    : Container(
+                    : _viewMode == 3
+                        ? _buildTableContainer(context)
+                        : Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
+                          color: Colors.black.withValues(alpha: 0.08),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -2042,13 +2403,13 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 Icon(
                                   Icons.add_circle_outline,
                                   size: 48,
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
                                   'No life areas yet',
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -2062,7 +2423,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                          _refreshCounter++;
                                        });
                                      } catch (e) {
-  print('Error creating default areas: $e');
+  if (kDebugMode) debugPrint('Error creating default areas: $e');
                                      }
                                    },
                                    child: const Text('Create default areas'),
@@ -2122,7 +2483,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -2174,7 +2535,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
                             ),
                           ),
                           child: Material(
@@ -2200,7 +2561,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     Container(
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: _parseColor(area.color).withOpacity(0.1),
+                                        color: _parseColor(area.color).withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Icon(
@@ -2226,7 +2587,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                           Text(
           'Add activity',
                                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                                             ),
                                           ),
                                         ],
@@ -2235,7 +2596,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: _parseColor(area.color).withOpacity(0.1),
+                                        color: _parseColor(area.color).withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Icon(
@@ -2248,7 +2609,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     Icon(
                                       Icons.arrow_forward_ios,
                                       size: 16,
-                                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                                     ),
                                   ],
                                 ),
@@ -2281,7 +2642,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       }
       return areas;
     } catch (e) {
-  print('Error loading life areas: $e');
+  if (kDebugMode) debugPrint('Error loading life areas: $e');
       rethrow;
     }
   }
@@ -2310,7 +2671,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
+                color: Colors.black.withValues(alpha: 0.08),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -2396,10 +2757,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -2417,7 +2778,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           Text(
             title,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: color.withOpacity(0.7),
+              color: color.withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -2485,7 +2846,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           '$value',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             fontSize: 10,
-                            color: Colors.grey.withOpacity(0.7),
+                            color: Colors.grey.withValues(alpha: 0.7),
                           ),
                         );
                       }).reversed.toList(),
@@ -2524,7 +2885,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 right: 0,
                                 child: Container(
                                   height: 1,
-                                  color: Colors.grey.withOpacity(0.15),
+                                  color: Colors.grey.withValues(alpha: 0.15),
                                 ),
                               );
                             }),
@@ -2594,7 +2955,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     textAlign: isFirst ? TextAlign.left : (isLast ? TextAlign.right : TextAlign.center),
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                           fontSize: 10,
-                                          color: Colors.grey.withOpacity(0.7),
+                                          color: Colors.grey.withValues(alpha: 0.7),
                                         ),
                                   ),
                                 ),
@@ -2684,7 +3045,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           label,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 fontSize: 10,
-                                color: Colors.grey.withOpacity(0.7),
+                                color: Colors.grey.withValues(alpha: 0.7),
                               ),
                         );
                       }).reversed.toList(),
@@ -2723,7 +3084,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 right: 0,
                                 child: Container(
                                   height: 1,
-                                  color: Colors.grey.withOpacity(0.2),
+                                  color: Colors.grey.withValues(alpha: 0.2),
                                 ),
                               );
                             }),
@@ -2775,7 +3136,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     textAlign: TextAlign.center,
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                           fontSize: 10,
-                                          color: Colors.grey.withOpacity(0.7),
+                                          color: Colors.grey.withValues(alpha: 0.7),
                                         ),
                                   ),
                                 ),
@@ -2812,7 +3173,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         'averageDuration': averageDuration,
       };
     } catch (e) {
-      print('Fehler beim Berechnen der globalen Statistiken: $e');
+      if (kDebugMode) debugPrint('Fehler beim Berechnen der globalen Statistiken: $e');
       return {};
     }
   }
@@ -2836,7 +3197,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         }).length;
       }).toList();
     } catch (e) {
-  print('Error loading 7-day activities: $e');
+  if (kDebugMode) debugPrint('Error loading 7-day activities: $e');
       return List.filled(7, 0);
     }
   }
@@ -2861,7 +3222,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return minutes;
       }).toList();
     } catch (e) {
-      print('Fehler beim Laden der 7-Tage-Dauer: $e');
+      if (kDebugMode) debugPrint('Fehler beim Laden der 7-Tage-Dauer: $e');
       return List.filled(7, 0);
     }
   }
@@ -2932,7 +3293,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         'totals': totals,
       };
     } catch (e) {
-      print('Fehler beim Laden der 7-Tage-Stacks: $e');
+      if (kDebugMode) debugPrint('Fehler beim Laden der 7-Tage-Stacks: $e');
       return {
         'stacks': List.generate(7, (_) => <_StackSlice>[]),
         'totals': List.filled(7, 0),
@@ -3087,13 +3448,15 @@ class _CalendarDayCell extends StatelessWidget {
     final bool hasEntries = entries.isNotEmpty;
     // Dominante Farbe per Lebensbereich bestimmen, mit Tie-Breaker nach Monats-Häufigkeit
     Color dominantColor() {
-      if (!hasEntries) return colorScheme.outline.withOpacity(0.6);
+      if (!hasEntries) return colorScheme.outline.withValues(alpha: 0.6);
       final Map<String, int> areaToCount = {};
+      final Map<String, int> areaToMinutes = {};
       final Map<String, Color> areaToColor = {};
       for (final e in entries) {
         if (e.areaKey == null) continue;
         final key = e.areaKey!;
         areaToCount[key] = (areaToCount[key] ?? 0) + 1;
+        areaToMinutes[key] = (areaToMinutes[key] ?? 0) + (e.durationMin ?? 0);
         if (e.color != null) areaToColor[key] = e.color!;
       }
       if (areaToCount.isEmpty) {
@@ -3129,14 +3492,14 @@ class _CalendarDayCell extends StatelessWidget {
         final key = candidates.first;
         return areaToColor[key] ?? colorScheme.primary;
       }
-      // Tie-Breaker: wähle die Farbe mit geringerer Monatsanzahl
+      // Tie-Breaker: wähle die Farbe mit den meisten Minuten
       String? chosen;
-      int? chosenMonthCount;
+      int? chosenMinutes;
       for (final key in candidates) {
-        final monthCount = monthAreaCounts?[key] ?? 0;
-        if (chosen == null || monthCount < (chosenMonthCount ?? 1 << 30)) {
+        final minutes = areaToMinutes[key] ?? 0;
+        if (chosen == null || minutes > (chosenMinutes ?? -1)) {
           chosen = key;
-          chosenMonthCount = monthCount;
+          chosenMinutes = minutes;
         }
       }
       return areaToColor[chosen!] ?? colorScheme.primary;
@@ -3146,7 +3509,7 @@ class _CalendarDayCell extends StatelessWidget {
     final List<_DayEntry> shown = () {
       if (entries.isEmpty) return const <_DayEntry>[];
       if (entries.length == 1) return <_DayEntry>[entries.first];
-      return <_DayEntry>[entries.first, _DayEntry(title: '+${entries.length - 1}')];
+      return <_DayEntry>[entries.first, _DayEntry(title: '+${entries.length - 1}', durationMin: 0)];
     }();
 
     // Base content
@@ -3154,16 +3517,16 @@ class _CalendarDayCell extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: hasEntries ? accentColor.withOpacity(0.06) : null,
+        color: hasEntries ? accentColor.withValues(alpha: 0.06) : null,
         border: Border.all(
           color: hasEntries
-              ? accentColor.withOpacity(0.35)
-              : colorScheme.outline.withOpacity(0.18),
+              ? accentColor.withValues(alpha: 0.35)
+              : colorScheme.outline.withValues(alpha: 0.18),
         ),
         boxShadow: hasEntries
             ? [
                 BoxShadow(
-                  color: accentColor.withOpacity(0.12),
+                  color: accentColor.withValues(alpha: 0.12),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 )
@@ -3177,8 +3540,8 @@ class _CalendarDayCell extends StatelessWidget {
             '$day',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: hasEntries
-                      ? accentColor.withOpacity(0.9)
-                      : colorScheme.onSurface.withOpacity(0.8),
+                      ? accentColor.withValues(alpha: 0.9)
+                      : colorScheme.onSurface.withValues(alpha: 0.8),
                   fontWeight: FontWeight.w600,
                 ),
           ),
@@ -3188,7 +3551,7 @@ class _CalendarDayCell extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: (e.color ?? colorScheme.primary).withOpacity(e.title.startsWith('+') ? 0.0 : 0.10),
+                    color: (e.color ?? colorScheme.primary).withValues(alpha: e.title.startsWith('+') ? 0.0 : 0.10),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -3198,7 +3561,7 @@ class _CalendarDayCell extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontSize: 12,
                           height: 1.1,
-                          color: colorScheme.onSurface.withOpacity(0.8),
+                          color: colorScheme.onSurface.withValues(alpha: 0.8),
                         ),
                   ),
                 ),
@@ -3238,7 +3601,8 @@ class _DayEntry {
   final String title;
   final Color? color;
   final String? areaKey; // canonical key to identify life area (name|category)
-  const _DayEntry({required this.title, this.color, this.areaKey});
+  final int? durationMin; // duration in minutes for tie-breaking
+  const _DayEntry({required this.title, this.color, this.areaKey, this.durationMin});
 }
 
 class _AreaTag {
@@ -3348,7 +3712,7 @@ class _GlobalBarChartPainter extends CustomPainter {
     final double barWidth = slotWidth * 0.6;
 
     final paint = Paint()
-      ..color = color.withOpacity(0.85)
+      ..color = color.withValues(alpha: 0.85)
       ..style = PaintingStyle.fill;
 
     for (int i = 0; i < data.length; i++) {
@@ -3401,7 +3765,7 @@ class _StackedBarChartPainter extends CustomPainter {
           Rect.fromLTWH(left, top, barWidth, sliceHeight),
           const Radius.circular(3),
         );
-        final paint = Paint()..color = slice.color.withOpacity(0.9);
+        final paint = Paint()..color = slice.color.withValues(alpha: 0.9);
         canvas.drawRRect(rect, paint);
         accumulated += sliceHeight;
       }

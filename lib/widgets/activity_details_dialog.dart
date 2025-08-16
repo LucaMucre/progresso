@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -254,7 +255,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
           }
           bytes = fetched;
         } catch (e) {
-          print('Error converting web image: $e');
+          if (kDebugMode) debugPrint('Error converting web image: $e');
           return 'https://via.placeholder.com/400x300/FF0000/FFFFFF?text=Upload+Failed';
         }
       } else if (_selectedImage != null) {
@@ -286,7 +287,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
 
       return imageUrl;
     } catch (e) {
-      print('Upload error: $e');
+      if (kDebugMode) debugPrint('Upload error: $e');
       throw Exception('Fehler beim Hochladen des Bildes: $e');
     }
   }
@@ -304,7 +305,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
         try {
           imageUrl = await _uploadImage();
         } catch (e) {
-          print('Image upload failed: $e');
+          if (kDebugMode) debugPrint('Image upload failed: $e');
           setState(() {
             _error = 'Bild-Upload fehlgeschlagen: $e';
           });
@@ -421,7 +422,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: (_areaColor ?? Theme.of(context).primaryColor).withOpacity(0.12),
+                color: (_areaColor ?? Theme.of(context).primaryColor).withValues(alpha: 0.12),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(12),
                   topRight: Radius.circular(12),
@@ -443,7 +444,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                         Text(
           'Activity details',
                           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: Colors.black.withOpacity(0.6),
+                                color: Colors.black.withValues(alpha: 0.6),
                               ),
                         ),
                       ],
@@ -483,7 +484,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                         width: double.infinity,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
@@ -607,9 +608,9 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
+                          color: Colors.red.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.withOpacity(0.3)),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           _error!,
@@ -627,7 +628,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.05),
+                  color: Colors.grey.withValues(alpha: 0.05),
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(12),
                     bottomRight: Radius.circular(12),

@@ -15,7 +15,6 @@ class ProfileHeaderWidget extends StatefulWidget {
 
 class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
   String? _userName;
-  String? _userBio;
   String? _userAvatarUrl;
   bool _isLoading = true;
   RealtimeChannel? _usersChannel;
@@ -52,7 +51,6 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           if (mounted) {
           setState(() {
             _userName = res['name'] ?? user.email?.split('@')[0] ?? 'User';
-            _userBio = res['bio'] ?? '';
             _userAvatarUrl = res['avatar_url'];
             _isLoading = false;
             _cacheBust = DateTime.now().millisecondsSinceEpoch;
@@ -64,7 +62,6 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
       if (mounted) {
         setState(() {
           _userName = Supabase.instance.client.auth.currentUser?.email?.split('@')[0] ?? 'User';
-          _userBio = '';
           _isLoading = false;
         });
       }
@@ -177,7 +174,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
               borderRadius: BorderRadius.circular(avatarSize / 2), // perfect circle
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                   ),
                   child: _userAvatarUrl != null
                       ? CachedNetworkImage(
@@ -224,7 +221,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
           // Edit Button
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: IconButton(

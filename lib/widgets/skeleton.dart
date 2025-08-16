@@ -57,8 +57,8 @@ class SkeletonList extends StatelessWidget {
       padding: padding,
       itemCount: itemCount,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (_, __) => Row(
-        children: const [
+      itemBuilder: (_, __) => const Row(
+        children: [
           SkeletonCircle(size: 40),
           SizedBox(width: 12),
           Expanded(
@@ -90,10 +90,10 @@ class SkeletonCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.06)),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.06)),
       ),
-      child: Row(
-        children: const [
+      child: const Row(
+        children: [
           SkeletonCircle(size: 40),
           SizedBox(width: 12),
           Expanded(

@@ -136,7 +136,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         height: 80,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.grey.withOpacity(0.3),
+          color: Colors.grey.withValues(alpha: 0.3),
         ),
         child: const CircularProgressIndicator(),
       );
@@ -148,7 +148,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         height: 80,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.red.withOpacity(0.3),
+          color: Colors.red.withValues(alpha: 0.3),
         ),
         child: const Icon(Icons.error, color: Colors.red),
       );
@@ -176,7 +176,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -226,7 +226,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 2,
                     offset: const Offset(0, 1),
                   ),
@@ -484,23 +484,23 @@ class _BubblesGridState extends State<BubblesGrid> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: isHovered 
-                        ? _parseColor(area.color).withOpacity(0.9)
+                        ? _parseColor(area.color).withValues(alpha: 0.9)
                         : _parseColor(area.color),
                     border: Border.all(
                       color: isHovered 
-                          ? Colors.white.withOpacity(0.6)
-                          : Colors.white.withOpacity(0.3),
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : Colors.white.withValues(alpha: 0.3),
                       width: isHovered ? 3 : 2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: _parseColor(area.color).withOpacity(isHovered ? 0.6 : 0.4),
+                        color: _parseColor(area.color).withValues(alpha: isHovered ? 0.6 : 0.4),
                         blurRadius: isHovered ? 16 : 12,
                         offset: const Offset(0, 4),
                         spreadRadius: isHovered ? 2 : 1,
                       ),
                       BoxShadow(
-                        color: Colors.black.withOpacity(isHovered ? 0.15 : 0.1),
+                        color: Colors.black.withValues(alpha: isHovered ? 0.15 : 0.1),
                         blurRadius: isHovered ? 6 : 4,
                         offset: const Offset(0, 2),
                       ),
@@ -537,13 +537,13 @@ class _BubblesGridState extends State<BubblesGrid> {
         position.dy,
       ),
       items: [
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
-              const Icon(Icons.delete, size: 20, color: Colors.red),
-              const SizedBox(width: 8),
-              const Text('Löschen', style: TextStyle(color: Colors.red)),
+              Icon(Icons.delete, size: 20, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Löschen', style: TextStyle(color: Colors.red)),
             ],
           ),
         ),

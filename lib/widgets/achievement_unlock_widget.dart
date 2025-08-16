@@ -129,7 +129,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
             GestureDetector(
               onTap: _dismiss,
               child: Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 width: double.infinity,
                 height: double.infinity,
               ),
@@ -149,7 +149,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: widget.achievement.color.withOpacity(0.3 * _glowAnimation.value),
+                              color: widget.achievement.color.withValues(alpha: 0.3 * _glowAnimation.value),
                               blurRadius: 20 + (30 * _glowAnimation.value),
                               spreadRadius: 5 + (10 * _glowAnimation.value),
                             ),
@@ -161,7 +161,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: widget.achievement.color.withOpacity(0.3),
+                              color: widget.achievement.color.withValues(alpha: 0.3),
                               width: 2,
                             ),
                           ),
@@ -172,10 +172,10 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: widget.achievement.color.withOpacity(0.1),
+                                  color: widget.achievement.color.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: widget.achievement.color.withOpacity(0.3),
+                                    color: widget.achievement.color.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: Text(
@@ -219,7 +219,7 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(
-                                            color: widget.achievement.color.withOpacity(0.3),
+                                            color: widget.achievement.color.withValues(alpha: 0.3),
                                             blurRadius: 15,
                                             spreadRadius: 5,
                                           ),
@@ -297,7 +297,7 @@ class ParticlePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withOpacity(0.6)
+      ..color = color.withValues(alpha: 0.6)
       ..style = PaintingStyle.fill;
     
     final center = Offset(size.width / 2, size.height / 2);
@@ -312,7 +312,7 @@ class ParticlePainter extends CustomPainter {
       final x = center.dx + distance * Math.cos(angle);
       final y = center.dy + distance * Math.sin(angle);
       
-      paint.color = color.withOpacity((1 - progress) * 0.8);
+      paint.color = color.withValues(alpha: (1 - progress) * 0.8);
       canvas.drawCircle(Offset(x, y), particleSize, paint);
     }
     
@@ -325,7 +325,7 @@ class ParticlePainter extends CustomPainter {
       final x = center.dx + distance * Math.cos(angle);
       final y = center.dy + distance * Math.sin(angle);
       
-      paint.color = Colors.yellow.withOpacity(Math.sin(progress * 3.14159) * 0.8);
+      paint.color = Colors.yellow.withValues(alpha: Math.sin(progress * 3.14159) * 0.8);
       canvas.drawCircle(Offset(x, y), sparkleSize, paint);
     }
   }

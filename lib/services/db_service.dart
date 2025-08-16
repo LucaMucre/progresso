@@ -32,7 +32,9 @@ String? extractTitleFromNotes(dynamic notesValue) {
         if (t is String && t.trim().isNotEmpty) return t.trim();
       }
     }
-  } catch (_) {}
+  } catch (e) {
+    if (kDebugMode) debugPrint('Error extracting title from notes: $e');
+  }
   return null;
 }
 
@@ -180,10 +182,14 @@ Future<void> _checkAchievementsAfterLogInsert() async {
             }
             rolledParents.add(key);
           }
-        } catch (_) {}
+        } catch (e) {
+          if (kDebugMode) debugPrint('Error parsing log notes for achievements: $e');
+        }
       }
       lifeAreaCount = rolledParents.where((k) => k != 'unknown').length;
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error calculating life area count for achievements: $e');
+    }
 
     // Heutige Aktionen für Tages-Achievements
     final now = DateTime.now();
@@ -239,7 +245,7 @@ Map<String, int> calculateLevelDetailed(int totalXp) {
   final level = calculateLevel(totalXp);
   // 100 XP pro Level
   final xpInto = totalXp % 100; // XP im aktuellen Level (Rest der Division)
-  final xpNeeded = 100; // Jedes Level benötigt 100 XP
+  const xpNeeded = 100; // Jedes Level benötigt 100 XP
   
   return {
     'level': level,
