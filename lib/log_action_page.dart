@@ -8,8 +8,11 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 // Avoid direct dart:html in non-web builds; use conditional helper instead
 import 'utils/web_bytes_stub.dart'
     if (dart.library.html) 'utils/web_bytes_web.dart' as web_bytes;
+import 'utils/web_file_picker_stub.dart'
+    if (dart.library.html) 'utils/web_file_picker_web.dart' as web_file_picker;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:js' as js if (dart.library.html) 'dart:js';
 import 'services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'services/level_up_service.dart';
@@ -61,124 +64,71 @@ class _LogActionPageState extends State<LogActionPage> {
       _activityNameCtrl.text = widget.template!.name;
     }
     _quillCtrl = quill.QuillController.basic();
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 80,
-      );
-      
-      if (image != null) {
-        setState(() {
-          if (kIsWeb) {
-            _selectedImageUrl = image.path;
-          } else {
-            _selectedImage = File(image.path);
-          }
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error selecting image: $e';
+    
+    // On web, call JavaScript to prevent password manager
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _preventPasswordManager();
       });
     }
   }
-
-  Future<void> _takePhoto() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-        preferredCameraDevice: CameraDevice.rear, // Hauptkamera bevorzugen
-      );
-      
-      if (image != null) {
-        setState(() {
-          if (kIsWeb) {
-            _selectedImageUrl = image.path;
-          } else {
-            _selectedImage = File(image.path);
-          }
-        });
+  
+  void _preventPasswordManager() {
+    if (kIsWeb) {
+      try {
+        // Call JavaScript function to aggressively prevent password manager
+        js.context.callMethod('preventPasswordManagerOnLogPage', []);
+      } catch (e) {
+        // Silently ignore if the function doesn't exist
       }
-    } catch (e) {
-      setState(() {
-        _error = 'Error taking photo: $e';
-      });
     }
   }
+
+
 
   Future<void> _showImageSourceDialog() async {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _pickImage();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Take Photo'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _takePhoto();
-                },
-              ),
-              if (!kIsWeb) ...[
-                ListTile(
-                  leading: const Icon(Icons.camera_front),
-                  title: const Text('Take Selfie'),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _takeSelfie();
-                  },
-                ),
-              ],
-            ],
-          ),
-        );
-      },
+    // Navigate to completely separate page for image picking to avoid password popup
+    final result = await Navigator.of(context).push<dynamic>(
+      MaterialPageRoute(
+        builder: (context) => const _ImagePickerPage(),
+        fullscreenDialog: true,
+      ),
     );
-  }
-
-  Future<void> _takeSelfie() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-        preferredCameraDevice: CameraDevice.front, // Frontkamera für Selfies
-      );
-      
-      if (image != null) {
-        setState(() {
-          if (kIsWeb) {
-            _selectedImageUrl = image.path;
-          } else {
-            _selectedImage = File(image.path);
-          }
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error taking selfie: $e';
-      });
+    
+    if (result != null) {
+      await _handleImageResult(result);
     }
   }
+  
+  Future<void> _handleImageResult(dynamic image) async {
+    if (kIsWeb) {
+      if (image is _WebFile) {
+        // For web: use custom file data
+        final url = image.path; // Already a data URL
+        setState(() {
+          _selectedImage = null;
+          _selectedImageUrl = url;
+        });
+      } else if (image is XFile) {
+        // Fallback for regular XFile
+        final bytes = await image.readAsBytes();
+        final url = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        setState(() {
+          _selectedImage = null;
+          _selectedImageUrl = url;
+        });
+      }
+    } else {
+      // For mobile: use File
+      if (image is XFile) {
+        setState(() {
+          _selectedImage = File(image.path);
+          _selectedImageUrl = null;
+        });
+      }
+    }
+  }
+
 
   Future<String?> _uploadImage() async {
     if (_selectedImage == null && _selectedImageUrl == null) return null;
@@ -607,11 +557,13 @@ class _LogActionPageState extends State<LogActionPage> {
       appBar: AppBar(
         title: Text(title),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      body: AutofillGroup(
+        // Explicitly disable autofill for the entire form to prevent password manager
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             if (selectedArea != null && selectedArea.isNotEmpty) ...[
               Container(
                 padding: const EdgeInsets.all(14),
@@ -681,6 +633,11 @@ class _LogActionPageState extends State<LogActionPage> {
                   children: [
                     TextField(
                       controller: _activityNameCtrl,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      autofillHints: const [],
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.next,
                       decoration: _buildInputDecoration(
                         hint: 'z. B. Laufen, Lesen, Meditation...',
                         icon: Icons.task_alt,
@@ -703,6 +660,11 @@ class _LogActionPageState extends State<LogActionPage> {
                   TextField(
                     controller: _durationCtrl,
                     keyboardType: TextInputType.number,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    autofillHints: const [],
+                    textInputAction: TextInputAction.done,
+                    inputFormatters: const [],
                     decoration: _buildInputDecoration(hint: 'z. B. 45', icon: Icons.timer_outlined, accentColor: accent),
                   ),
                 ],
@@ -714,42 +676,46 @@ class _LogActionPageState extends State<LogActionPage> {
               accentColor: accent,
               title: 'Notiz (optional)',
               leadingIcon: Icons.notes,
-              child: Column(
+              child: Stack(
                 children: [
-                  // Toolbar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    child: quill.QuillSimpleToolbar(
-                      controller: _quillCtrl,
-                      config: const quill.QuillSimpleToolbarConfig(
-                        multiRowsDisplay: false,
-                        showAlignmentButtons: false,
-                        showUnderLineButton: false,
-                        showStrikeThrough: false,
-                        showInlineCode: false,
-                        showCodeBlock: false,
-                        showSearchButton: false,
-                        showSubscript: false,
-                        showSuperscript: false,
-                        showQuote: false,
-                        showListCheck: false,
-                        showClipboardCut: false,
-                        showClipboardCopy: false,
-                        showClipboardPaste: false,
+                  Column(
+                    children: [
+                      // Toolbar
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        child: quill.QuillSimpleToolbar(
+                          controller: _quillCtrl,
+                          config: const quill.QuillSimpleToolbarConfig(
+                            multiRowsDisplay: false,
+                            showAlignmentButtons: false,
+                            showUnderLineButton: false,
+                            showStrikeThrough: false,
+                            showInlineCode: false,
+                            showCodeBlock: false,
+                            showSearchButton: false,
+                            showSubscript: false,
+                            showSuperscript: false,
+                            showQuote: false,
+                            showListCheck: false,
+                            showClipboardCut: false,
+                            showClipboardCopy: false,
+                            showClipboardPaste: false,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  // Editor area (WYSIWYG)
-                  SizedBox(
-                    height: 260,
-                    child: quill.QuillEditor.basic(
-                      controller: _quillCtrl,
-                      config: const quill.QuillEditorConfig(
-                        placeholder: 'Deine Gedanken…',
-                        padding: EdgeInsets.all(12),
+                      const Divider(height: 1),
+                      // Editor area (WYSIWYG)
+                      SizedBox(
+                        height: 260,
+                        child: quill.QuillEditor.basic(
+                          controller: _quillCtrl,
+                          config: const quill.QuillEditorConfig(
+                            placeholder: 'Deine Gedanken…',
+                            padding: EdgeInsets.all(12),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -795,7 +761,7 @@ class _LogActionPageState extends State<LogActionPage> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _pickImage,
+                      onPressed: _showImageSourceDialog,
                       icon: const Icon(Icons.edit),
                       label: const Text('Change Image'),
                       style: OutlinedButton.styleFrom(
@@ -862,7 +828,8 @@ class _LogActionPageState extends State<LogActionPage> {
                   )
                 : const Text('Log speichern'),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -956,5 +923,169 @@ class _MarkdownPreviewState extends State<_MarkdownPreview> {
         ),
       ),
     );
+  }
+}
+
+// Custom XFile-like class for web
+class _WebFile {
+  final String name;
+  final Uint8List bytes;
+  final String path;
+  
+  _WebFile({
+    required this.name,
+    required this.bytes,
+    required this.path,
+  });
+  
+  Future<Uint8List> readAsBytes() async => bytes;
+}
+
+// Separate page for image picking to avoid password manager popup
+class _ImagePickerPage extends StatelessWidget {
+  const _ImagePickerPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Add Image'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.add_a_photo,
+              size: 80,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Choose how to add your image',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _pickFromGallery(context),
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Choose from Gallery'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _takePhoto(context),
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Take Photo'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
+            ),
+            if (!kIsWeb) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _takeSelfie(context),
+                  icon: const Icon(Icons.camera_front),
+                  label: const Text('Take Selfie'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFromGallery(BuildContext context) async {
+    if (kIsWeb) {
+      final result = await web_file_picker.pickImageFile();
+      if (result != null && context.mounted) {
+        // Create a fake XFile-like object for web
+        final fakeFile = _WebFile(
+          name: result['name'],
+          bytes: _dataUrlToBytes(result['dataUrl']),
+          path: result['dataUrl'],
+        );
+        Navigator.of(context).pop(fakeFile);
+      } else if (context.mounted) {
+        Navigator.of(context).pop(); // User cancelled
+      }
+    } else {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
+      if (image != null && context.mounted) {
+        Navigator.of(context).pop(image);
+      }
+    }
+  }
+  
+  Uint8List _dataUrlToBytes(String dataUrl) {
+    final base64String = dataUrl.split(',')[1];
+    return base64Decode(base64String);
+  }
+
+  Future<void> _takePhoto(BuildContext context) async {
+    if (kIsWeb) {
+      // Camera not fully supported in web file picker, close dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 80,
+    );
+    if (image != null && context.mounted) {
+      Navigator.of(context).pop(image);
+    }
+  }
+
+  Future<void> _takeSelfie(BuildContext context) async {
+    if (kIsWeb) {
+      // Camera not fully supported in web file picker, close dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 80,
+    );
+    if (image != null && context.mounted) {
+      Navigator.of(context).pop(image);
+    }
   }
 }

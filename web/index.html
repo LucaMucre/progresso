@@ -19,6 +19,9 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="password-save" content="no">
+  <meta name="autocomplete" content="off">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -38,6 +41,238 @@
     window.addEventListener('contextmenu', function(e) {
       e.preventDefault();
     });
+    
+    // Prevent password manager popups
+    document.addEventListener('DOMContentLoaded', function() {
+      // Disable autocomplete on all input elements
+      const style = document.createElement('style');
+      style.textContent = `
+        input[type="text"], input[type="password"], input[type="email"], input[type="file"] {
+          autocomplete: off !important;
+        }
+        input:-webkit-autofill {
+          -webkit-box-shadow: 0 0 0 1000px white inset !important;
+        }
+        /* Disable password manager on contenteditable (QuillEditor) */
+        [contenteditable="true"] {
+          autocomplete: off !important;
+          autocorrect: off !important;
+          autocapitalize: off !important;
+          spellcheck: false !important;
+        }
+        .ql-editor {
+          autocomplete: off !important;
+          autocorrect: off !important;
+          autocapitalize: off !important;
+          spellcheck: false !important;
+        }
+      `;
+      document.head.appendChild(style);
+      
+      // Monitor for dynamically created inputs and contenteditable elements
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          mutation.addedNodes.forEach(function(node) {
+            if (node.nodeType === 1) { // Element node
+              // Handle input elements
+              const inputs = node.querySelectorAll ? node.querySelectorAll('input') : [];
+              inputs.forEach(function(input) {
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('data-form-type', 'other');
+                input.setAttribute('data-lpignore', 'true');
+                input.setAttribute('data-1p-ignore', 'true');
+              });
+              
+              // Handle contenteditable elements (QuillEditor)
+              const editables = node.querySelectorAll ? node.querySelectorAll('[contenteditable="true"], .ql-editor') : [];
+              editables.forEach(function(editable) {
+                editable.setAttribute('autocomplete', 'off');
+                editable.setAttribute('autocorrect', 'off');
+                editable.setAttribute('autocapitalize', 'off');
+                editable.setAttribute('spellcheck', 'false');
+                editable.setAttribute('data-form-type', 'other');
+                editable.setAttribute('data-lpignore', 'true');
+                editable.setAttribute('data-1p-ignore', 'true');
+                editable.setAttribute('data-bwignore', 'true');
+                editable.setAttribute('data-dashlane-ignore', 'true');
+                editable.setAttribute('role', 'textbox');
+                editable.setAttribute('inputmode', 'text');
+              });
+              
+              // Check if the node itself is an input or contenteditable
+              if (node.tagName === 'INPUT') {
+                node.setAttribute('autocomplete', 'off');
+                node.setAttribute('data-form-type', 'other');
+                node.setAttribute('data-lpignore', 'true');
+                node.setAttribute('data-1p-ignore', 'true');
+              }
+              
+              if (node.contentEditable === 'true' || node.classList && node.classList.contains('ql-editor')) {
+                node.setAttribute('autocomplete', 'off');
+                node.setAttribute('autocorrect', 'off');
+                node.setAttribute('autocapitalize', 'off');
+                node.setAttribute('spellcheck', 'false');
+                node.setAttribute('data-form-type', 'other');
+                node.setAttribute('data-lpignore', 'true');
+                node.setAttribute('data-1p-ignore', 'true');
+                node.setAttribute('data-bwignore', 'true');
+                node.setAttribute('data-dashlane-ignore', 'true');
+                node.setAttribute('role', 'textbox');
+                node.setAttribute('inputmode', 'text');
+              }
+            }
+          });
+        });
+      });
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
+      // Periodically check and fix contenteditable elements
+      setInterval(function() {
+        // Find all QuillEditor elements and mark them
+        document.querySelectorAll('[contenteditable="true"], .ql-editor, .ql-container').forEach(function(el) {
+          el.setAttribute('autocomplete', 'off');
+          el.setAttribute('data-form-type', 'other');
+          el.setAttribute('data-lpignore', 'true');
+          el.setAttribute('data-1p-ignore', 'true');
+          el.setAttribute('data-bwignore', 'true');
+          el.setAttribute('data-dashlane-ignore', 'true');
+          el.setAttribute('role', 'textbox');
+          el.setAttribute('aria-label', 'Notes editor');
+          el.setAttribute('data-purpose', 'notes');
+        });
+        
+        // Find all input elements and mark them
+        document.querySelectorAll('input').forEach(function(input) {
+          if (input.type !== 'hidden') {
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('data-form-type', 'other');
+            input.setAttribute('data-lpignore', 'true');
+            input.setAttribute('data-1p-ignore', 'true');
+          }
+        });
+      }, 500); // Check every 500ms
+      
+      // Remove decoy fields approach to avoid triggering password managers
+      
+      // Intercept form submissions to prevent any accidental password saves
+      document.addEventListener('submit', function(e) {
+        const form = e.target;
+        if (form && form.tagName === 'FORM') {
+          // Check if this is our decoy form
+          if (!form.hasAttribute('data-allow-submit')) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+        }
+      }, true);
+    });
+    
+    // Function to aggressively prevent password manager on log action page
+    window.preventPasswordManagerOnLogPage = function() {
+      // Find and mark all form-like elements
+      setTimeout(function() {
+        // Mark all contenteditable elements
+        document.querySelectorAll('[contenteditable], .ql-editor, .ql-container, .ql-toolbar').forEach(function(el) {
+          el.setAttribute('autocomplete', 'off');
+          el.setAttribute('data-form-type', 'other');
+          el.setAttribute('data-lpignore', 'true');
+          el.setAttribute('data-1p-ignore', 'true');
+          el.setAttribute('data-bwignore', 'true');
+          el.setAttribute('role', 'textbox');
+          el.setAttribute('aria-label', 'Text editor');
+        });
+        
+        // Mark all input fields
+        document.querySelectorAll('input, textarea').forEach(function(input) {
+          if (input.type !== 'hidden') {
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('data-form-type', 'other');
+            input.setAttribute('data-lpignore', 'true');
+            input.setAttribute('data-1p-ignore', 'true');
+          }
+        });
+        
+        // Find any form elements and mark them
+        document.querySelectorAll('form').forEach(function(form) {
+          form.setAttribute('autocomplete', 'off');
+          form.setAttribute('data-form-type', 'other');
+        });
+      }, 100);
+    };
+    
+    // Custom file picker to avoid password manager
+    window.customFilePicker = function() {
+      return new Promise((resolve) => {
+        let isResolved = false;
+        
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.style.display = 'none';
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('data-form-type', 'file-upload');
+        input.setAttribute('data-lpignore', 'true');
+        input.setAttribute('data-1p-ignore', 'true');
+        input.setAttribute('data-bwignore', 'true');
+        input.setAttribute('data-dashlane-ignore', 'true');
+        
+        let isCleanedUp = false;
+        const cleanup = () => {
+          if (!isCleanedUp && input.parentNode) {
+            input.parentNode.removeChild(input);
+            isCleanedUp = true;
+          }
+        };
+        
+        input.addEventListener('change', function(e) {
+          if (isResolved) return;
+          isResolved = true;
+          
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+              resolve({
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                dataUrl: event.target.result
+              });
+              cleanup();
+            };
+            reader.onerror = function() {
+              resolve(null);
+              cleanup();
+            };
+            reader.readAsDataURL(file);
+          } else {
+            resolve(null);
+            cleanup();
+          }
+        }, { once: true });
+        
+        // Append directly to body to avoid form semantics
+        document.body.appendChild(input);
+        
+        // Trigger file dialog
+        input.click();
+        
+        // Cleanup on timeout
+        setTimeout(() => {
+          if (!isResolved) {
+            isResolved = true;
+            resolve(null);
+            cleanup();
+            // no-op
+          }
+        }, 30000); // 30 second timeout
+      });
+    };
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

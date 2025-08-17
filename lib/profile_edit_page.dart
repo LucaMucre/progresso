@@ -5,6 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'services/avatar_sync_service.dart';
+import 'utils/web_file_picker_stub.dart'
+    if (dart.library.html) 'utils/web_file_picker_web.dart' as web_file_picker;
+import 'dart:convert';
 
 class ProfileEditPage extends StatefulWidget {
   const ProfileEditPage({Key? key}) : super(key: key);
@@ -77,24 +80,33 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   }
 
   Future<void> _pickAvatar() async {
-    final picker = ImagePicker();
-    final img = await picker.pickImage(source: ImageSource.gallery);
-    if (img != null) {
-      if (kIsWeb) {
-        // Für Web: Verwende die Bytes direkt
-        final bytes = await img.readAsBytes();
+    if (kIsWeb) {
+      // Use custom web file picker to avoid password manager popup
+      final result = await web_file_picker.pickImageFile();
+      if (result != null) {
+        // Convert data URL to bytes
+        final bytes = _dataUrlToBytes(result['dataUrl']);
         setState(() {
-          _avatarFile = null; // Kein File für Web
+          _avatarFile = null; // No File for Web
         });
-        // Speichere die Bytes für den Upload
+        // Upload the bytes
         _uploadAvatarBytes(bytes);
-      } else {
-        // Für Mobile: Verwende File
+      }
+    } else {
+      // For Mobile: Use standard ImagePicker
+      final picker = ImagePicker();
+      final img = await picker.pickImage(source: ImageSource.gallery);
+      if (img != null) {
         setState(() {
           _avatarFile = File(img.path);
         });
       }
     }
+  }
+
+  Uint8List _dataUrlToBytes(String dataUrl) {
+    final base64String = dataUrl.split(',')[1];
+    return base64Decode(base64String);
   }
 
   Future<void> _uploadAvatarBytes(Uint8List bytes) async {

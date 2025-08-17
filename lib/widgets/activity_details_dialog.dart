@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 // Avoid direct dart:html in non-web builds; use conditional helper instead
 import '../utils/web_bytes_stub.dart'
     if (dart.library.html) '../utils/web_bytes_web.dart' as web_bytes;
+import '../utils/web_file_picker_stub.dart'
+    if (dart.library.html) '../utils/web_file_picker_web.dart' as web_file_picker;
 import 'dart:convert';
 import '../services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
@@ -210,21 +213,30 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
 
   Future<void> _pickImage() async {
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 80,
-      );
-      
-      if (image != null) {
-        setState(() {
-          if (kIsWeb) {
-            _selectedImageUrl = image.path;
-          } else {
+      if (kIsWeb) {
+        // Use custom web file picker to avoid password manager popup
+        final result = await web_file_picker.pickImageFile();
+        if (result != null) {
+          setState(() {
+            _selectedImageUrl = result['dataUrl'];
+            _selectedImage = null;
+          });
+        }
+      } else {
+        // For Mobile: Use standard ImagePicker
+        final XFile? image = await _imagePicker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        );
+        
+        if (image != null) {
+          setState(() {
             _selectedImage = File(image.path);
-          }
-        });
+            _selectedImageUrl = null;
+          });
+        }
       }
     } catch (e) {
       setState(() {
@@ -232,6 +244,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       });
     }
   }
+
 
   Future<String?> _uploadImage() async {
     if (_selectedImage == null && _selectedImageUrl == null) return null;

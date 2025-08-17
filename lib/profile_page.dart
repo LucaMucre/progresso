@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'utils/web_file_picker_stub.dart'
+    if (dart.library.html) 'utils/web_file_picker_web.dart' as web_file_picker;
 import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
@@ -387,12 +390,90 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _pickAvatar() async {
-    final picker = ImagePicker();
-    final img = await picker.pickImage(source: ImageSource.gallery);
-    if (img != null) {
+    if (kIsWeb) {
+      // Use custom web file picker to avoid password manager popup
+      final result = await web_file_picker.pickImageFile();
+      if (result != null) {
+        // For web: create a temporary file-like object
+        final bytes = _dataUrlToBytes(result['dataUrl']);
+        // Set up for upload (profile_page handles avatar differently than profile_edit_page)
+        setState(() {
+          _avatarFile = null;
+        });
+        // Handle web upload directly
+        await _uploadWebAvatar(bytes);
+      }
+    } else {
+      // For Mobile: Use standard ImagePicker
+      final picker = ImagePicker();
+      final img = await picker.pickImage(source: ImageSource.gallery);
+      if (img != null) {
+        setState(() {
+          _avatarFile = File(img.path);
+        });
+      }
+    }
+  }
+
+  Uint8List _dataUrlToBytes(String dataUrl) {
+    final base64String = dataUrl.split(',')[1];
+    return base64Decode(base64String);
+  }
+
+  Future<void> _uploadWebAvatar(Uint8List bytes) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    
+    try {
+      final currentUser = _supabase.auth.currentUser!;
+      const ext = 'jpg'; // Standard for web
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final path = '${currentUser.id}/avatar_${timestamp}.$ext';
+      
+      await _supabase.storage
+          .from('avatars')
+          .uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
+      final avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
+      
+      // Update profile with new avatar URL
+      final profile = {
+        'id': currentUser.id,
+        'email': currentUser.email,
+        'name': _nameCtrl.text.trim(),
+        'bio': _bioCtrl.text.trim(),
+        'avatar_url': avatarUrl,
+      };
+      
+      await _supabase
+          .from('users')
+          .upsert(profile, onConflict: 'id');
+
+      // Sync avatar across all tables
+      await AvatarSyncService.syncAvatar(avatarUrl);
+      
+      // Update local state
       setState(() {
-        _avatarFile = File(img.path);
+        _avatarUrl = avatarUrl;
+        _cacheBust = DateTime.now().millisecondsSinceEpoch;
+        _loading = false;
       });
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Avatar gespeichert!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+    } catch (err) {
+      setState(() {
+        _error = err.toString();
+        _loading = false;
+      });
+      if (kDebugMode) debugPrint('Error uploading web avatar: $err');
     }
   }
 
