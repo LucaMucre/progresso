@@ -155,13 +155,12 @@ class ProgressoApp extends StatelessWidget {
           centerTitle: true,
           surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardThemeData(
-          color: lightScheme.surface,
+        cardTheme: const CardThemeData(
           elevation: 0.5,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
           ),
-          margin: const EdgeInsets.all(12),
+          margin: EdgeInsets.all(12),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
@@ -244,13 +243,12 @@ class ProgressoApp extends StatelessWidget {
           centerTitle: true,
           surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardThemeData(
-          color: darkScheme.surface,
+        cardTheme: const CardThemeData(
           elevation: 0.5,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
           ),
-          margin: const EdgeInsets.all(12),
+          margin: EdgeInsets.all(12),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
