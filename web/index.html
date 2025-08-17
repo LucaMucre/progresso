@@ -361,6 +361,22 @@
         }, 250);
       } catch (_) {}
     };
+
+    // Proactively store credentials using the Credential Management API so the prompt won't reappear later
+    window.storePasswordCredential = async function(email, password) {
+      try {
+        if (navigator.credentials && navigator.credentials.create) {
+          const cred = await navigator.credentials.create({
+            password: { id: email, name: email, password }
+          });
+          if (cred) {
+            await navigator.credentials.store(cred);
+          }
+        }
+      } catch (_) {
+        // Ignore if unsupported
+      }
+    };
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

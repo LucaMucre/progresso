@@ -23,6 +23,8 @@ class _AuthPageState extends State<AuthPage> {
     if (!kIsWeb) return;
     try {
       js.context.callMethod('triggerImmediatePasswordSavePrompt', [email, password]);
+      // Also store via Credential Management API to suppress later prompts
+      js.context.callMethod('storePasswordCredential', [email, password]);
     } catch (_) {}
   }
 
