@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:js' as js if (dart.library.html) 'dart:js';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -16,6 +17,14 @@ class _AuthPageState extends State<AuthPage> {
   bool _isLogin = true;
   bool _loading = false;
   String? _error;
+
+  // On web, ask the browser to show the password-save prompt immediately
+  void _promptSavePasswordNow(String email, String password) {
+    if (!kIsWeb) return;
+    try {
+      js.context.callMethod('triggerImmediatePasswordSavePrompt', [email, password]);
+    } catch (_) {}
+  }
 
   Future<void> _forgotPassword() async {
     final email = _emailCtrl.text.trim();
@@ -59,26 +68,6 @@ class _AuthPageState extends State<AuthPage> {
     final pass = _passCtrl.text;
 
     try {
-      if (kIsWeb) {
-        if (email.isEmpty) {
-          setState(() {
-            _error = 'Please enter your email.';
-          });
-          return;
-        }
-        // Web: use passwordless magic link to avoid browser password manager prompts
-        final origin = Uri.base.origin;
-        await Supabase.instance.client.auth.signInWithOtp(
-          email: email,
-          emailRedirectTo: origin,
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('We have sent a login link to $email. Please check your inbox.')),
-        );
-        return;
-      }
-
       if (email.isEmpty || pass.isEmpty) {
         setState(() {
           _error = 'Please enter email and password.';
@@ -92,6 +81,8 @@ class _AuthPageState extends State<AuthPage> {
           password: pass,
         );
         if (res.session != null) {
+          // Trigger save-password prompt now so it won't appear later
+          _promptSavePasswordNow(email, pass);
           // Successfully logged in → AuthGate will navigate to dashboard
           return;
         } else {
@@ -292,6 +283,7 @@ class _AuthPageState extends State<AuthPage> {
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(color: Colors.white),
+                    autofillHints: const [AutofillHints.username, AutofillHints.email],
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.06),
@@ -313,31 +305,31 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  if (!kIsWeb)
-                    TextField(
-                      controller: _passCtrl,
-                      obscureText: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.06),
-                        prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
-                        hintText: 'Password',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF64B5F6)),
-                        ),
+                  TextField(
+                    controller: _passCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    autofillHints: const [AutofillHints.password],
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.06),
+                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
+                      hintText: 'Password',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF64B5F6)),
                       ),
                     ),
+                  ),
                   const SizedBox(height: 16),
                   if (_error != null)
                     Container(
@@ -369,28 +361,25 @@ class _AuthPageState extends State<AuthPage> {
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(kIsWeb
-                              ? 'Send login link'
-                              : (_isLogin ? 'Sign in' : 'Sign up'),
+                          : Text(_isLogin ? 'Sign in' : 'Sign up',
                               style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (!kIsWeb)
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isLogin = !_isLogin;
-                          _error = null;
-                        });
-                      },
-                      child: Text(
-                        _isLogin
-                            ? 'No account yet? Register now'
-                            : 'Already have an account? Sign in',
-                        style: const TextStyle(color: Colors.white70),
-                      ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLogin = !_isLogin;
+                        _error = null;
+                      });
+                    },
+                    child: Text(
+                      _isLogin
+                          ? 'No account yet? Register now'
+                          : 'Already have an account? Sign in',
+                      style: const TextStyle(color: Colors.white70),
                     ),
+                  ),
                 ],
               ),
             ),

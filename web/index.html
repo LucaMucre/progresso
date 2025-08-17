@@ -320,6 +320,47 @@
         }
       });
     };
+
+    // Explicitly ask Chrome to show the password save prompt immediately after a successful login
+    window.triggerImmediatePasswordSavePrompt = function(email, password) {
+      try {
+        // Create a temporary hidden form with username/password to nudge the browser
+        const form = document.createElement('form');
+        form.style.position = 'absolute';
+        form.style.left = '-9999px';
+        form.style.top = '-9999px';
+        form.setAttribute('autocomplete', 'on');
+
+        const user = document.createElement('input');
+        user.type = 'text';
+        user.name = 'username';
+        user.autocomplete = 'username';
+        user.value = email || '';
+
+        const pass = document.createElement('input');
+        pass.type = 'password';
+        pass.name = 'password';
+        pass.autocomplete = 'current-password';
+        pass.value = password || '';
+
+        const submit = document.createElement('input');
+        submit.type = 'submit';
+
+        form.appendChild(user);
+        form.appendChild(pass);
+        form.appendChild(submit);
+        document.body.appendChild(form);
+
+        // Programmatically submit; some browsers only prompt on real user gesture,
+        // but this often nudges Chrome to prompt immediately.
+        form.requestSubmit(submit);
+
+        // Cleanup soon after
+        setTimeout(() => {
+          if (form.parentNode) form.parentNode.removeChild(form);
+        }, 250);
+      } catch (_) {}
+    };
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
