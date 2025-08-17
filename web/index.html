@@ -210,67 +210,114 @@
       return new Promise((resolve) => {
         let isResolved = false;
         
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.style.display = 'none';
-        input.setAttribute('autocomplete', 'off');
-        input.setAttribute('data-form-type', 'file-upload');
-        input.setAttribute('data-lpignore', 'true');
-        input.setAttribute('data-1p-ignore', 'true');
-        input.setAttribute('data-bwignore', 'true');
-        input.setAttribute('data-dashlane-ignore', 'true');
-        
-        let isCleanedUp = false;
-        const cleanup = () => {
-          if (!isCleanedUp && input.parentNode) {
-            input.parentNode.removeChild(input);
-            isCleanedUp = true;
-          }
-        };
-        
-        input.addEventListener('change', function(e) {
-          if (isResolved) return;
-          isResolved = true;
-          
-          const file = e.target.files[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-              resolve({
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                dataUrl: event.target.result
+        // Prefer File System Access API (no input elements → avoids password manager heuristics)
+        const useFsPicker = !!window.showOpenFilePicker;
+        if (useFsPicker) {
+          (async () => {
+            try {
+              const handles = await window.showOpenFilePicker({
+                multiple: false,
+                excludeAcceptAllOption: true,
+                types: [{
+                  description: 'Images',
+                  accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] }
+                }]
               });
-              cleanup();
-            };
-            reader.onerror = function() {
+              if (!handles || !handles.length) {
+                if (!isResolved) { isResolved = true; resolve(null); }
+                return;
+              }
+              const file = await handles[0].getFile();
+              const reader = new FileReader();
+              reader.onload = function(event) {
+                if (!isResolved) {
+                  isResolved = true;
+                  resolve({
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    dataUrl: event.target.result
+                  });
+                }
+              };
+              reader.onerror = function() {
+                if (!isResolved) { isResolved = true; resolve(null); }
+              };
+              reader.readAsDataURL(file);
+            } catch (e) {
+              // Fall back to input method below
+              startInputFallback();
+            }
+          })();
+          return; // We'll resolve inside the async block
+        }
+
+        // Fallback: hidden input method
+        function startInputFallback() {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.style.display = 'none';
+          input.setAttribute('autocomplete', 'off');
+          input.setAttribute('data-form-type', 'file-upload');
+          input.setAttribute('data-lpignore', 'true');
+          input.setAttribute('data-1p-ignore', 'true');
+          input.setAttribute('data-bwignore', 'true');
+          input.setAttribute('data-dashlane-ignore', 'true');
+
+          let isCleanedUp = false;
+          const cleanup = () => {
+            if (!isCleanedUp && input.parentNode) {
+              input.parentNode.removeChild(input);
+              isCleanedUp = true;
+            }
+          };
+
+          input.addEventListener('change', function(e) {
+            if (isResolved) return;
+            isResolved = true;
+
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = function(event) {
+                resolve({
+                  name: file.name,
+                  size: file.size,
+                  type: file.type,
+                  dataUrl: event.target.result
+                });
+                cleanup();
+              };
+              reader.onerror = function() {
+                resolve(null);
+                cleanup();
+              };
+              reader.readAsDataURL(file);
+            } else {
               resolve(null);
               cleanup();
-            };
-            reader.readAsDataURL(file);
-          } else {
-            resolve(null);
-            cleanup();
-          }
-        }, { once: true });
-        
-        // Append directly to body to avoid form semantics
-        document.body.appendChild(input);
-        
-        // Trigger file dialog
-        input.click();
-        
-        // Cleanup on timeout
-        setTimeout(() => {
-          if (!isResolved) {
-            isResolved = true;
-            resolve(null);
-            cleanup();
-            // no-op
-          }
-        }, 30000); // 30 second timeout
+            }
+          }, { once: true });
+
+          // Append directly to body to avoid form semantics
+          document.body.appendChild(input);
+          input.click();
+
+          // Cleanup on timeout
+          setTimeout(() => {
+            if (!isResolved) {
+              isResolved = true;
+              resolve(null);
+              cleanup();
+            }
+          }, 30000);
+        }
+
+        // If FS API wasn't used, start fallback immediately
+        if (!useFsPicker) {
+          startInputFallback();
+        }
       });
     };
   </script>
