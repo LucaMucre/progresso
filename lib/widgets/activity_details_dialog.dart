@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 // Avoid direct dart:html in non-web builds; use conditional helper instead
 import '../utils/web_bytes_stub.dart'
     if (dart.library.html) '../utils/web_bytes_web.dart' as web_bytes;
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 
@@ -18,10 +16,10 @@ class ActivityDetailsDialog extends StatefulWidget {
   final VoidCallback? onUpdate;
 
   const ActivityDetailsDialog({
-    Key? key,
+    super.key,
     required this.log,
     this.onUpdate,
-  }) : super(key: key);
+  });
 
   @override
   State<ActivityDetailsDialog> createState() => _ActivityDetailsDialogState();

@@ -116,10 +116,10 @@ class _ChatPageState extends State<ChatPage> {
     final t = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(t?.chatTitle ?? 'Chat'),
+        title: Text(t.chatTitle),
         actions: [
           IconButton(
-            tooltip: t?.chatReindexTooltip ?? 'Index neu aufbauen',
+            tooltip: t.chatReindexTooltip,
             icon: const Icon(Icons.refresh),
             onPressed: _sending ? null : _reindex,
           ),
@@ -186,7 +186,7 @@ class _ChatPageState extends State<ChatPage> {
                   child: TextField(
                     controller: _inputCtrl,
                     decoration: InputDecoration(
-                      hintText: t?.chatInputHint ?? 'Frage zu deinen Daten…',
+                      hintText: t.chatInputHint,
                       border: const OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -197,7 +197,7 @@ class _ChatPageState extends State<ChatPage> {
                 ElevatedButton.icon(
                   onPressed: _sending ? null : _send,
                   icon: const Icon(Icons.send, size: 16),
-                  label: Text(t?.chatSend ?? 'Senden'),
+                  label: Text(t.chatSend),
                 ),
               ],
             ),

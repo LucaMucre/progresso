@@ -1,10 +1,7 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'level_up_service.dart';
 import 'achievement_service.dart';
-import 'life_areas_service.dart';
 import '../repository/logs_repository.dart';
 import '../repository/templates_repository.dart';
 import '../repository/stats_repository.dart';

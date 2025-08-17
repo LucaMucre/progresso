@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'services/avatar_sync_service.dart';
 
 class DebugAvatarPage extends StatefulWidget {
-  const DebugAvatarPage({Key? key}) : super(key: key);
+  const DebugAvatarPage({super.key});
 
   @override
   State<DebugAvatarPage> createState() => _DebugAvatarPageState();

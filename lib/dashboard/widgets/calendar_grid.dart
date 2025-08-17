@@ -53,7 +53,7 @@ class _CalendarGridState extends State<CalendarGrid> {
     }
     final maxEntriesPerCell = isCompact ? 2 : 3; // baseline, further refined per-cell below
 
-    final first = DateTime(widget.month.year, widget.month.month, 1);
+    final first = DateTime(widget.month.year, widget.month.month);
     final firstWeekday = first.weekday == 7 ? 0 : first.weekday; // Mon=1..Sun=7 => 0..6 with Sun at 0
     final daysInMonth = DateTime(widget.month.year, widget.month.month + 1, 0).day;
     final cells = <Widget>[];
@@ -125,7 +125,6 @@ class _CalendarGridState extends State<CalendarGrid> {
                 padding: EdgeInsets.all(pad),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.max,
                   children: [
                     Text(
                       '$d',

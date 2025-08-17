@@ -6,13 +6,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/life_areas_service.dart';
 import '../services/character_service.dart';
 import '../services/avatar_sync_service.dart';
-import '../profile_page.dart';
 import '../navigation.dart';
 import 'dart:convert'; // Added for jsonDecode
 
 // Separate Character Widget to prevent rebuilding on hover
 class CharacterWidget extends StatefulWidget {
-  const CharacterWidget({Key? key}) : super(key: key);
+  const CharacterWidget({super.key});
 
   @override
   State<CharacterWidget> createState() => _CharacterWidgetState();
@@ -255,12 +254,12 @@ class BubblesGrid extends StatefulWidget {
   final Function(LifeArea)? onDelete;
 
   const BubblesGrid({
-    Key? key,
+    super.key,
     required this.areas,
     required this.onBubbleTap,
     this.onToggleVisibility,
     this.onDelete,
-  }) : super(key: key);
+  });
 
   @override
   State<BubblesGrid> createState() => _BubblesGridState();
@@ -421,7 +420,6 @@ class _BubblesGridState extends State<BubblesGrid> {
       for (final area in ordered) {
         final double size = sizeById[area.id]!;
         final rnd = Random(area.id.hashCode);
-        Offset? pos;
         for (int attempt = 0; attempt < 240; attempt++) {
           // Uniform over rectangle with safe margins
           final x = padding + size / 2 + rnd.nextDouble() * (canvasWidth - size - padding * 2);
@@ -431,7 +429,7 @@ class _BubblesGridState extends State<BubblesGrid> {
           for (final placedRect in placed) {
             if (rect.overlaps(placedRect.inflate(6))) { overlaps = true; break; }
           }
-          if (!overlaps) { pos = Offset(x, y); placed.add(rect); _layoutByAreaId[area.id] = rect; break; }
+          if (!overlaps) { placed.add(rect); _layoutByAreaId[area.id] = rect; break; }
         }
         _layoutByAreaId.putIfAbsent(area.id, () => Rect.fromLTWH((canvasWidth - size) / 2, (canvasHeight - size) / 2, size, size));
       }

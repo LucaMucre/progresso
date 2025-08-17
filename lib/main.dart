@@ -125,7 +125,7 @@ Future<void> main() async {
 }
 
 class ProgressoApp extends StatelessWidget {
-  const ProgressoApp({Key? key}) : super(key: key);
+  const ProgressoApp({super.key});
 
   @override
   Widget build(BuildContext context) {

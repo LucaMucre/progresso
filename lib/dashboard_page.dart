@@ -10,19 +10,14 @@ import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
 import 'services/db_service.dart';
 import 'services/life_areas_service.dart';
-import 'services/avatar_sync_service.dart';
 import 'widgets/bubble_widget.dart';
-import 'widgets/profile_header_widget.dart';
 import 'dashboard/widgets/dashboard_header.dart';
 import 'dashboard/widgets/gallery_filters.dart';
-import 'chat_page.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
 import 'models/action_models.dart' as models;
 import 'services/achievement_service.dart';
-import 'settings_page.dart';
 import 'navigation.dart';
-import 'dashboard/widgets/calendar_view.dart';
 import 'dashboard/widgets/calendar_header.dart';
 import 'dashboard/widgets/calendar_grid.dart';
 import 'widgets/skeleton.dart';
@@ -30,7 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_state.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({Key? key}) : super(key: key);
+  const DashboardPage({super.key});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -87,8 +82,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       });
       try {
         // Riverpod Provider invalidieren, damit Streak neu berechnet wird
-        final container = ProviderScope.containerOf(context, listen: false);
-        container.refresh(streakNotifierProvider);
+        if (mounted) {
+          final container = ProviderScope.containerOf(context, listen: false);
+          container.refresh(streakNotifierProvider);
+        }
       } catch (_) {}
     });
   }
@@ -265,7 +262,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       
     } on PostgrestException catch (e) {
       // Fallback when activity_name column doesn't exist
-      if ((e.message ?? '').contains('activity_name')) {
+      if (e.message.contains('activity_name')) {
         final res = await client
             .from('action_logs')
             .select('id, occurred_at, duration_min, notes, earned_xp, template_id, image_url')
@@ -536,7 +533,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           final int total = (r['total'] as num?)?.toInt() ?? 0;
                           final int mins = (r['sum_duration'] as num?)?.toInt() ?? 0;
                           final int xp = (r['sum_xp'] as num?)?.toInt() ?? 0;
-                          final color = _colorForAreaKey(area);
+                          final color = _getAreaColor(area, areaTags);
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
@@ -643,7 +640,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                               }
                             }
                           }
-                          return _colorForAreaKey(areaKey.isNotEmpty ? areaKey : 'unknown');
+                          return _getAreaColor(areaKey.isNotEmpty ? areaKey : 'unknown', areaTags);
                         })();
                         return ListTile(
                           dense: true,
@@ -704,9 +701,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
     // Build range for the month [start, nextMonthStart) with timezone buffer
     // Expand query range to cover potential timezone differences
-    final startOfMonthLocal = DateTime(month.year, month.month, 1);
+    final startOfMonthLocal = DateTime(month.year, month.month);
     final startOfMonth = startOfMonthLocal.subtract(const Duration(days: 1)).toUtc();
-    final startOfNextMonthLocal = DateTime(month.year, month.month + 1, 1);
+    final startOfNextMonthLocal = DateTime(month.year, month.month + 1);
     final startOfNextMonth = startOfNextMonthLocal.add(const Duration(days: 1)).toUtc();
 
     // Fetch templates once to resolve template_id to names
@@ -731,7 +728,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           .order('occurred_at') as List;
     } on PostgrestException catch (e) {
       // Fallback for schemas without activity_name
-      if ((e.message ?? '').contains('activity_name')) {
+      if (e.message.contains('activity_name')) {
         logsRes = await client
             .from('action_logs')
             .select('occurred_at, template_id, notes, duration_min')
@@ -786,9 +783,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             }
             final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
             final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
-            if (areaName is String || category is String) {
+            if (areaName.isNotEmpty || category.isNotEmpty) {
               matched = _matchAreaTag(areaTags, areaName, category);
-              if (matched != null) tagColor = matched!.color;
+              if (matched != null) tagColor = matched.color;
             }
           }
         } catch (_) {}
@@ -796,18 +793,24 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
       // Apply filter: skip if a filter is set and this log doesn't match
       if (areaFilterName != null) {
-        if (matched == null || matched!.name.toLowerCase() != areaFilterName.toLowerCase()) {
+        if (matched == null || matched.name.toLowerCase() != areaFilterName.toLowerCase()) {
           continue;
         }
       }
 
       String? areaKey = matched != null
-          ? '${matched!.name.toLowerCase()}|${matched!.category.toLowerCase()}'
+          ? matched.name.toLowerCase()  // Use just the name, not name|category
           : null;
       // Normalize nutrition to health in areaKey
-      if (areaKey != null && areaKey.startsWith('nutrition|')) {
-        areaKey = areaKey.replaceFirst('nutrition|', 'health|');
+      if (areaKey == 'nutrition') {
+        areaKey = 'health';
       }
+      
+      // Debug for day 16
+      if (dayKey.day == 16 && kDebugMode) {
+        debugPrint('Entry: $title, areaKey: $areaKey, color: ${tagColor != null ? '#${tagColor!.value.toRadixString(16).padLeft(8, '0').substring(2)}' : 'null'}, duration: $durationMin');
+      }
+      
       dayToTitles
           .putIfAbsent(dayKey, () => <_DayEntry>[])
           .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey, durationMin: durationMin));
@@ -873,8 +876,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           const SizedBox(height: 16),
           
           // Table with all activities
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _loadAllActivities(),
+          FutureBuilder<List<List>>(
+            future: Future.wait([_loadAllActivities(), _lifeAreasFuture ?? _loadLifeAreas()]),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -894,7 +897,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 );
               }
               
-              final activities = snapshot.data ?? [];
+              final results = snapshot.data;
+              if (results == null || results.length < 2) return Container();
+              
+              final activities = results[0] as List<Map<String, dynamic>>;
+              final lifeAreas = results[1] as List<LifeArea>;
               
               if (activities.isEmpty) {
                 return Container(
@@ -928,7 +935,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 );
               }
               
-              return _buildActivitiesTable(activities);
+              return _buildActivitiesTable(activities, lifeAreas);
             },
           ),
         ],
@@ -942,18 +949,32 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       final user = client.auth.currentUser;
       if (user == null) return <Map<String, dynamic>>[];
 
-      // Simple query without joins for now to avoid compilation issues
-      final res = await client
-          .from('action_logs')
-          .select('id, activity_name, occurred_at, duration_min, notes, image_url, earned_xp, template_id')
-          .eq('user_id', user.id)
-          .order('occurred_at', ascending: false)
-          .limit(500);
+      List<dynamic> res;
+      try {
+        // Try with activity_name column first
+        res = await client
+            .from('action_logs')
+            .select('id, activity_name, occurred_at, duration_min, notes, image_url, earned_xp, template_id')
+            .eq('user_id', user.id)
+            .order('occurred_at', ascending: false)
+            .limit(500) as List;
+      } catch (e) {
+        if (kDebugMode) debugPrint('Falling back to query without activity_name: $e');
+        // Fallback without activity_name column if it doesn't exist
+        res = await client
+            .from('action_logs')
+            .select('id, occurred_at, duration_min, notes, image_url, earned_xp, template_id')
+            .eq('user_id', user.id)
+            .order('occurred_at', ascending: false)
+            .limit(500) as List;
+      }
 
       final List<Map<String, dynamic>> result = [];
-      for (final item in res as List) {
+      for (final item in res) {
         result.add(item as Map<String, dynamic>);
       }
+      
+      if (kDebugMode) debugPrint('Loaded ${result.length} activities for table view');
       return result;
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading all activities: $e');
@@ -961,7 +982,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     }
   }
 
-  Widget _buildActivitiesTable(List<Map<String, dynamic>> activities) {
+  Widget _buildActivitiesTable(List<Map<String, dynamic>> activities, List<LifeArea> lifeAreas) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1038,14 +1059,69 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 final activity = activities[index];
                 final isEven = index % 2 == 0;
                 
-                final activityName = activity['activity_name'] as String? ?? 'Unknown';
+                // Extract activity name from activity_name field or notes
+                String activityName = activity['activity_name'] as String? ?? '';
+                if (activityName.isEmpty) {
+                  // Try to extract title from notes JSON
+                  final notes = activity['notes'] as String?;
+                  if (notes != null && notes.trim().isNotEmpty) {
+                    try {
+                      final obj = jsonDecode(notes);
+                      if (obj is Map<String, dynamic>) {
+                        final title = obj['title'] as String?;
+                        if (title != null && title.trim().isNotEmpty) {
+                          activityName = title.trim();
+                        }
+                      }
+                    } catch (_) {
+                      // If JSON parsing fails, use first line of notes
+                      activityName = notes.split('\n').first.trim();
+                    }
+                  }
+                }
+                if (activityName.isEmpty) activityName = 'Activity';
                 final imageUrl = activity['image_url'] as String?;
                 final occurredAt = DateTime.parse(activity['occurred_at'] as String);
                 final durationMin = activity['duration_min'] as int?;
                 
-                // For now, show simplified info without life area details
-                const areaName = 'Activity';
-                const areaColor = '#6366f1';
+                // Extract life area information using actual life areas
+                String areaName = 'Activity';
+                String areaColor = '#6366f1';
+                
+                // Extract life area information from notes
+                final notes = activity['notes'] as String?;
+                String? extractedArea;
+                String? extractedCategory;
+                
+                if (notes != null && notes.trim().isNotEmpty) {
+                  try {
+                    final obj = jsonDecode(notes);
+                    if (obj is Map<String, dynamic>) {
+                      extractedArea = obj['area'] as String?;
+                      extractedCategory = obj['category'] as String?;
+                    }
+                  } catch (_) {
+                    // If JSON parsing fails, keep default values
+                  }
+                }
+                
+                // Convert LifeAreas to AreaTags for matching
+                final areaTags = lifeAreas.map((la) => _AreaTag(
+                  name: la.name,
+                  category: la.category,
+                  color: _parseHexColor(la.color),
+                )).toList();
+                
+                // Try to match with actual life areas
+                final matchedArea = _matchAreaTag(areaTags, extractedArea, extractedCategory);
+                if (matchedArea != null) {
+                  areaName = matchedArea.name;
+                  areaColor = '#${matchedArea.color.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+                } else if (extractedArea != null && extractedArea.trim().isNotEmpty) {
+                  areaName = extractedArea.trim();
+                } else if (extractedCategory != null && extractedCategory.trim().isNotEmpty) {
+                  areaName = extractedCategory.trim();
+                }
                 
                 return Container(
                   padding: const EdgeInsets.all(16),
@@ -1572,16 +1648,22 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           // Prefer area-specific color when available
                           switch (area) {
                             case 'spirituality':
-                              color = Colors.grey; // requested grey for Spiritualität
+                              color = const Color(0xFF6B7280); // Gray - match actual life area color
                               break;
                             case 'finance':
-                              color = Colors.amber;
+                              color = const Color(0xFFF59E0B); // Yellow/Amber
                               break;
                             case 'career':
-                              color = Colors.brown;
+                              color = const Color(0xFF92400E); // Brown - match actual life area color
                               break;
                             case 'learning':
-                              color = Colors.blueGrey;
+                              color = const Color(0xFF3B82F6); // Light Blue
+                              break;
+                            case 'health':
+                              color = const Color(0xFF22C55E); // Green
+                              break;
+                            case 'fitness':
+                              color = const Color(0xFFF97316); // Orange
                               break;
                           }
 
@@ -1589,28 +1671,31 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           if (color == null) {
                             switch (cat) {
                               case 'health':
-                                color = Colors.green;
+                                color = const Color(0xFF22C55E); // Green
                                 break;
                               case 'work':
-                                color = Colors.brown;
+                                color = const Color(0xFF92400E); // Brown - match career color
                                 break;
                               case 'finance':
-                                color = Colors.amber;
+                                color = const Color(0xFFF59E0B); // Yellow/Amber - same as area finance
                                 break;
                               case 'social':
-                                color = Colors.pink;
+                                color = const Color(0xFFEC4899); // Pink
                                 break;
                               case 'inner':
-                                color = Colors.grey; // treat "Inner" as neutral/grey
+                                color = const Color(0xFF6B7280); // Gray - match spirituality color
                                 break;
                               case 'development':
-                                color = Colors.blueGrey;
+                                color = const Color(0xFF3B82F6); // Light Blue
                                 break;
                               case 'creativity':
-                                color = Colors.purple;
+                                color = const Color(0xFFF97316); // Orange
+                                break;
+                              case 'fitness':
+                                color = const Color(0xFFF97316); // Orange
                                 break;
                               default:
-                                color = Colors.grey; // neutral default
+                                color = const Color(0xFF9CA3AF); // Neutral gray
                             }
                           }
                         }
@@ -1688,32 +1773,56 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   }
 
   Color _colorForAreaKey(String area) {
+    // Use improved color mapping that matches typical life area colors
     switch (area.toLowerCase()) {
       case 'spirituality':
       case 'inner':
-        return Colors.grey;
+        return const Color(0xFF6B7280); // Gray - match actual life area
       case 'finance':
-        return Colors.amber;
+        return const Color(0xFFF59E0B); // Gold/Amber
       case 'career':
       case 'work':
-        return Colors.brown;
+        return const Color(0xFF92400E); // Brown - match actual life area
       case 'learning':
       case 'development':
-        return Colors.blueGrey;
+        return const Color(0xFF3B82F6); // Light Blue / hellblau
       case 'relationships':
       case 'social':
-        return Colors.pink;
+        return const Color(0xFFEC4899); // Pink
       case 'health':
       case 'nutrition':
-        return Colors.green;
+        return const Color(0xFF22C55E); // Green
+      case 'fitness':
       case 'vitality':
-        return Colors.orange;
+        return const Color(0xFFF97316); // Orange
       case 'creativity':
       case 'art':
-        return Colors.purple;
+        return const Color(0xFFF97316); // Orange for creativity
       default:
-        return Colors.grey;
+        return const Color(0xFF9CA3AF); // Neutral gray
     }
+  }
+
+  // Helper method to get color for an area, trying to use actual life area colors when available
+  Color _getAreaColor(String area, List<_AreaTag>? areaTags) {
+    if (areaTags != null) {
+      // Try to find exact match by area name
+      final exactMatch = areaTags.where((tag) => 
+        tag.name.toLowerCase() == area.toLowerCase()).firstOrNull;
+      if (exactMatch != null) {
+        return exactMatch.color;
+      }
+      
+      // Try to find match by category
+      final categoryMatch = areaTags.where((tag) => 
+        tag.category.toLowerCase() == area.toLowerCase()).firstOrNull;
+      if (categoryMatch != null) {
+        return categoryMatch.color;
+      }
+    }
+    
+    // Fallback to improved hardcoded colors
+    return _colorForAreaKey(area);
   }
 
   void _onBubbleTap(BuildContext context, LifeArea area) {
@@ -1988,6 +2097,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         color: selectedColor,
                         icon: selectedIcon,
                       );
+                      if (!mounted) return;
                       Navigator.of(context).pop();
                       // Refresh cached data immediately
                       setState(() {
@@ -2001,6 +2111,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         const SnackBar(content: Text('Life area created')),
                       );
                     } catch (e) {
+                      if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Error creating area: $e')),
                       );
@@ -3449,6 +3560,58 @@ class _CalendarDayCell extends StatelessWidget {
     // Dominante Farbe per Lebensbereich bestimmen, mit Tie-Breaker nach Monats-Häufigkeit
     Color dominantColor() {
       if (!hasEntries) return colorScheme.outline.withValues(alpha: 0.6);
+      
+      // Primary approach: Use colors directly if areaKey matching fails
+      final Map<int, int> colorToCount = {};
+      final Map<int, int> colorToMinutes = {};
+      
+      for (final e in entries) {
+        if (e.color != null) {
+          final colorValue = e.color!.value;
+          colorToCount[colorValue] = (colorToCount[colorValue] ?? 0) + 1;
+          colorToMinutes[colorValue] = (colorToMinutes[colorValue] ?? 0) + (e.durationMin ?? 0);
+        }
+      }
+      
+      if (colorToCount.isNotEmpty) {
+        // Find color with most activities
+        int maxCount = 0;
+        for (final count in colorToCount.values) {
+          if (count > maxCount) maxCount = count;
+        }
+        
+        // Get all colors with max count
+        final List<int> candidates = [];
+        colorToCount.forEach((colorValue, count) {
+          if (count == maxCount) candidates.add(colorValue);
+        });
+        
+        if (candidates.length == 1) {
+          return Color(candidates.first);
+        }
+        
+        // Tie-breaker: use color with most minutes
+        int? chosenColor;
+        int chosenMinutes = -1;
+        for (final colorValue in candidates) {
+          final minutes = colorToMinutes[colorValue] ?? 0;
+          if (minutes > chosenMinutes) {
+            chosenColor = colorValue;
+            chosenMinutes = minutes;
+          }
+        }
+        
+        if (day == 16 && kDebugMode) {
+          debugPrint('=== Day $day Color-Based Debug ===');
+          debugPrint('Color counts: ${colorToCount.map((k, v) => MapEntry('#${k.toRadixString(16).padLeft(8, '0').substring(2)}', v))}');
+          debugPrint('Color minutes: ${colorToMinutes.map((k, v) => MapEntry('#${k.toRadixString(16).padLeft(8, '0').substring(2)}', v))}');
+          debugPrint('Chosen color: #${chosenColor?.toRadixString(16).padLeft(8, '0').substring(2)}');
+        }
+        
+        return Color(chosenColor!);
+      }
+      
+      // Fallback to area-based logic
       final Map<String, int> areaToCount = {};
       final Map<String, int> areaToMinutes = {};
       final Map<String, Color> areaToColor = {};
@@ -3458,6 +3621,18 @@ class _CalendarDayCell extends StatelessWidget {
         areaToCount[key] = (areaToCount[key] ?? 0) + 1;
         areaToMinutes[key] = (areaToMinutes[key] ?? 0) + (e.durationMin ?? 0);
         if (e.color != null) areaToColor[key] = e.color!;
+      }
+      
+      // Debug output for day 16
+      if (day == 16 && kDebugMode) {
+        debugPrint('=== Day $day Debug ===');
+        debugPrint('Total entries: ${entries.length}');
+        for (final e in entries) {
+          debugPrint('  Entry: ${e.title}, areaKey: ${e.areaKey}, duration: ${e.durationMin}');
+        }
+        debugPrint('Area counts: $areaToCount');
+        debugPrint('Area minutes: $areaToMinutes');
+        debugPrint('Area colors: ${areaToColor.map((k, v) => MapEntry(k, '#${v.value.toRadixString(16).padLeft(8, '0').substring(2)}'))}');
       }
       if (areaToCount.isEmpty) {
         // Fallback auf Farbhäufigkeit, wenn kein areaKey vorhanden
@@ -3502,7 +3677,16 @@ class _CalendarDayCell extends StatelessWidget {
           chosenMinutes = minutes;
         }
       }
-      return areaToColor[chosen!] ?? colorScheme.primary;
+      final chosenColor = areaToColor[chosen!] ?? colorScheme.primary;
+      
+      // Debug output for day 16
+      if (day == 16 && kDebugMode) {
+        debugPrint('Chosen area: $chosen');
+        debugPrint('Chosen color: #${chosenColor.value.toRadixString(16).padLeft(8, '0').substring(2)}');
+        debugPrint('=== End Day $day Debug ===');
+      }
+      
+      return chosenColor;
     }
     final Color accentColor = dominantColor();
     // Maximal 2 Zeilen anzeigen: erste Aktivität + ggf. "+N"

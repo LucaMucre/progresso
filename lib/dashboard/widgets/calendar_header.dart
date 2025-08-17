@@ -32,7 +32,7 @@ class CalendarHeader extends StatelessWidget {
           hint: const Text('All areas'),
           onChanged: onAreaSelected,
           items: <DropdownMenuItem<String?>>[
-            const DropdownMenuItem<String?>(value: null, child: Text('All areas')),
+            const DropdownMenuItem<String?>(child: Text('All areas')),
             ...areaNames.map((n) => DropdownMenuItem<String?>(value: n, child: Text(n)))
           ],
         ),

@@ -27,13 +27,13 @@ class LogActionPage extends StatefulWidget {
   final String? areaIcon;
   
   const LogActionPage({
-    Key? key, 
+    super.key, 
     this.template,
     this.selectedCategory,
     this.selectedArea,
     this.areaColorHex,
     this.areaIcon,
-  }) : super(key: key);
+  });
 
   @override
   State<LogActionPage> createState() => _LogActionPageState();

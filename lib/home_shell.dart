@@ -8,7 +8,7 @@ import 'settings_page.dart';
 import 'navigation.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({Key? key}) : super(key: key);
+  const HomeShell({super.key});
 
   @override
   State<HomeShell> createState() => _HomeShellState();
