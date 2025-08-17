@@ -10,6 +10,8 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'navigation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'utils/logging_service.dart';
+import 'utils/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,9 +29,7 @@ Future<void> main() async {
     supabaseUrl = ddSupabaseUrl;
     supabaseAnonKey = ddSupabaseAnonKey;
     dartDefineLoaded = true;
-    if (kDebugMode) {
-      debugPrint('✅ Loaded Supabase config from --dart-define');
-    }
+    LoggingService.info('✅ Loaded Supabase config from --dart-define');
   }
 
   // 2) Nur in Nicht-Release zusätzlich .env lesen (Dev‑Bequemlichkeit)
@@ -50,17 +50,13 @@ Future<void> main() async {
       if (supabaseUrl != null && supabaseAnonKey != null &&
           supabaseUrl!.isNotEmpty && supabaseAnonKey!.isNotEmpty) {
         envLoaded = true;
-        if (kDebugMode) {
-          debugPrint('✅ .env file loaded successfully');
-        }
+        LoggingService.info('✅ .env file loaded successfully');
       } else {
         throw Exception('SUPABASE_URL oder SUPABASE_ANON_KEY fehlen in .env Datei');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ Error loading .env file: $e');
-        debugPrint('ℹ️  Verwende --dart-define oder konfiguriere eine lokale .env für Dev.');
-      }
+      LoggingService.warning('❌ Error loading .env file: $e');
+      LoggingService.info('ℹ️  Verwende --dart-define oder konfiguriere eine lokale .env für Dev.');
     }
   }
 
@@ -77,7 +73,7 @@ Future<void> main() async {
         final source = dartDefineLoaded
             ? '--dart-define'
             : (envLoaded ? '.env' : 'unknown source');
-        debugPrint('✅ Supabase initialisiert (Quelle: $source)');
+        LoggingService.info('✅ Supabase initialisiert (Quelle: $source)');
       }
       // Nicht blockierend testen, damit der App-Start nicht hängt (z. B. bei CORS/Netzwerkproblemen)
       Future(() async {
@@ -88,16 +84,14 @@ Future<void> main() async {
               .select('count')
               .limit(1)
               .timeout(const Duration(seconds: 3));
-          if (kDebugMode) debugPrint('✅ Supabase Verbindung getestet - erfolgreich');
+          LoggingService.info('✅ Supabase Verbindung getestet - erfolgreich');
         } catch (e) {
-          if (kDebugMode) debugPrint('ℹ️  Supabase Test-Query übersprungen/fehlgeschlagen: $e');
+          LoggingService.warning('ℹ️  Supabase Test-Query übersprungen/fehlgeschlagen: $e');
         }
       });
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ Supabase Initialisierung fehlgeschlagen: $e');
-        debugPrint('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
-      }
+      LoggingService.error('❌ Supabase Initialisierung fehlgeschlagen', e);
+      LoggingService.warning('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
     }
     return const ProviderScope(child: ProgressoApp());
   }
@@ -142,182 +136,8 @@ class ProgressoApp extends StatelessWidget {
       title: 'Progresso',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: lightScheme,
-        scaffoldBackgroundColor: lightScheme.surface,
-        visualDensity: VisualDensity.standard,
-        textTheme: GoogleFonts.interTextTheme(),
-        appBarTheme: AppBarTheme(
-          backgroundColor: lightScheme.surface,
-          foregroundColor: lightScheme.onSurface,
-          elevation: 0,
-          centerTitle: true,
-          surfaceTintColor: Colors.transparent,
-        ),
-        cardTheme: const CardThemeData(
-          elevation: 0.5,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(16)),
-          ),
-          margin: EdgeInsets.all(12),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: lightScheme.primary,
-            foregroundColor: lightScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            textStyle: const TextStyle(fontWeight: FontWeight.w600),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: lightScheme.surfaceContainerHighest,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: lightScheme.outline),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: lightScheme.outlineVariant),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: lightScheme.primary, width: 1.8),
-          ),
-          labelStyle: TextStyle(color: lightScheme.onSurfaceVariant),
-          hintStyle: TextStyle(color: lightScheme.onSurfaceVariant),
-        ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: lightScheme.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: lightScheme.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-        ),
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: lightScheme.primary,
-          foregroundColor: lightScheme.onPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: lightScheme.inverseSurface,
-          contentTextStyle: TextStyle(color: lightScheme.onInverseSurface),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: ZoomPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.fuchsia: FadeUpwardsPageTransitionsBuilder(),
-          },
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: darkScheme,
-        scaffoldBackgroundColor: darkScheme.surface,
-        visualDensity: VisualDensity.standard,
-        textTheme: GoogleFonts.interTextTheme(),
-        appBarTheme: AppBarTheme(
-          backgroundColor: darkScheme.surface,
-          foregroundColor: darkScheme.onSurface,
-          elevation: 0,
-          centerTitle: true,
-          surfaceTintColor: Colors.transparent,
-        ),
-        cardTheme: const CardThemeData(
-          elevation: 0.5,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(16)),
-          ),
-          margin: EdgeInsets.all(12),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: darkScheme.primary,
-            foregroundColor: darkScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            textStyle: const TextStyle(fontWeight: FontWeight.w600),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: darkScheme.surfaceContainerHighest,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: darkScheme.outline),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: darkScheme.outlineVariant),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: darkScheme.primary, width: 1.8),
-          ),
-          labelStyle: TextStyle(color: darkScheme.onSurfaceVariant),
-          hintStyle: TextStyle(color: darkScheme.onSurfaceVariant),
-        ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: darkScheme.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: darkScheme.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-        ),
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: darkScheme.primary,
-          foregroundColor: darkScheme.onPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: darkScheme.inverseSurface,
-          contentTextStyle: TextStyle(color: darkScheme.onInverseSurface),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: ZoomPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.fuchsia: FadeUpwardsPageTransitionsBuilder(),
-          },
-        ),
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,

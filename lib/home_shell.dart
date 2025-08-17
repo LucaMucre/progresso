@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dashboard_page.dart';
 import 'l10n/app_localizations.dart';
 import 'life_area_selection_page.dart';
+import 'insights_page.dart';
 // import 'chat_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart';
@@ -42,7 +43,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onExternalProfileRefresh() {
     if (!mounted) return;
     setState(() {
-      _currentIndex = 2;
+      _currentIndex = 3; // Profile is now at index 3
     });
   }
 
@@ -59,6 +60,7 @@ class _HomeShellState extends State<HomeShell> {
           children: const [
             DashboardPage(),
             LifeAreaSelectionPage(),
+            InsightsPage(),
             ProfilePage(),
             SettingsPage(),
           ],
@@ -77,6 +79,7 @@ class _HomeShellState extends State<HomeShell> {
           destinations: [
             NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: t?.navDashboard ?? 'Dashboard'),
             NavigationDestination(icon: const Icon(Icons.add_circle_outline), selectedIcon: const Icon(Icons.add_circle), label: t?.navLog ?? 'Log'),
+            NavigationDestination(icon: const Icon(Icons.lightbulb_outline), selectedIcon: const Icon(Icons.lightbulb), label: 'Insights'),
             NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: t?.navProfile ?? 'Profile'),
             NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: t?.navSettings ?? 'Settings'),
           ],

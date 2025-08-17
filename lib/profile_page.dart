@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'utils/web_file_picker_stub.dart'
     if (dart.library.html) 'utils/web_file_picker_web.dart' as web_file_picker;
+import 'utils/logging_service.dart';
 import 'services/character_service.dart';
 import 'services/life_areas_service.dart';
 import 'services/db_service.dart';
@@ -85,7 +86,9 @@ class _ProfilePageState extends State<ProfilePage> {
           _cacheBust = DateTime.now().millisecondsSinceEpoch;
         });
       }
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      LoggingService.error('Error in profile operation', e, stackTrace, 'Profile');
+    }
     _loadProfile();
     _loadStatistics();
   }
@@ -96,15 +99,16 @@ class _ProfilePageState extends State<ProfilePage> {
     
     final channel = _supabase
         .channel('public:action_logs:user_id=eq.${user.id}:profile-refresh')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: 'INSERT',
-            schema: 'public',
-            table: 'action_logs',
-            filter: 'user_id=eq.${user.id}',
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'action_logs',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: user.id,
           ),
-          (payload, [ref]) async {
+          callback: (PostgresChangePayload payload) async {
             // Reload statistics when new activity is created
             await _loadStatistics();
             if (mounted) setState(() {});
@@ -146,7 +150,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (kDebugMode) debugPrint('Error loading profile: $e');
       // Erstelle Standard-Profil wenn noch nicht vorhanden
       _nameCtrl.text = _supabase.auth.currentUser?.email?.split('@')[0] ?? 'User';
-      _bioCtrl.text = 'Das ist meine Bio.';
+      _bioCtrl.text = 'This is my bio.';
       setState(() {});
     }
   }
@@ -157,15 +161,16 @@ class _ProfilePageState extends State<ProfilePage> {
     _usersChannel?.unsubscribe();
     final channel = _supabase
         .channel('public:users:id=eq.${user.id}:profile-page')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'users',
-            filter: 'id=eq.${user.id}',
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: user.id,
           ),
-          (payload, [ref]) async {
+          callback: (PostgresChangePayload payload) async {
             await _loadProfile();
             if (mounted) setState(() {});
           },
@@ -223,7 +228,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 areaFromNotes ??= lifeAreaFromNotes;
                 categoryFromNotes = (obj['category'] as String?)?.trim().toLowerCase();
               }
-            } catch (_) {}
+            } catch (e, stackTrace) {
+      LoggingService.error('Error in profile operation', e, stackTrace, 'Profile');
+    }
           }
           bool isKnownParent(String? v) => const {
             'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
@@ -914,7 +921,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     await _saveProfile();
                                     if (mounted) Navigator.of(ctx).pop(true);
                                   },
-                                  child: const Text('Speichern'),
+                                  child: const Text('Save'),
                                 )
                               ],
                             );

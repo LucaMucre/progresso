@@ -32,7 +32,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   LifeArea? _parentArea;
   int _totalXp = 0;
   int _activityCount = 0;
-  double _averageDuration = 0;
+  double _totalDuration = 0;
   final Random _random = Random();
   bool _isBubbleView = true; // Toggle between bubble and table view
   List<LifeArea> _subAreas = [];
@@ -117,10 +117,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       // Calculate statistics
       final totalXp = filteredLogs.fold<int>(0, (sum, log) => sum + log.earnedXp);
       final activityCount = filteredLogs.length;
-      final totalDuration = filteredLogs
+      final totalDurationMinutes = filteredLogs
           .where((log) => log.durationMin != null)
           .fold<int>(0, (sum, log) => sum + (log.durationMin ?? 0));
-      final averageDuration = activityCount > 0 ? totalDuration / activityCount : 0.0;
       
       setState(() {
         _templates = filteredTemplates;
@@ -130,7 +129,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         _parentArea = parent;
         _totalXp = totalXp;
         _activityCount = activityCount;
-        _averageDuration = averageDuration;
+        _totalDuration = totalDurationMinutes.toDouble();
         _isLoading = false;
       });
       
@@ -1901,7 +1900,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                 child: _buildStatCard(
                   icon: Icons.timer,
                   title: 'Time',
-                  value: _formatDuration(_averageDuration),
+                  value: _formatDuration(_totalDuration),
                   color: Colors.blue,
                 ),
               ),

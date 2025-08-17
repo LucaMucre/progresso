@@ -37,20 +37,38 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading life areas: $e');
       setState(() {
-        _error = 'Fehler beim Laden der Lebensbereiche';
+        _error = 'Error loading life areas';
         _loading = false;
       });
     }
   }
 
   void _selectLifeArea(LifeArea area) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => LogActionPage(
-          selectedArea: area.name,
-          selectedCategory: area.category,
-          areaColorHex: area.color,
-          areaIcon: area.icon,
+    // Show as modal bottom sheet instead of replacing route
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: LogActionPage(
+            selectedArea: area.name,
+            selectedCategory: area.category,
+            areaColorHex: area.color,
+            areaIcon: area.icon,
+            scrollController: scrollController,
+            isModal: true,
+          ),
         ),
       ),
     );
@@ -59,7 +77,7 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
   void _createNewArea() {
     // TODO: Implement create new life area functionality
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Neuen Lebensbereich erstellen - wird bald implementiert')),
+      const SnackBar(content: Text('Create new life area - coming soon')),
     );
   }
 
@@ -69,11 +87,8 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lebensbereich auswählen'),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => goToHomeTab(0), // Zurück zum Dashboard
-        ),
+        title: const Text('Select Life Area'),
+        automaticallyImplyLeading: false,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -88,7 +103,7 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: _loadLifeAreas,
-                        child: const Text('Erneut versuchen'),
+                        child: const Text('Try Again'),
                       ),
                     ],
                   ),
@@ -114,7 +129,7 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Wähle einen Lebensbereich',
+                              'Choose a Life Area',
                               style: theme.textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -122,7 +137,7 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Für welchen Bereich deines Lebens möchtest du eine Aktivität loggen?',
+                              'For which area of your life would you like to log an activity?',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -238,14 +253,14 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'Keine Lebensbereiche gefunden',
+                                'No life areas found',
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Erstelle deinen ersten Lebensbereich, um Aktivitäten zu loggen.',
+                                'Create your first life area to log activities.',
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -262,7 +277,7 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                       OutlinedButton.icon(
                         onPressed: _createNewArea,
                         icon: const Icon(Icons.add),
-                        label: const Text('Neuen Lebensbereich erstellen'),
+                        label: const Text('Create New Life Area'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(

@@ -7,6 +7,8 @@ import '../repository/templates_repository.dart';
 import '../repository/stats_repository.dart';
 import '../models/action_models.dart' as models;
 import '../navigation.dart';
+import '../utils/logging_service.dart';
+import '../utils/xp_calculator.dart';
 
 final _db = Supabase.instance.client;
 final LogsRepository _logsRepo = LogsRepository(_db);
@@ -108,7 +110,11 @@ Future<ActionLog> createLog({
     imageUrl: imageUrl,
   );
   _checkAchievementsAfterLogInsert();
-  try { notifyLogsChanged(); } catch (_) {}
+  try { 
+    notifyLogsChanged(); 
+  } catch (e, stackTrace) {
+    LoggingService.error('Failed to notify logs changed after createLog', e, stackTrace, 'DbService');
+  }
   return log;
 }
 
@@ -128,7 +134,11 @@ Future<ActionLog> createQuickLog({
     imageUrl: imageUrl,
   );
   await _checkAchievementsAfterLogInsert();
-  try { notifyLogsChanged(); } catch (_) {}
+  try { 
+    notifyLogsChanged(); 
+  } catch (e, stackTrace) {
+    LoggingService.error('Failed to notify logs changed after createLog', e, stackTrace, 'DbService');
+  }
   return log;
 }
 

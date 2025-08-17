@@ -8,6 +8,8 @@ import '../services/character_service.dart';
 import '../services/avatar_sync_service.dart';
 import '../navigation.dart';
 import 'dart:convert'; // Added for jsonDecode
+import '../utils/animation_utils.dart';
+import '../utils/app_theme.dart';
 
 // Separate Character Widget to prevent rebuilding on hover
 class CharacterWidget extends StatefulWidget {
@@ -103,15 +105,16 @@ class _CharacterWidgetState extends State<CharacterWidget> {
     _usersChannel?.unsubscribe();
     final channel = client
         .channel('public:users:id=eq.${user.id}:bubble')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'users',
-            filter: 'id=eq.${user.id}',
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: user.id,
           ),
-          (payload, [ref]) async {
+          callback: (PostgresChangePayload payload) async {
             await _loadUserAvatar();
             if (mounted) setState(() {});
           },
@@ -160,27 +163,30 @@ class _CharacterWidgetState extends State<CharacterWidget> {
         ? '$rawAvatarUrl?cb=$_cacheBust'
         : null;
     
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.secondary,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return AnimationUtils.bounceIn(
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: AppTheme.primaryGradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-        ],
-      ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryColor.withValues(alpha: 0.4),
+              blurRadius: 15,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: AppTheme.primaryColor.withValues(alpha: 0.2),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
       child: Stack(
         children: [
           // Avatar or default icon
@@ -242,6 +248,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as Math;
+import 'dart:math' as math;
 import '../services/achievement_service.dart';
+import '../utils/app_theme.dart';
+import '../utils/animation_utils.dart';
 
 class AchievementUnlockWidget extends StatefulWidget {
   final Achievement achievement;
   final VoidCallback? onDismissed;
   
   const AchievementUnlockWidget({
-    Key? key,
+    super.key,
     required this.achievement,
     this.onDismissed,
-  }) : super(key: key);
+  });
   
   @override
   State<AchievementUnlockWidget> createState() => _AchievementUnlockWidgetState();
@@ -146,12 +148,17 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                     builder: (context, child) {
                       return Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: widget.achievement.color.withValues(alpha: 0.3 * _glowAnimation.value),
-                              blurRadius: 20 + (30 * _glowAnimation.value),
-                              spreadRadius: 5 + (10 * _glowAnimation.value),
+                              color: widget.achievement.color.withValues(alpha: 0.4 * _glowAnimation.value),
+                              blurRadius: 25 + (40 * _glowAnimation.value),
+                              spreadRadius: 8 + (15 * _glowAnimation.value),
+                            ),
+                            BoxShadow(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.2 * _glowAnimation.value),
+                              blurRadius: 40 + (60 * _glowAnimation.value),
+                              spreadRadius: 15 + (25 * _glowAnimation.value),
                             ),
                           ],
                         ),
@@ -309,8 +316,8 @@ class ParticlePainter extends CustomPainter {
       final distance = progress * 40;
       final particleSize = (1 - progress) * 4 + 2;
       
-      final x = center.dx + distance * Math.cos(angle);
-      final y = center.dy + distance * Math.sin(angle);
+      final x = center.dx + distance * math.cos(angle);
+      final y = center.dy + distance * math.sin(angle);
       
       paint.color = color.withValues(alpha: (1 - progress) * 0.8);
       canvas.drawCircle(Offset(x, y), particleSize, paint);
@@ -320,12 +327,12 @@ class ParticlePainter extends CustomPainter {
     for (int i = 0; i < 8; i++) {
       final angle = (i * 45.0 + progress * 360) * (3.14159 / 180);
       final distance = 30 + progress * 15;
-      final sparkleSize = Math.sin(progress * 3.14159) * 3;
+      final sparkleSize = math.sin(progress * 3.14159) * 3;
       
-      final x = center.dx + distance * Math.cos(angle);
-      final y = center.dy + distance * Math.sin(angle);
+      final x = center.dx + distance * math.cos(angle);
+      final y = center.dy + distance * math.sin(angle);
       
-      paint.color = Colors.yellow.withValues(alpha: Math.sin(progress * 3.14159) * 0.8);
+      paint.color = Colors.yellow.withValues(alpha: math.sin(progress * 3.14159) * 0.8);
       canvas.drawCircle(Offset(x, y), sparkleSize, paint);
     }
   }

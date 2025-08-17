@@ -6,10 +6,10 @@ class GalleryFilters extends StatelessWidget {
   final ValueChanged<String?> onSelected;
 
   const GalleryFilters({
-    Key? key,
+    super.key,
     required this.selectedAreaFilterName,
     required this.onSelected,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

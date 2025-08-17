@@ -7,7 +7,7 @@ import '../services/avatar_sync_service.dart';
 
 class ProfileHeaderWidget extends StatefulWidget {
   final bool compact;
-  const ProfileHeaderWidget({Key? key, this.compact = false}) : super(key: key);
+  const ProfileHeaderWidget({super.key, this.compact = false});
 
   @override
   State<ProfileHeaderWidget> createState() => _ProfileHeaderWidgetState();
@@ -79,15 +79,16 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
 
     final channel = client
         .channel('public:users:id=eq.${user.id}')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'users',
-            filter: 'id=eq.${user.id}',
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: user.id,
           ),
-          (payload, [ref]) async {
+          callback: (PostgresChangePayload payload) async {
             // Bei Avatar-Änderung neu laden
             await _loadUserProfile();
             if (mounted) setState(() {});
@@ -243,7 +244,7 @@ class _ProfileHeaderWidgetState extends State<ProfileHeaderWidget> {
                 }
               },
               icon: const Icon(Icons.edit, color: Colors.white, size: 18),
-              tooltip: 'Profil bearbeiten',
+              tooltip: 'Edit profile',
             ),
           ),
         ],

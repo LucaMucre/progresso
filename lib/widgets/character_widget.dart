@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/avatar_sync_service.dart';
 
 class CharacterWidget extends StatefulWidget {
-  const CharacterWidget({Key? key}) : super(key: key);
+  const CharacterWidget({super.key});
 
   @override
   State<CharacterWidget> createState() => _CharacterWidgetState();
@@ -58,15 +58,16 @@ class _CharacterWidgetState extends State<CharacterWidget> {
     _usersChannel?.unsubscribe();
     final channel = client
         .channel('public:users:id=eq.${user.id}:character-card')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'users',
-            filter: 'id=eq.${user.id}',
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: user.id,
           ),
-          (payload, [ref]) async {
+          callback: (PostgresChangePayload payload) async {
             await _loadUserAvatar();
             if (mounted) setState(() {});
           },

@@ -28,6 +28,8 @@ class LogActionPage extends StatefulWidget {
   final String? selectedArea;
   final String? areaColorHex;
   final String? areaIcon;
+  final ScrollController? scrollController;
+  final bool isModal;
   
   const LogActionPage({
     super.key, 
@@ -36,6 +38,8 @@ class LogActionPage extends StatefulWidget {
     this.selectedArea,
     this.areaColorHex,
     this.areaIcon,
+    this.scrollController,
+    this.isModal = false,
   });
 
   @override
@@ -217,7 +221,7 @@ class _LogActionPageState extends State<LogActionPage> {
     if (mounted) {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Speichere… XP wird berechnet'),
+          content: Text('Saving... XP is being calculated'),
           duration: Duration(milliseconds: 900),
         ),
       );
@@ -553,6 +557,53 @@ class _LogActionPageState extends State<LogActionPage> {
     
     final Color accent = areaColor ?? Theme.of(context).colorScheme.primary;
 
+    // Use different layout for modal vs fullscreen
+    if (widget.isModal) {
+      return Column(
+        children: [
+          // Modal header with handle and close button
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: AutofillGroup(
+              child: SingleChildScrollView(
+                controller: widget.scrollController,
+                padding: const EdgeInsets.all(16),
+                child: _buildFormContent(selectedArea, selectedCategory, areaIcon, accent, areaColor),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -561,7 +612,14 @@ class _LogActionPageState extends State<LogActionPage> {
         // Explicitly disable autofill for the entire form to prevent password manager
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Column(
+          child: _buildFormContent(selectedArea, selectedCategory, areaIcon, accent, areaColor),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormContent(String? selectedArea, String? selectedCategory, IconData? areaIcon, Color accent, Color? areaColor) {
+    return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
             if (selectedArea != null && selectedArea.isNotEmpty) ...[
@@ -599,7 +657,7 @@ class _LogActionPageState extends State<LogActionPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Lebensbereich',
+                            'Life Area',
                             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                   color: (areaColor ?? Theme.of(context).colorScheme.onSurface).withValues(alpha: 0.6),
                                 ),
@@ -626,7 +684,7 @@ class _LogActionPageState extends State<LogActionPage> {
             if (widget.template == null) ...[
               _sectionCard(
                 accentColor: accent,
-                title: 'Aktivitätsname',
+                title: 'Activity Name',
                 leadingIcon: Icons.task_alt,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -652,7 +710,7 @@ class _LogActionPageState extends State<LogActionPage> {
             
             _sectionCard(
               accentColor: accent,
-              title: 'Dauer in Minuten (optional)',
+              title: 'Duration in Minutes (optional)',
               leadingIcon: Icons.timer_outlined,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -674,7 +732,7 @@ class _LogActionPageState extends State<LogActionPage> {
             
             _sectionCard(
               accentColor: accent,
-              title: 'Notiz (optional)',
+              title: 'Note (optional)',
               leadingIcon: Icons.notes,
               child: Stack(
                 children: [
@@ -826,13 +884,10 @@ class _LogActionPageState extends State<LogActionPage> {
                     height: 16, width: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Log speichern'),
+                : const Text('Save Log'),
             ),
             ],
-          ),
-        ),
-      ),
-    );
+          );
   }
 }
 

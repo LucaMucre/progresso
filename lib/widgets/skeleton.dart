@@ -6,11 +6,11 @@ class SkeletonBox extends StatelessWidget {
   final BorderRadius borderRadius;
 
   const SkeletonBox({
-    Key? key,
+    super.key,
     required this.width,
     required this.height,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +28,7 @@ class SkeletonBox extends StatelessWidget {
 
 class SkeletonCircle extends StatelessWidget {
   final double size;
-  const SkeletonCircle({Key? key, required this.size}) : super(key: key);
+  const SkeletonCircle({super.key, required this.size});
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +47,7 @@ class SkeletonCircle extends StatelessWidget {
 class SkeletonList extends StatelessWidget {
   final int itemCount;
   final EdgeInsets padding;
-  const SkeletonList({Key? key, this.itemCount = 6, this.padding = const EdgeInsets.all(16)}) : super(key: key);
+  const SkeletonList({super.key, this.itemCount = 6, this.padding = const EdgeInsets.all(16)});
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +80,7 @@ class SkeletonList extends StatelessWidget {
 class SkeletonCard extends StatelessWidget {
   final double height;
   final EdgeInsets margin;
-  const SkeletonCard({Key? key, this.height = 120, this.margin = const EdgeInsets.all(12)}) : super(key: key);
+  const SkeletonCard({super.key, this.height = 120, this.margin = const EdgeInsets.all(12)});
 
   @override
   Widget build(BuildContext context) {

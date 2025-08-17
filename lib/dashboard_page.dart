@@ -11,7 +11,6 @@ import 'log_action_page.dart';
 import 'services/db_service.dart';
 import 'services/life_areas_service.dart';
 import 'widgets/bubble_widget.dart';
-import 'dashboard/widgets/dashboard_header.dart';
 import 'dashboard/widgets/gallery_filters.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
@@ -23,6 +22,7 @@ import 'dashboard/widgets/calendar_grid.dart';
 import 'widgets/skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_state.dart';
+import 'utils/logging_service.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -86,7 +86,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           final container = ProviderScope.containerOf(context, listen: false);
           container.refresh(streakNotifierProvider);
         }
-      } catch (_) {}
+      } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
     });
   }
 
@@ -129,10 +131,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       final client = Supabase.instance.client;
       client
           .channel('realtime-logs')
-          .on(
-            RealtimeListenTypes.postgresChanges,
-            ChannelFilter(event: 'INSERT', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) {
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'action_logs',
+            callback: (PostgresChangePayload payload) {
               if (!mounted || LevelUpService.isShowingDialogs) return;
               _realtimeDebounce?.cancel();
               _realtimeDebounce = Timer(const Duration(milliseconds: 250), () {
@@ -146,10 +149,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               });
             },
           )
-          .on(
-            RealtimeListenTypes.postgresChanges,
-            ChannelFilter(event: 'UPDATE', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) {
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'action_logs',
+            callback: (PostgresChangePayload payload) {
               if (!mounted || LevelUpService.isShowingDialogs) return;
               _realtimeDebounce?.cancel();
               _realtimeDebounce = Timer(const Duration(milliseconds: 250), () {
@@ -163,10 +167,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               });
             },
           )
-          .on(
-            RealtimeListenTypes.postgresChanges,
-            ChannelFilter(event: 'DELETE', schema: 'public', table: 'action_logs'),
-            (payload, [ref]) {
+          .onPostgresChanges(
+            event: PostgresChangeEvent.delete,
+            schema: 'public',
+            table: 'action_logs',
+            callback: (PostgresChangePayload payload) {
               if (!mounted || LevelUpService.isShowingDialogs) return;
               _realtimeDebounce?.cancel();
               _realtimeDebounce = Timer(const Duration(milliseconds: 250), () {
@@ -181,7 +186,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             },
           )
           .subscribe();
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+    }
   }
 
 
@@ -386,7 +393,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             }
           }
         }
-      } catch (_) {}
+      } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
       
       // Template-Kategorie Fallback
       if (log.templateId != null) {
@@ -504,7 +513,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             }
                           }
                         }
-                      } catch (_) {}
+                      } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
                       final bucket = tmp.putIfAbsent(areaKey, () => {'total': 0, 'sum_duration': 0, 'sum_xp': 0});
                       bucket['total'] = (bucket['total'] ?? 0) + 1;
                       bucket['sum_duration'] = (bucket['sum_duration'] ?? 0) + (log.durationMin ?? 0);
@@ -611,7 +622,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 }
                               }
                             }
-                          } catch (_) {}
+                          } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
                           if (areaKey.isEmpty && log.templateId != null) {
                             final cat = templateIdToCategory[log.templateId!];
                             if (cat != null && cat.isNotEmpty) {
@@ -788,7 +801,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               if (matched != null) tagColor = matched.color;
             }
           }
-        } catch (_) {}
+        } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
       }
 
       // Apply filter: skip if a filter is set and this log doesn't match
@@ -1366,7 +1381,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           return obj['title'].toString();
         }
       }
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+    }
 
     return 'Activity';
   }
@@ -1406,7 +1423,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           };
         }
       }
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+    }
 
     return {
       'name': 'General',
@@ -1633,7 +1652,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           final area = obj is Map<String, dynamic> ? (obj['area'] as String?) : null;
                           if (area != null && area != _selectedAreaFilterName) continue;
                         }
-                      } catch (_) {}
+                      } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
                     }
                     final fromNotes = extractTitleFromNotes(l.notes);
                     final title = l.activityName ?? fromNotes ?? 'Activity';
@@ -1700,7 +1721,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           }
                         }
                       }
-                    } catch (_) {}
+                    } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
                     (data[key] ??= []).add(_DayEntry(title: title, color: color, durationMin: l.durationMin));
                   }
                   final mapped = <DateTime, List<CalendarDayEntry>>{};
@@ -2706,8 +2729,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 data: (logs) {
                   final totalXp = logs.fold<int>(0, (sum, l) => sum + l.earnedXp);
                   final activityCount = logs.length;
-                  final totalDuration = logs.where((l) => l.durationMin != null).fold<int>(0, (s, l) => s + (l.durationMin ?? 0));
-                  final averageDuration = activityCount > 0 ? totalDuration / activityCount : 0.0;
+                  final totalDurationMinutes = logs.where((l) => l.durationMin != null).fold<int>(0, (s, l) => s + (l.durationMin ?? 0));
 
                   return Column(
                     children: [
@@ -2738,7 +2760,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                               context,
                               icon: Icons.timer,
                               title: 'Time',
-                              value: _formatDuration(averageDuration),
+                              value: _formatDuration(totalDurationMinutes.toDouble()),
                               color: Colors.green,
                             ),
                           ),
@@ -3174,15 +3196,14 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       
       final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp);
       final activityCount = logs.length;
-      final totalDuration = logs
+      final totalDurationMinutes = logs
           .where((log) => log.durationMin != null)
           .fold<int>(0, (sum, log) => sum + (log.durationMin ?? 0));
-      final averageDuration = activityCount > 0 ? totalDuration / activityCount : 0.0;
       
       return {
         'totalXp': totalXp,
         'activityCount': activityCount,
-        'averageDuration': averageDuration,
+        'totalDuration': totalDurationMinutes.toDouble(),
       };
     } catch (e) {
       if (kDebugMode) debugPrint('Fehler beim Berechnen der globalen Statistiken: $e');
@@ -3249,7 +3270,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       final lifeAreasRes = await Supabase.instance.client
           .from('life_areas')
           .select('name,category,color')
-          .eq('user_id', Supabase.instance.client.auth.currentUser?.id);
+          .eq('user_id', Supabase.instance.client.auth.currentUser!.id);
       final List<_AreaTag> areaTags = (lifeAreasRes as List)
           .map((m) => _AreaTag(
                 name: (m['name'] as String).trim(),
@@ -3269,7 +3290,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               if (match != null) return match.color;
             }
           }
-        } catch (_) {}
+        } catch (e, stackTrace) {
+        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
+      }
         return Colors.green; // fallback
       }
 
@@ -3326,15 +3349,15 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       
       if (weeks == 1) {
         if (days > 0) {
-          return days == 1 ? '1 week, 1 day' : '1 week, $days days';
+          return days == 1 ? '1 w, 1 d' : '1 w, $days d';
         } else {
-          return '1 week';
+          return '1 w';
         }
       } else {
         if (days > 0) {
-          return days == 1 ? '$weeks weeks, 1 day' : '$weeks weeks, $days days';
+          return days == 1 ? '$weeks w, 1 d' : '$weeks w, $days d';
         } else {
-          return '$weeks weeks';
+          return '$weeks w';
         }
       }
     }
@@ -3345,7 +3368,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       final remainingMinutes = totalMinutes - (days * 1440);
       final hours = (remainingMinutes / 60).floor();
       
-      final d = days == 1 ? '1 day' : '$days days';
+      final d = days == 1 ? '1 d' : '$days d';
       if (hours > 0) {
         final h = '$hours h';
         return '$d, $h';

@@ -550,7 +550,7 @@ class AchievementService {
             .from('user_achievements')
             .delete()
             .eq('user_id', uid)
-            .in_('achievement_id', toRemove.toList());
+            .inFilter('achievement_id', toRemove.toList());
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Error removing test achievements: $e');

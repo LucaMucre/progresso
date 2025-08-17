@@ -115,7 +115,7 @@ class LifeAreasService {
         .from('life_areas')
         .select()
         .eq('user_id', user.id)
-        .is_('parent_id', null)
+        .isFilter('parent_id', null)
         .order('order_index');
 
     return (response as List).map((json) => LifeArea.fromJson(json)).toList();
@@ -259,7 +259,7 @@ class LifeAreasService {
   // Sichtbarkeit einer Life Area umschalten
   static Future<void> toggleLifeAreaVisibility(String id) async {
     // Temporarily disabled until migration is applied
-    throw Exception('Sichtbarkeit-Umschaltung ist temporär deaktiviert. Bitte wenden Sie die Datenbank-Migration an.');
+    throw Exception('Visibility toggle is temporarily disabled. Please apply the database migration.');
   }
 
   // Life Area löschen

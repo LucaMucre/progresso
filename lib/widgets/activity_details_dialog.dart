@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 // Avoid direct dart:html in non-web builds; use conditional helper instead
 import '../utils/web_bytes_stub.dart'
@@ -64,7 +63,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
           Supabase.instance.client
               .from('life_areas')
               .select('name,category,color')
-              .eq('user_id', Supabase.instance.client.auth.currentUser?.id)
+              .eq('user_id', Supabase.instance.client.auth.currentUser!.id)
               .then((res) {
             if (!mounted) return;
             for (final m in (res as List)) {
@@ -367,7 +366,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       );
     } catch (err) {
       setState(() {
-        _error = 'Fehler beim Speichern: $err';
+        _error = 'Error saving: $err';
         _isLoading = false;
       });
     }
@@ -577,7 +576,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildDetailChip(
-                              label: 'Dauer',
+                              label: 'Duration',
                               value: widget.log.durationMin != null ? '${widget.log.durationMin} min' : '-',
                               icon: Icons.timer_outlined,
                             ),
@@ -588,7 +587,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
 
                     if (_isEditing) ...[
                       _buildDetailSection(
-                        title: 'Dauer (Minuten)',
+                        title: 'Duration (Minutes)',
                         value: _durationCtrl.text,
                         isEditable: true,
                         controller: _durationCtrl,
@@ -596,7 +595,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                       ),
                       
                       _buildDetailSection(
-                        title: 'Notizen',
+                        title: 'Notes',
                         value: _notesCtrl.text,
                         isEditable: true,
                         controller: _notesCtrl,
@@ -607,7 +606,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                       
                       if (widget.log.notes != null && widget.log.notes!.isNotEmpty)
                         _buildDetailSection(
-                          title: 'Notizen',
+                          title: 'Notes',
                           value: widget.log.notes!,
                           isEditable: false,
                         ),
@@ -671,7 +670,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                                 width: 16,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('Speichern'),
+                            : const Text('Save'),
                       ),
                     ),
                   ],

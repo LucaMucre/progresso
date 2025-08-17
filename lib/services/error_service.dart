@@ -64,7 +64,7 @@ class ErrorService {
         return 'Keine Berechtigung für diese Aktion.';
       }
       if (errorString.contains('pgrst302')) {
-        return 'Authentifizierung erforderlich.';
+        return 'Authentication required.';
       }
     return 'Database error. Please try again.';
     }
@@ -72,16 +72,16 @@ class ErrorService {
     // Auth-Fehler
     if (errorString.contains('auth') || errorString.contains('jwt')) {
       if (errorString.contains('invalid_credentials')) {
-        return 'Ungültige Anmeldedaten.';
+        return 'Invalid credentials.';
       }
       if (errorString.contains('email_not_confirmed')) {
-        return 'Bitte bestätige deine E-Mail-Adresse.';
+        return 'Please confirm your email address.';
       }
       if (errorString.contains('weak_password')) {
-        return 'Das Passwort ist zu schwach.';
+        return 'Password is too weak.';
       }
       if (errorString.contains('email_already_in_use')) {
-        return 'Diese E-Mail-Adresse wird bereits verwendet.';
+        return 'This email address is already in use.';
       }
     return 'Authentication error. Please sign in again.';
     }
@@ -157,7 +157,7 @@ class ErrorService {
         case 'PGRST301':
           return 'Keine Berechtigung für diese Aktion.';
         case 'PGRST302':
-          return 'Authentifizierung erforderlich.';
+          return 'Authentication required.';
         default:
     return 'Database error: ${error.message}';
       }
@@ -166,13 +166,13 @@ class ErrorService {
     if (error is AuthException) {
       switch (error.message) {
         case 'Invalid login credentials':
-          return 'Ungültige Anmeldedaten.';
+          return 'Invalid credentials.';
         case 'Email not confirmed':
-          return 'Bitte bestätige deine E-Mail-Adresse.';
+          return 'Please confirm your email address.';
         case 'Weak password':
-          return 'Das Passwort ist zu schwach.';
+          return 'Password is too weak.';
         case 'User already registered':
-          return 'Diese E-Mail-Adresse wird bereits verwendet.';
+          return 'This email address is already in use.';
         default:
     return 'Authentication error: ${error.message}';
       }

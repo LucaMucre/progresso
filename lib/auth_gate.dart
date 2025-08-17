@@ -113,7 +113,7 @@ class _AuthGateState extends State<AuthGate> {
                 }
               }
             },
-            child: const Text('Speichern'),
+            child: const Text('Save'),
           )
         ],
       ),

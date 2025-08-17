@@ -71,7 +71,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           _userName = _supabase.auth.currentUser?.email?.split('@')[0] ?? 'User';
           _userBio = '';
           _nameCtrl.text = _supabase.auth.currentUser?.email?.split('@')[0] ?? 'User';
-          _bioCtrl.text = 'Das ist meine Bio.';
+          _bioCtrl.text = 'This is my bio.';
           _isLoadingProfile = false;
         });
       }
