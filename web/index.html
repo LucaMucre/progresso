@@ -22,6 +22,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="password-save" content="no">
   <meta name="autocomplete" content="off">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta name="format-detection" content="telephone=no">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -42,8 +44,50 @@
       e.preventDefault();
     });
     
+    // Global flag to completely disable password manager
+    window.__disablePasswordManager = true;
+    
     // Prevent password manager popups
     document.addEventListener('DOMContentLoaded', function() {
+      // Create decoy invisible form at the beginning of body to absorb password manager attention
+      const decoyForm = document.createElement('form');
+      decoyForm.style.position = 'absolute';
+      decoyForm.style.left = '-9999px';
+      decoyForm.style.top = '-9999px';
+      decoyForm.style.width = '1px';
+      decoyForm.style.height = '1px';
+      decoyForm.style.overflow = 'hidden';
+      decoyForm.setAttribute('autocomplete', 'off');
+      
+      // Add decoy fields that password managers will target instead
+      const decoyUser = document.createElement('input');
+      decoyUser.type = 'text';
+      decoyUser.name = 'decoy_username';
+      decoyUser.setAttribute('autocomplete', 'username');
+      decoyUser.setAttribute('tabindex', '-1');
+      decoyUser.setAttribute('aria-hidden', 'true');
+      decoyUser.style.position = 'absolute';
+      decoyUser.style.left = '-9999px';
+      
+      const decoyPass = document.createElement('input');
+      decoyPass.type = 'password';
+      decoyPass.name = 'decoy_password';
+      decoyPass.setAttribute('autocomplete', 'new-password');
+      decoyPass.setAttribute('tabindex', '-1');
+      decoyPass.setAttribute('aria-hidden', 'true');
+      decoyPass.style.position = 'absolute';
+      decoyPass.style.left = '-9999px';
+      
+      decoyForm.appendChild(decoyUser);
+      decoyForm.appendChild(decoyPass);
+      document.body.insertBefore(decoyForm, document.body.firstChild);
+      
+      // Prevent any form submission
+      decoyForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
       // Disable autocomplete on all input elements
       const style = document.createElement('style');
       style.textContent = `
@@ -81,6 +125,17 @@
                 input.setAttribute('data-form-type', 'other');
                 input.setAttribute('data-lpignore', 'true');
                 input.setAttribute('data-1p-ignore', 'true');
+                input.setAttribute('data-bwignore', 'true');
+                
+                // Change input type temporarily on focus to confuse password managers
+                if (input.type === 'text' || input.type === 'number') {
+                  input.addEventListener('focus', function() {
+                    this.setAttribute('readonly', 'readonly');
+                    setTimeout(() => {
+                      this.removeAttribute('readonly');
+                    }, 10);
+                  });
+                }
               });
               
               // Handle contenteditable elements (QuillEditor)
@@ -170,6 +225,27 @@
           }
         }
       }, true);
+      
+      // Override the browser's credential store to prevent password prompts
+      if (navigator.credentials) {
+        const originalStore = navigator.credentials.store;
+        navigator.credentials.store = function() {
+          if (window.__disablePasswordManager) {
+            return Promise.resolve(null);
+          }
+          return originalStore.apply(this, arguments);
+        };
+      }
+      
+      // Intercept beforeunload to prevent password save prompts on navigation
+      window.addEventListener('beforeunload', function(e) {
+        // Clear any form data to prevent save prompts
+        document.querySelectorAll('input').forEach(function(input) {
+          if (input.type !== 'hidden' && !input.hasAttribute('data-preserve')) {
+            input.value = '';
+          }
+        });
+      });
     });
     
     // Function to aggressively prevent password manager on log action page
@@ -207,6 +283,9 @@
     
     // Custom file picker to avoid password manager
     window.customFilePicker = function() {
+      // Temporarily disable password manager during file picker
+      window.__disablePasswordManager = true;
+      
       return new Promise((resolve) => {
         let isResolved = false;
         

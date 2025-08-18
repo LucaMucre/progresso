@@ -12,6 +12,58 @@ import '../utils/web_file_picker_stub.dart'
 import 'dart:convert';
 import '../services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'optimized_image.dart';
+
+// Fullscreen image viewer widget
+class _FullscreenImageViewer extends StatelessWidget {
+  final String? imageUrl;
+  final File? imageFile;
+  
+  const _FullscreenImageViewer({this.imageUrl, this.imageFile})
+      : assert(imageUrl != null || imageFile != null, 'Either imageUrl or imageFile must be provided');
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          child: imageUrl != null
+              ? OptimizedImage(
+                  imageUrl: imageUrl!,
+                  fit: BoxFit.contain,
+                  enableThumbnails: false, // Keep original resolution for fullscreen
+                  errorWidget: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error, color: Colors.white, size: 64),
+                        SizedBox(height: 16),
+                        Text(
+                          'Failed to load image',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Image.file(
+                  imageFile!,
+                  fit: BoxFit.contain,
+                ),
+        ),
+      ),
+    );
+  }
+}
 
 class ActivityDetailsDialog extends StatefulWidget {
   final ActionLog log;
@@ -48,6 +100,23 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     _notesCtrl.text = widget.log.notes ?? '';
     _initTitle();
     _initAreaColor();
+    
+    // Debug: Check if imageUrl is available
+    if (kDebugMode) {
+      print('ActivityDetailsDialog - imageUrl: ${widget.log.imageUrl}');
+    }
+  }
+
+  void _showFullscreenImage({String? imageUrl, File? imageFile}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _FullscreenImageViewer(
+          imageUrl: imageUrl,
+          imageFile: imageFile,
+        ),
+        fullscreenDialog: true,
+      ),
+    );
   }
 
   void _initAreaColor() {
@@ -360,7 +429,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Änderungen gespeichert!'),
+          content: Text('Changes saved!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -386,7 +455,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Löschen'),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -407,7 +476,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
         Navigator.of(context).pop();
       } catch (err) {
         setState(() {
-          _error = 'Fehler beim Löschen: $err';
+          _error = 'Error deleting: $err';
           _isLoading = false;
         });
       }
@@ -464,12 +533,12 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                     IconButton(
                       onPressed: () => setState(() => _isEditing = true),
                       icon: const Icon(Icons.edit),
-                      tooltip: 'Bearbeiten',
+                      tooltip: 'Edit',
                     ),
                     IconButton(
                       onPressed: _deleteLog,
                       icon: const Icon(Icons.delete, color: Colors.red),
-                      tooltip: 'Löschen',
+                      tooltip: 'Delete',
                     ),
                   ],
                   IconButton(
@@ -489,35 +558,76 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                   children: [
                     // Image section
                     if (widget.log.imageUrl != null || _selectedImage != null || _selectedImageUrl != null) ...[
-                      Container(
-                        height: 300,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: _selectedImage != null || _selectedImageUrl != null
-                              ? (kIsWeb && _selectedImageUrl != null
-                                  ? Image.network(
-                                      _selectedImageUrl!,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return _buildImageErrorWidget();
-                                      },
-                                    )
-                                  : Image.file(
-                                      _selectedImage!,
-                                      fit: BoxFit.cover,
-                                    ))
-                              : Image.network(
-                                  widget.log.imageUrl!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return _buildImageErrorWidget();
-                                  },
+                      GestureDetector(
+                        onTap: () {
+                          // Determine which image to show (URL or file)
+                          if (_selectedImage != null) {
+                            _showFullscreenImage(imageFile: _selectedImage);
+                          } else if (_selectedImageUrl != null) {
+                            _showFullscreenImage(imageUrl: _selectedImageUrl);
+                          } else if (widget.log.imageUrl != null) {
+                            _showFullscreenImage(imageUrl: widget.log.imageUrl);
+                          }
+                        },
+                        child: Container(
+                          height: 300,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                          ),
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: _selectedImage != null || _selectedImageUrl != null
+                                    ? (kIsWeb && _selectedImageUrl != null
+                                        ? OptimizedImage(
+                                            imageUrl: _selectedImageUrl!,
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: 300,
+                                            memCacheWidth: 800,
+                                            memCacheHeight: 600,
+                                            borderRadius: BorderRadius.circular(12),
+                                            errorWidget: _buildImageErrorWidget(),
+                                          )
+                                        : Image.file(
+                                            _selectedImage!,
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          ))
+                                    : OptimizedImage(
+                                        imageUrl: widget.log.imageUrl!,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: 300,
+                                        memCacheWidth: 800,
+                                        memCacheHeight: 600,
+                                        borderRadius: BorderRadius.circular(12),
+                                        errorWidget: _buildImageErrorWidget(),
+                                      ),
+                              ),
+                              // Overlay icon to indicate clickability
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.fullscreen,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -531,7 +641,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                             child: OutlinedButton.icon(
                               onPressed: _pickImage,
                               icon: const Icon(Icons.photo_library),
-                              label: const Text('Bild ändern'),
+                              label: const Text('Change Image'),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -544,7 +654,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                                 });
                               },
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              label: const Text('Bild entfernen', style: TextStyle(color: Colors.red)),
+                              label: const Text('Remove Image', style: TextStyle(color: Colors.red)),
                             ),
                           ),
                         ],
@@ -707,6 +817,9 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
             TextField(
               controller: controller,
               keyboardType: keyboardType,
+              autofillHints: const [],
+              enableSuggestions: false,
+              autocorrect: false,
               maxLines: maxLines ?? 1,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
@@ -764,7 +877,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
             ),
             SizedBox(height: 8),
             Text(
-              'Bild nicht verfügbar',
+              'Image not available',
               style: TextStyle(color: Colors.grey),
             ),
           ],

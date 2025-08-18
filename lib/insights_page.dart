@@ -5,6 +5,7 @@ import 'services/life_areas_service.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'utils/app_theme.dart';
 import 'utils/logging_service.dart';
+import 'utils/parsed_activity_data.dart';
 
 class InsightsPage extends StatefulWidget {
   const InsightsPage({super.key});
@@ -58,6 +59,7 @@ class _InsightsPageState extends State<InsightsPage> {
             earned_xp,
             occurred_at,
             template_id,
+            image_url,
             action_templates (
               name,
               category
@@ -83,35 +85,43 @@ class _InsightsPageState extends State<InsightsPage> {
     
     setState(() {
       _filteredActivities = _activities.where((activity) {
+        // Parse notes data to get meaningful content
+        final notesData = _parseNotesData(activity['notes']);
+        
         // Text search in title and notes
         bool matchesText = true;
         if (query.isNotEmpty) {
-          final notes = (activity['notes'] ?? '').toString().toLowerCase();
           final templateName = (activity['action_templates']?['name'] ?? '').toString().toLowerCase();
+          final notesTitle = notesData['title'].toString().toLowerCase();
+          final notesText = notesData['plainText'].toString().toLowerCase();
           
           // Split query into words for partial matching
           final queryWords = query.split(' ').where((word) => word.isNotEmpty);
           
           matchesText = queryWords.every((word) =>
-            notes.contains(word) || 
-            templateName.contains(word)
+            templateName.contains(word) || 
+            notesTitle.contains(word) ||
+            notesText.contains(word)
           );
         }
         
-        // Life area filter (based on template category)
+        // Life area filter
         bool matchesLifeArea = true;
         if (_selectedLifeArea != null && _selectedLifeArea!.isNotEmpty) {
-          final templateCategory = activity['action_templates']?['category'] ?? '';
-          // Match by category name (which corresponds to life area names)
-          matchesLifeArea = templateCategory == _selectedLifeArea;
+          matchesLifeArea = _activityMatchesLifeArea(activity, _selectedLifeArea!);
         }
         
         // Date filter
         bool matchesDate = true;
         if (_selectedDateRange != null) {
-          final activityDate = DateTime.parse(activity['occurred_at']);
-          matchesDate = activityDate.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) &&
-                       activityDate.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
+          final activityDateTime = DateTime.parse(activity['occurred_at']);
+          // Convert to date only (ignore time) for comparison
+          final activityDate = DateTime(activityDateTime.year, activityDateTime.month, activityDateTime.day);
+          final startDate = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
+          final endDate = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
+          
+          // Check if activity date is within the selected range (inclusive)
+          matchesDate = !activityDate.isBefore(startDate) && !activityDate.isAfter(endDate);
         }
         
         return matchesText && matchesLifeArea && matchesDate;
@@ -159,6 +169,82 @@ class _InsightsPageState extends State<InsightsPage> {
     _performSearch();
   }
 
+  // Helper method to check if an activity matches a selected life area
+  bool _activityMatchesLifeArea(Map<String, dynamic> activity, String selectedAreaName) {
+    final notesData = _parseNotesData(activity['notes']);
+    final notesCategory = notesData['category'].toString();
+    final templateCategory = activity['action_templates']?['category'] ?? '';
+    final categoryToCheck = notesCategory.isNotEmpty ? notesCategory : templateCategory;
+    
+    // Direct match with category name
+    if (categoryToCheck == selectedAreaName) {
+      return true;
+    }
+    
+    // Find the selected life area and check if its category matches
+    for (final area in _lifeAreas) {
+      if (area.name == selectedAreaName) {
+        // Check if the activity's category matches this area's category or name
+        return area.category.toLowerCase() == categoryToCheck.toLowerCase() ||
+               area.name.toLowerCase() == categoryToCheck.toLowerCase();
+      }
+    }
+    
+    return false;
+  }
+
+  // Helper method to parse color strings safely
+  Color _parseColor(String colorString) {
+    try {
+      String colorHex = colorString;
+      // Handle different hex color formats
+      if (colorHex.startsWith('#')) {
+        colorHex = colorHex.substring(1);
+      }
+      if (colorHex.length == 6) {
+        colorHex = 'FF$colorHex'; // Add alpha if missing
+      }
+      return Color(int.parse(colorHex, radix: 16));
+    } catch (e) {
+      return AppTheme.primaryColor; // Fallback color
+    }
+  }
+
+  // Helper method to format dates in a user-friendly way
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final activityDate = DateTime(date.year, date.month, date.day);
+    
+    if (activityDate == today) {
+      return 'Today';
+    } else if (activityDate == yesterday) {
+      return 'Yesterday';
+    } else if (now.difference(date).inDays < 7) {
+      // Show day of week for recent dates
+      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[date.weekday - 1];
+    } else if (date.year == now.year) {
+      // Same year, show month and day
+      return '${date.day}/${date.month}';
+    } else {
+      // Different year, show full date
+      return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
+  // Helper method to parse notes JSON and extract meaningful data
+  Map<String, dynamic> _parseNotesData(String? notesJson) {
+    final parsed = ParsedActivityData.fromNotes(notesJson);
+    return {
+      'title': parsed.title ?? '',
+      'area': parsed.area ?? '',
+      'category': parsed.category ?? '',
+      'plainText': parsed.plainText ?? '',
+    };
+  }
+
   void _showActivityDetails(Map<String, dynamic> activity) {
     // Convert the map to ActionLog format for compatibility
     final actionLog = ActionLog(
@@ -169,6 +255,7 @@ class _InsightsPageState extends State<InsightsPage> {
       earnedXp: activity['earned_xp'] ?? 0,
       templateId: activity['template_id'],
       activityName: null, // This field doesn't exist in action_logs table
+      imageUrl: activity['image_url'],
     );
     
     showDialog(
@@ -266,7 +353,7 @@ class _InsightsPageState extends State<InsightsPage> {
                                       width: 12,
                                       height: 12,
                                       decoration: BoxDecoration(
-                                        color: Color(int.parse(area.color.replaceAll('#', '0xFF'))),
+                                        color: _parseColor(area.color),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                     ),
@@ -365,13 +452,17 @@ class _InsightsPageState extends State<InsightsPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredActivities.isEmpty
                     ? _buildEmptyState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _filteredActivities.length,
-                        itemBuilder: (context, index) {
-                          final activity = _filteredActivities[index];
-                          return _buildActivityCard(activity);
-                        },
+                    : RepaintBoundary(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _filteredActivities.length,
+                          itemBuilder: (context, index) {
+                            final activity = _filteredActivities[index];
+                            return RepaintBoundary(
+                              child: _buildActivityCard(activity),
+                            );
+                          },
+                        ),
                       ),
           ),
         ],
@@ -383,31 +474,61 @@ class _InsightsPageState extends State<InsightsPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
+    final hasActiveFilters = _selectedLifeArea != null || 
+                            _selectedDateRange != null || 
+                            _searchController.text.isNotEmpty;
+    
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.search_off,
-            size: 64,
-            color: colorScheme.onSurface.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No insights found',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.6),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              hasActiveFilters ? Icons.filter_alt_off : Icons.insights_outlined,
+              size: 72,
+              color: colorScheme.onSurface.withValues(alpha: 0.3),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Try adjusting your search terms or filters',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.5),
+            const SizedBox(height: 24),
+            Text(
+              hasActiveFilters 
+                  ? 'No matching activities found'
+                  : 'No activity insights yet',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: colorScheme.onSurface.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              hasActiveFilters
+                  ? 'Try adjusting your search terms or filters to find more activities'
+                  : 'Start logging activities to see your insights here.\nYour journey begins with a single step!',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (hasActiveFilters) ...[
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _selectedLifeArea = null;
+                    _selectedDateRange = null;
+                    _searchController.clear();
+                  });
+                  _performSearch();
+                },
+                icon: const Icon(Icons.clear_all),
+                label: const Text('Clear all filters'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -418,16 +539,67 @@ class _InsightsPageState extends State<InsightsPage> {
     
     final occurredAt = DateTime.parse(activity['occurred_at']);
     final templateName = activity['action_templates']?['name'] ?? '';
-    final title = templateName;
-    final notes = activity['notes'] ?? '';
-    final categoryName = activity['action_templates']?['category'] ?? '';
     
-    // Find the color for this category from life areas
+    // Parse notes data to get meaningful content
+    final notesData = _parseNotesData(activity['notes']);
+    
+    // Use parsed title if available, otherwise template name
+    final title = notesData['title'].toString().isNotEmpty 
+        ? notesData['title'].toString()
+        : templateName;
+    
+    // Use parsed plain text for notes display
+    final notes = notesData['plainText'].toString();
+    
+    // Use parsed category if available, otherwise template category
+    final notesCategory = notesData['category'].toString();
+    final templateCategory = activity['action_templates']?['category'] ?? '';
+    final categoryName = notesCategory.isNotEmpty ? notesCategory : templateCategory;
+    
+    // Find the color and display name for this category from life areas
     Color categoryColor = AppTheme.primaryColor;
-    for (final area in _lifeAreas) {
-      if (area.name == categoryName) {
-        categoryColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
-        break;
+    String displayName = categoryName.isNotEmpty ? categoryName : 'General';
+    
+    if (categoryName.isNotEmpty) {
+      // Map common category names to life area names
+      final categoryMapping = {
+        'creativity': 'Creativity',
+        'development': 'Development', 
+        'learning': 'Learning',
+        'art': 'Art',
+        'fitness': 'Fitness',
+        'health': 'Health',
+        'work': 'Work',
+        'social': 'Social',
+        'family': 'Family',
+        'general': 'General',
+      };
+      
+      // Normalize category name
+      final normalizedCategory = categoryMapping[categoryName.toLowerCase()] ?? categoryName;
+      
+      // Try exact match first
+      for (final area in _lifeAreas) {
+        if (area.name == normalizedCategory || area.category == normalizedCategory ||
+            area.name == categoryName || area.category == categoryName) {
+          categoryColor = _parseColor(area.color);
+          displayName = area.name; // Use the life area name for display
+          break;
+        }
+      }
+      
+      // If no exact match found, try case-insensitive match
+      if (categoryColor == AppTheme.primaryColor) {
+        for (final area in _lifeAreas) {
+          if (area.name.toLowerCase() == normalizedCategory.toLowerCase() || 
+              area.category.toLowerCase() == normalizedCategory.toLowerCase() ||
+              area.name.toLowerCase() == categoryName.toLowerCase() || 
+              area.category.toLowerCase() == categoryName.toLowerCase()) {
+            categoryColor = _parseColor(area.color);
+            displayName = area.name; // Use the life area name for display
+            break;
+          }
+        }
       }
     }
     
@@ -454,7 +626,7 @@ class _InsightsPageState extends State<InsightsPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    categoryName.isNotEmpty ? categoryName : 'General',
+                    displayName,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: categoryColor,
                       fontWeight: FontWeight.w500,
@@ -462,7 +634,7 @@ class _InsightsPageState extends State<InsightsPage> {
                   ),
                   const Spacer(),
                   Text(
-                    '${occurredAt.day}/${occurredAt.month}/${occurredAt.year}',
+                    _formatDate(occurredAt),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
@@ -474,9 +646,10 @@ class _InsightsPageState extends State<InsightsPage> {
               
               // Title
               Text(
-                title,
+                title.isNotEmpty ? title : 'Untitled Activity',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
+                  color: title.isEmpty ? colorScheme.onSurface.withValues(alpha: 0.5) : null,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -492,6 +665,15 @@ class _InsightsPageState extends State<InsightsPage> {
                   ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
+                ),
+              ] else ...[
+                const SizedBox(height: 8),
+                Text(
+                  'No additional notes',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurface.withValues(alpha: 0.4),
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
               

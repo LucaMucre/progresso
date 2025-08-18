@@ -425,7 +425,7 @@ class _LogActionPageState extends State<LogActionPage> {
   }) {
     final theme = Theme.of(context);
     final Color stripeColor = (accentColor ?? theme.colorScheme.primary).withAlpha(140);
-    final Color bgColor = theme.colorScheme.surfaceContainerHighest;
+    final Color bgColor = theme.colorScheme.surface;
 
     return Container(
       decoration: BoxDecoration(
@@ -505,20 +505,24 @@ class _LogActionPageState extends State<LogActionPage> {
       hintText: hint,
       prefixIcon: Icon(icon, color: focusColor.withAlpha(204)),
       filled: true,
-      fillColor: theme.colorScheme.surfaceContainerHighest,
+      fillColor: theme.colorScheme.surface,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: focusColor.withValues(alpha: 0.8), width: 1.6),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: focusColor, width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      hintStyle: TextStyle(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        fontSize: 16,
+      ),
     );
   }
 
@@ -692,12 +696,12 @@ class _LogActionPageState extends State<LogActionPage> {
                     TextField(
                       controller: _activityNameCtrl,
                       autocorrect: false,
-                      enableSuggestions: false,
                       autofillHints: const [],
+                      enableSuggestions: false,
                       keyboardType: TextInputType.text,
                       textInputAction: TextInputAction.next,
                       decoration: _buildInputDecoration(
-                        hint: 'z. B. Laufen, Lesen, Meditation...',
+                        hint: 'e.g. Running, Reading, Meditation...',
                         icon: Icons.task_alt,
                         accentColor: accent,
                       ),
@@ -718,12 +722,12 @@ class _LogActionPageState extends State<LogActionPage> {
                   TextField(
                     controller: _durationCtrl,
                     keyboardType: TextInputType.number,
-                    autocorrect: false,
-                    enableSuggestions: false,
                     autofillHints: const [],
+                    enableSuggestions: false,
+                    autocorrect: false,
                     textInputAction: TextInputAction.done,
                     inputFormatters: const [],
-                    decoration: _buildInputDecoration(hint: 'z. B. 45', icon: Icons.timer_outlined, accentColor: accent),
+                    decoration: _buildInputDecoration(hint: 'e.g. 45', icon: Icons.timer_outlined, accentColor: accent),
                   ),
                 ],
               ),
@@ -768,7 +772,7 @@ class _LogActionPageState extends State<LogActionPage> {
                         child: quill.QuillEditor.basic(
                           controller: _quillCtrl,
                           config: const quill.QuillEditorConfig(
-                            placeholder: 'Deine Gedanken…',
+                            placeholder: 'Your thoughts…',
                             padding: EdgeInsets.all(12),
                           ),
                         ),

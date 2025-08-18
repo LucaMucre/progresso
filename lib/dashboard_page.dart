@@ -16,6 +16,8 @@ import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
 import 'models/action_models.dart' as models;
 import 'services/achievement_service.dart';
+import 'utils/parsed_activity_data.dart';
+import 'widgets/optimized_image.dart';
 import 'navigation.dart';
 import 'dashboard/widgets/calendar_header.dart';
 import 'dashboard/widgets/calendar_grid.dart';
@@ -297,16 +299,22 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final user = client.auth.currentUser;
     if (user == null) return;
 
-    // Fetch data (sequential for compatibility)
-    final logs = await _fetchLogsForDay(day);
-    final templatesRes = await client
+    // Fetch data in parallel for better performance
+    final results = await Future.wait<dynamic>([
+      _fetchLogsForDay(day),
+      client
         .from('action_templates')
         .select('id,name,category')
-        .eq('user_id', user.id);
-    final lifeAreasRes = await client
+        .eq('user_id', user.id),
+      client
         .from('life_areas')
         .select('name,category,color')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id),
+    ]);
+    
+    final logs = results[0] as List<ActionLog>;
+    final templatesRes = results[1] as List<dynamic>;
+    final lifeAreasRes = results[2] as List<dynamic>;
 
     final templateMap = {
       for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
@@ -332,22 +340,26 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       if (log.activityName != null && log.activityName!.trim().isNotEmpty) {
         return log.activityName!.trim();
       }
-      final fromNotes = extractTitleFromNotes(log.notes);
-      if (fromNotes != null && fromNotes.trim().isNotEmpty) return fromNotes.trim();
+      
+      // Use parsed data instead of re-parsing JSON
+      final parsed = ParsedActivityData.fromNotes(log.notes);
+      final title = parsed.displayTitle;
+      if (title != 'Activity') return title;
+      
       if (log.templateId != null && templateMap[log.templateId!] != null) {
         return templateMap[log.templateId!]!;
       }
-              return 'Activity';
+      return 'Activity';
     }
 
     Color? tagColorForLog(ActionLog log) {
       try {
         if (log.notes != null && log.notes!.isNotEmpty) {
-          final obj = jsonDecode(log.notes!);
-          if (obj is Map<String, dynamic>) {
-            final areaName = LifeAreasService.canonicalAreaName(obj['area'] as String?);
-            final lifeArea = LifeAreasService.canonicalAreaName(obj['life_area'] as String?);
-            final category = LifeAreasService.canonicalCategory(obj['category'] as String?);
+          final parsed = ParsedActivityData.fromNotes(log.notes);
+          if (parsed.isValid) {
+            final areaName = LifeAreasService.canonicalAreaName(parsed.area);
+            final lifeArea = LifeAreasService.canonicalAreaName(parsed.lifeArea);
+            final category = LifeAreasService.canonicalCategory(parsed.category);
             
             // Verwende den präzisesten verfügbaren Area-Namen für Match
             final effectiveAreaName = areaName.isNotEmpty ? areaName : lifeArea;
@@ -890,8 +902,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           ),
           const SizedBox(height: 16),
           
-          // Table with all activities
-          FutureBuilder<List<List>>(
+          // Table with all activities - wrapped in RepaintBoundary for performance
+          RepaintBoundary(
+            child: FutureBuilder<List<List>>(
             future: Future.wait([_loadAllActivities(), _lifeAreasFuture ?? _loadLifeAreas()]),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -952,6 +965,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               
               return _buildActivitiesTable(activities, lifeAreas);
             },
+            ),
           ),
         ],
       ),
@@ -1074,27 +1088,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 final activity = activities[index];
                 final isEven = index % 2 == 0;
                 
-                // Extract activity name from activity_name field or notes
+                // Extract activity name from activity_name field or notes - optimized parsing
                 String activityName = activity['activity_name'] as String? ?? '';
                 if (activityName.isEmpty) {
-                  // Try to extract title from notes JSON
-                  final notes = activity['notes'] as String?;
-                  if (notes != null && notes.trim().isNotEmpty) {
-                    try {
-                      final obj = jsonDecode(notes);
-                      if (obj is Map<String, dynamic>) {
-                        final title = obj['title'] as String?;
-                        if (title != null && title.trim().isNotEmpty) {
-                          activityName = title.trim();
-                        }
-                      }
-                    } catch (_) {
-                      // If JSON parsing fails, use first line of notes
-                      activityName = notes.split('\n').first.trim();
-                    }
-                  }
+                  final parsed = ParsedActivityData.fromNotes(activity['notes'] as String?);
+                  activityName = parsed.displayTitle;
                 }
-                if (activityName.isEmpty) activityName = 'Activity';
                 final imageUrl = activity['image_url'] as String?;
                 final occurredAt = DateTime.parse(activity['occurred_at'] as String);
                 final durationMin = activity['duration_min'] as int?;
@@ -1103,22 +1102,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 String areaName = 'Activity';
                 String areaColor = '#6366f1';
                 
-                // Extract life area information from notes
-                final notes = activity['notes'] as String?;
-                String? extractedArea;
-                String? extractedCategory;
-                
-                if (notes != null && notes.trim().isNotEmpty) {
-                  try {
-                    final obj = jsonDecode(notes);
-                    if (obj is Map<String, dynamic>) {
-                      extractedArea = obj['area'] as String?;
-                      extractedCategory = obj['category'] as String?;
-                    }
-                  } catch (_) {
-                    // If JSON parsing fails, keep default values
-                  }
-                }
+                // Extract life area information from notes - optimized parsing
+                final parsed = ParsedActivityData.fromNotes(activity['notes'] as String?);
+                final extractedArea = parsed.effectiveAreaName;
+                final extractedCategory = parsed.category;
                 
                 // Convert LifeAreas to AreaTags for matching
                 final areaTags = lifeAreas.map((la) => _AreaTag(
@@ -1132,18 +1119,45 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 if (matchedArea != null) {
                   areaName = matchedArea.name;
                   areaColor = '#${matchedArea.color.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
-                } else if (extractedArea != null && extractedArea.trim().isNotEmpty) {
-                  areaName = extractedArea.trim();
+                } else if (extractedArea.isNotEmpty) {
+                  areaName = extractedArea;
                 } else if (extractedCategory != null && extractedCategory.trim().isNotEmpty) {
                   areaName = extractedCategory.trim();
                 }
                 
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isEven ? Colors.grey[50] : Colors.white,
-                  ),
-                  child: Row(
+                return InkWell(
+                  onTap: () {
+                    // Convert activity data to ActionLog and show details dialog
+                    final actionLog = models.ActionLog(
+                      id: activity['id'].toString(),
+                      occurredAt: occurredAt,
+                      durationMin: durationMin,
+                      notes: activity['notes'] as String?,
+                      earnedXp: activity['earned_xp'] as int? ?? 0,
+                      templateId: activity['template_id'] as String?,
+                      activityName: activity['activity_name'] as String?,
+                      imageUrl: imageUrl,
+                    );
+                    
+                    showDialog(
+                      context: context,
+                      builder: (_) => ActivityDetailsDialog(
+                        log: actionLog,
+                        onUpdate: () {
+                          // Refresh the activities when updated
+                          setState(() {
+                            // Force rebuild to refresh the activity table
+                          });
+                        },
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isEven ? Colors.grey[50] : Colors.white,
+                    ),
+                    child: Row(
                     children: [
                       // Activity Name
                       Expanded(
@@ -1157,10 +1171,15 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 margin: const EdgeInsets.only(right: 8),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
-                                  image: DecorationImage(
-                                    image: NetworkImage(imageUrl),
-                                    fit: BoxFit.cover,
-                                  ),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: OptimizedImage(
+                                  imageUrl: imageUrl,
+                                  width: 32,
+                                  height: 32,
+                                  fit: BoxFit.cover,
+                                  memCacheWidth: 64,
+                                  memCacheHeight: 64,
                                 ),
                               ),
                             Flexible(
@@ -1215,6 +1234,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         ),
                       ),
                     ],
+                    ),
                   ),
                 );
               },
@@ -1623,23 +1643,28 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             ],
           ),
           const SizedBox(height: 8),
-          Consumer(
-            builder: (context, ref, _) {
-              final logsAsync = ref.watch(logsNotifierProvider);
-              return logsAsync.when(
-                loading: () {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                },
-                error: (e, st) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: Text('Error loading calendar')),
-                  );
-                },
-                data: (logs) {
+          FutureBuilder<List<LifeArea>>(
+            future: _lifeAreasFuture,
+            builder: (context, areasSnapshot) {
+              final areas = areasSnapshot.data ?? const <LifeArea>[];
+              
+              return Consumer(
+                builder: (context, ref, _) {
+                  final logsAsync = ref.watch(logsNotifierProvider);
+                  return logsAsync.when(
+                    loading: () {
+                      return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    },
+                    error: (e, st) {
+                      return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: Text('Error loading calendar')),
+                      );
+                    },
+                    data: (logs) {
                   final data = <DateTime, List<_DayEntry>>{};
                   for (final l in logs) {
                     final d = l.occurredAt.toLocal();
@@ -1663,61 +1688,54 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       if (l.notes != null && l.notes!.isNotEmpty) {
                         final obj = jsonDecode(l.notes!);
                         if (obj is Map<String, dynamic>) {
-                          final area = (obj['area'] as String?)?.toLowerCase();
-                          final cat = (obj['category'] as String?)?.toLowerCase();
+                          final area = obj['area'] as String?;
+                          final cat = obj['category'] as String?;
 
-                          // Prefer area-specific color when available
-                          switch (area) {
-                            case 'spirituality':
-                              color = const Color(0xFF6B7280); // Gray - match actual life area color
-                              break;
-                            case 'finance':
-                              color = const Color(0xFFF59E0B); // Yellow/Amber
-                              break;
-                            case 'career':
-                              color = const Color(0xFF92400E); // Brown - match actual life area color
-                              break;
-                            case 'learning':
-                              color = const Color(0xFF3B82F6); // Light Blue
-                              break;
-                            case 'health':
-                              color = const Color(0xFF22C55E); // Green
-                              break;
-                            case 'fitness':
-                              color = const Color(0xFFF97316); // Orange
-                              break;
-                          }
-
-                          // Fallback to category if area not mapped
-                          if (color == null) {
-                            switch (cat) {
-                              case 'health':
-                                color = const Color(0xFF22C55E); // Green
-                                break;
-                              case 'work':
-                                color = const Color(0xFF92400E); // Brown - match career color
-                                break;
-                              case 'finance':
-                                color = const Color(0xFFF59E0B); // Yellow/Amber - same as area finance
-                                break;
-                              case 'social':
-                                color = const Color(0xFFEC4899); // Pink
-                                break;
-                              case 'inner':
-                                color = const Color(0xFF6B7280); // Gray - match spirituality color
-                                break;
-                              case 'development':
-                                color = const Color(0xFF3B82F6); // Light Blue
-                                break;
-                              case 'creativity':
-                                color = const Color(0xFFF97316); // Orange
-                                break;
-                              case 'fitness':
-                                color = const Color(0xFFF97316); // Orange
-                                break;
-                              default:
-                                color = const Color(0xFF9CA3AF); // Neutral gray
+                          // Try to match with actual life areas first
+                          if (area != null) {
+                            for (final lifeArea in areas) {
+                              if (lifeArea.name.toLowerCase() == area.toLowerCase()) {
+                                try {
+                                  String colorHex = lifeArea.color;
+                                  if (colorHex.startsWith('#')) {
+                                    colorHex = colorHex.substring(1);
+                                  }
+                                  if (colorHex.length == 6) {
+                                    colorHex = 'FF$colorHex';
+                                  }
+                                  color = Color(int.parse(colorHex, radix: 16));
+                                  break;
+                                } catch (e) {
+                                  // Fallback to category matching if color parsing fails
+                                }
+                              }
                             }
+                          }
+                          
+                          // Fallback to category matching if area not found
+                          if (color == null && cat != null) {
+                            for (final lifeArea in areas) {
+                              if (lifeArea.category.toLowerCase() == cat.toLowerCase()) {
+                                try {
+                                  String colorHex = lifeArea.color;
+                                  if (colorHex.startsWith('#')) {
+                                    colorHex = colorHex.substring(1);
+                                  }
+                                  if (colorHex.length == 6) {
+                                    colorHex = 'FF$colorHex';
+                                  }
+                                  color = Color(int.parse(colorHex, radix: 16));
+                                  break;
+                                } catch (e) {
+                                  // Continue to next area
+                                }
+                              }
+                            }
+                          }
+                          
+                          // Final fallback to default color
+                          if (color == null) {
+                            color = const Color(0xFF9CA3AF); // Neutral gray
                           }
                         }
                       }
@@ -1730,27 +1748,37 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   data.forEach((k, v) {
                     mapped[k] = v.map((e) => CalendarDayEntry(title: e.title, color: e.color)).toList();
                   });
-                  // Dominante Farbe je Tag direkt aus den Einträgen ableiten (nutzt Nutzerfarben)
+                  // Dominante Farbe je Tag basierend auf kumulierter Zeit ableiten (nutzt Nutzerfarben)
                   final Map<DateTime, Color> dominant = {};
-                  mapped.forEach((day, entries) {
-                    final counts = <int, int>{};
-                    for (final e in entries) {
+                  data.forEach((day, dayEntries) {
+                    final durationByColor = <int, int>{}; // color value -> total duration in minutes
+                    for (final e in dayEntries) {
                       final c = e.color?.value;
                       if (c == null) continue;
-                      counts[c] = (counts[c] ?? 0) + 1;
+                      final duration = e.durationMin ?? 1; // fallback to 1 minute if no duration
+                      durationByColor[c] = (durationByColor[c] ?? 0) + duration;
                     }
-                    if (counts.isNotEmpty) {
-                      int best = counts.entries.first.key;
-                      int bestCount = 0;
-                      counts.forEach((k,v){ if (v > bestCount) { bestCount = v; best = k; } });
-                      dominant[day] = Color(best);
+                    if (durationByColor.isNotEmpty) {
+                      int bestColor = durationByColor.entries.first.key;
+                      int bestDuration = 0;
+                      durationByColor.forEach((color, duration) { 
+                        if (duration > bestDuration) { 
+                          bestDuration = duration; 
+                          bestColor = color; 
+                        } 
+                      });
+                      dominant[day] = Color(bestColor);
                     }
                   });
-                  return CalendarGrid(
-                    month: _calendarMonth,
-                    dayEntries: mapped,
-                    dayDominantColors: dominant.isEmpty ? null : dominant,
-                    onOpenDay: _openDayDetails,
+                      return RepaintBoundary(
+                        child: CalendarGrid(
+                          month: _calendarMonth,
+                          dayEntries: mapped,
+                          dayDominantColors: dominant.isEmpty ? null : dominant,
+                          onOpenDay: _openDayDetails,
+                        ),
+                      );
+                    },
                   );
                 },
               );

@@ -548,7 +548,7 @@ class _BubblesGridState extends State<BubblesGrid> {
             children: [
               Icon(Icons.delete, size: 20, color: Colors.red),
               SizedBox(width: 8),
-              Text('Löschen', style: TextStyle(color: Colors.red)),
+              Text('Delete', style: TextStyle(color: Colors.red)),
             ],
           ),
         ),

@@ -3,6 +3,7 @@ import 'dashboard_page.dart';
 import 'l10n/app_localizations.dart';
 import 'life_area_selection_page.dart';
 import 'insights_page.dart';
+import 'statistics_page.dart';
 // import 'chat_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart';
@@ -43,7 +44,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onExternalProfileRefresh() {
     if (!mounted) return;
     setState(() {
-      _currentIndex = 3; // Profile is now at index 3
+      _currentIndex = 4; // Profile is now at index 4 (after adding Statistics)
     });
   }
 
@@ -61,6 +62,7 @@ class _HomeShellState extends State<HomeShell> {
             DashboardPage(),
             LifeAreaSelectionPage(),
             InsightsPage(),
+            StatisticsPage(),
             ProfilePage(),
             SettingsPage(),
           ],
@@ -80,6 +82,7 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: t?.navDashboard ?? 'Dashboard'),
             NavigationDestination(icon: const Icon(Icons.add_circle_outline), selectedIcon: const Icon(Icons.add_circle), label: t?.navLog ?? 'Log'),
             NavigationDestination(icon: const Icon(Icons.lightbulb_outline), selectedIcon: const Icon(Icons.lightbulb), label: 'Insights'),
+            NavigationDestination(icon: const Icon(Icons.analytics_outlined), selectedIcon: const Icon(Icons.analytics), label: 'Statistics'),
             NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: t?.navProfile ?? 'Profile'),
             NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: t?.navSettings ?? 'Settings'),
           ],

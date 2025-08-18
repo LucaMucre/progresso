@@ -71,8 +71,10 @@ class _CalendarGridState extends State<CalendarGrid> {
       Color? dominantColor = widget.dayDominantColors != null
           ? widget.dayDominantColors![key]
           : _dominantColorCache[key];
-      // If not provided, compute locally (memoized)
+      // If not provided, compute locally (memoized) - fallback logic
       if (dominantColor == null && entries.isNotEmpty) {
+        // Note: CalendarDayEntry doesn't have duration info, so fallback to count-based logic
+        // The main logic should use dayDominantColors from dashboard_page.dart
         final Map<int, int> colorCounts = {};
         for (final e in entries) {
           final color = (e.color ?? Theme.of(context).colorScheme.primary).value;

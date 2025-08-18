@@ -1,0 +1,1051 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'dart:math' as math;
+import 'models/action_models.dart';
+import 'services/life_areas_service.dart';
+import 'utils/app_theme.dart';
+import 'utils/parsed_activity_data.dart';
+
+enum DateFilter {
+  week7(days: 7, label: '7 Days'),
+  month30(days: 30, label: '30 Days'), 
+  month90(days: 90, label: '3 Months'),
+  year365(days: 365, label: '1 Year'),
+  all(days: null, label: 'All Time');
+
+  const DateFilter({required this.days, required this.label});
+  final int? days;
+  final String label;
+}
+
+class StatisticsPage extends ConsumerStatefulWidget {
+  const StatisticsPage({super.key});
+
+  @override
+  ConsumerState<StatisticsPage> createState() => _StatisticsPageState();
+}
+
+class _StatisticsPageState extends ConsumerState<StatisticsPage> {
+  DateFilter _selectedDateFilter = DateFilter.month30;
+  List<String> _selectedLifeAreas = [];
+  
+  List<ActionLog> _activities = [];
+  List<LifeArea> _lifeAreas = [];
+  bool _isLoading = true;
+  bool _isFilterLoading = false;
+  
+  // Statistics data
+  Map<String, dynamic> _stats = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      // Load life areas and activities in parallel
+      final results = await Future.wait([
+        _loadLifeAreas(),
+        _loadActivities(),
+      ]);
+      
+      _lifeAreas = results[0] as List<LifeArea>;
+      _activities = results[1] as List<ActionLog>;
+      
+      _calculateStatistics();
+    } catch (e) {
+      debugPrint('Error loading statistics data: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<List<LifeArea>> _loadLifeAreas() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return [];
+
+      final response = await client
+          .from('life_areas')
+          .select('*')
+          .eq('user_id', user.id);
+
+      return (response as List)
+          .map((item) => LifeArea.fromJson(item))
+          .toList();
+    } catch (e) {
+      debugPrint('Error loading life areas: $e');
+      return [];
+    }
+  }
+
+  Future<List<ActionLog>> _loadActivities() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return [];
+
+      var query = client
+          .from('action_logs')
+          .select('*')
+          .eq('user_id', user.id);
+
+      // Apply date filter
+      if (_selectedDateFilter.days != null) {
+        final cutoffDate = DateTime.now().subtract(Duration(days: _selectedDateFilter.days!));
+        query = query.gte('occurred_at', cutoffDate.toIso8601String());
+      }
+
+      final response = await query.order('occurred_at', ascending: false);
+      final activities = (response as List)
+          .map((item) => ActionLog.fromJson(item))
+          .toList();
+
+      // Apply life area filter if selected
+      if (_selectedLifeAreas.isNotEmpty) {
+        return activities.where((activity) {
+          final parsed = ParsedActivityData.fromNotes(activity.notes);
+          final area = parsed.effectiveAreaName.toLowerCase();
+          return _selectedLifeAreas.any((selected) => selected.toLowerCase() == area);
+        }).toList();
+      }
+
+      return activities;
+    } catch (e) {
+      debugPrint('Error loading activities: $e');
+      return [];
+    }
+  }
+
+  void _calculateStatistics() {
+    if (_activities.isEmpty) {
+      _stats = {};
+      return;
+    }
+
+    final now = DateTime.now();
+    final startDate = _selectedDateFilter.days != null
+        ? now.subtract(Duration(days: _selectedDateFilter.days!))
+        : _activities.last.occurredAt;
+
+    // Basic stats
+    final totalActivities = _activities.length;
+    final totalXP = _activities.fold<int>(0, (sum, activity) => sum + activity.earnedXp);
+    final totalMinutes = _activities.fold<int>(0, (sum, activity) => sum + (activity.durationMin ?? 0));
+    final avgXpPerDay = _selectedDateFilter.days != null 
+        ? totalXP / _selectedDateFilter.days! 
+        : totalXP / (now.difference(startDate).inDays + 1);
+
+    // Life areas distribution
+    final lifeAreasData = <String, Map<String, dynamic>>{};
+    for (final activity in _activities) {
+      final parsed = ParsedActivityData.fromNotes(activity.notes);
+      final areaName = parsed.effectiveAreaName.isNotEmpty 
+          ? parsed.effectiveAreaName 
+          : 'Other';
+      
+      lifeAreasData[areaName] = {
+        'count': (lifeAreasData[areaName]?['count'] ?? 0) + 1,
+        'xp': (lifeAreasData[areaName]?['xp'] ?? 0) + activity.earnedXp,
+        'minutes': (lifeAreasData[areaName]?['minutes'] ?? 0) + (activity.durationMin ?? 0),
+        'color': _getColorForArea(areaName),
+      };
+    }
+
+    // Daily activity chart data
+    final dailyData = <DateTime, Map<String, int>>{};
+    for (final activity in _activities) {
+      final day = DateTime(activity.occurredAt.year, activity.occurredAt.month, activity.occurredAt.day);
+      dailyData[day] = {
+        'count': (dailyData[day]?['count'] ?? 0) + 1,
+        'xp': (dailyData[day]?['xp'] ?? 0) + activity.earnedXp,
+        'minutes': (dailyData[day]?['minutes'] ?? 0) + (activity.durationMin ?? 0),
+      };
+    }
+
+    // Weekly pattern (0 = Monday, 6 = Sunday)
+    final weeklyPattern = List.generate(7, (index) => 0);
+    for (final activity in _activities) {
+      final weekday = activity.occurredAt.weekday - 1; // Convert to 0-6
+      weeklyPattern[weekday]++;
+    }
+
+    // Hourly pattern
+    final hourlyPattern = List.generate(24, (index) => 0);
+    for (final activity in _activities) {
+      hourlyPattern[activity.occurredAt.hour]++;
+    }
+
+    // Current streak calculation
+    int currentStreak = 0;
+    final sortedDays = dailyData.keys.toList()..sort();
+    if (sortedDays.isNotEmpty) {
+      DateTime checkDate = DateTime.now();
+      checkDate = DateTime(checkDate.year, checkDate.month, checkDate.day);
+      
+      // Allow for today or yesterday to start the streak
+      if (!dailyData.containsKey(checkDate)) {
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      }
+      
+      while (dailyData.containsKey(checkDate)) {
+        currentStreak++;
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      }
+    }
+
+    _stats = {
+      'totalActivities': totalActivities,
+      'totalXP': totalXP,
+      'totalMinutes': totalMinutes,
+      'avgXpPerDay': avgXpPerDay,
+      'currentStreak': currentStreak,
+      'lifeAreasData': lifeAreasData,
+      'dailyData': dailyData,
+      'weeklyPattern': weeklyPattern,
+      'hourlyPattern': hourlyPattern,
+    };
+  }
+
+  Color _getColorForArea(String areaName) {
+    final area = _lifeAreas.firstWhere(
+      (area) => area.name.toLowerCase() == areaName.toLowerCase(),
+      orElse: () => LifeArea(
+        id: '', 
+        name: '', 
+        category: '', 
+        color: '#6366f1', 
+        userId: '', 
+        icon: '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        orderIndex: 0,
+      ),
+    );
+    
+    try {
+      return Color(int.parse(area.color.replaceAll('#', '0xFF')));
+    } catch (_) {
+      return AppTheme.primaryColor;
+    }
+  }
+
+  void _updateFilters() async {
+    if (_activities.isEmpty) {
+      _loadData();
+      return;
+    }
+    
+    setState(() => _isFilterLoading = true);
+    
+    try {
+      // Instead of reloading all data, just recalculate with existing activities
+      await _reloadActivitiesWithFilter();
+      _calculateStatistics();
+    } catch (e) {
+      debugPrint('Error updating filters: $e');
+    } finally {
+      setState(() => _isFilterLoading = false);
+    }
+  }
+
+  Future<void> _reloadActivitiesWithFilter() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      var query = client
+          .from('action_logs')
+          .select('*')
+          .eq('user_id', user.id);
+
+      // Apply date filter
+      if (_selectedDateFilter.days != null) {
+        final cutoffDate = DateTime.now().subtract(Duration(days: _selectedDateFilter.days!));
+        query = query.gte('occurred_at', cutoffDate.toIso8601String());
+      }
+
+      final response = await query.order('occurred_at', ascending: false);
+      final activities = (response as List)
+          .map((item) => ActionLog.fromJson(item))
+          .toList();
+
+      // Apply life area filter if selected
+      if (_selectedLifeAreas.isNotEmpty) {
+        _activities = activities.where((activity) {
+          final parsed = ParsedActivityData.fromNotes(activity.notes);
+          final area = parsed.effectiveAreaName.toLowerCase();
+          return _selectedLifeAreas.any((selected) => selected.toLowerCase() == area);
+        }).toList();
+      } else {
+        _activities = activities;
+      }
+    } catch (e) {
+      debugPrint('Error reloading activities: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      appBar: AppBar(
+        title: const Text(
+          'Statistics',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        elevation: 0,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                RefreshIndicator(
+              onRefresh: _loadData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFilters(),
+                    const SizedBox(height: 24),
+                    _buildOverviewCards(),
+                    const SizedBox(height: 24),
+                    _buildActivityTrendChart(),
+                    const SizedBox(height: 24),
+                    _buildLifeAreasChart(),
+                    const SizedBox(height: 24),
+                    _buildWeeklyPatternChart(),
+                    const SizedBox(height: 24),
+                    _buildHourlyHeatmap(),
+                    const SizedBox(height: 24),
+                    _buildTopActivities(),
+                  ],
+                ),
+              ),
+            ),
+                
+                // Filter loading overlay
+                if (_isFilterLoading)
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Updating...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildFilters() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Filters',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          
+          // Date filter
+          const Text('Time Period:', style: TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: DateFilter.values.map((filter) {
+              return FilterChip(
+                label: Text(filter.label),
+                selected: _selectedDateFilter == filter,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() => _selectedDateFilter = filter);
+                    _updateFilters();
+                  }
+                },
+              );
+            }).toList(),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Life areas filter
+          const Text('Life Areas:', style: TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          if (_lifeAreas.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              children: _lifeAreas.map((area) {
+                return FilterChip(
+                  label: Text(area.name),
+                  selected: _selectedLifeAreas.contains(area.name),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedLifeAreas.add(area.name);
+                      } else {
+                        _selectedLifeAreas.remove(area.name);
+                      }
+                    });
+                    _updateFilters();
+                  },
+                );
+              }).toList(),
+            ),
+          
+          if (_selectedLifeAreas.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                setState(() => _selectedLifeAreas.clear());
+                _updateFilters();
+              },
+              child: const Text('Clear all filters'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewCards() {
+    final totalActivities = _stats['totalActivities'] ?? 0;
+    final totalXP = _stats['totalXP'] ?? 0;
+    final totalMinutes = _stats['totalMinutes'] ?? 0;
+    final avgXpPerDay = _stats['avgXpPerDay'] ?? 0.0;
+    final currentStreak = _stats['currentStreak'] ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Overview',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 3,
+          childAspectRatio: 1.1,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          children: [
+            _buildStatCard(
+              'Total Activities',
+              totalActivities.toString(),
+              Icons.check_circle_outline,
+              AppTheme.primaryColor,
+            ),
+            _buildStatCard(
+              'Total XP',
+              totalXP.toString(),
+              Icons.star_outline,
+              AppTheme.successColor,
+            ),
+            _buildStatCard(
+              'Time Spent',
+              '${(totalMinutes / 60).toStringAsFixed(1)}h',
+              Icons.schedule,
+              AppTheme.warningColor,
+            ),
+            _buildStatCard(
+              'Current Streak',
+              '$currentStreak days',
+              Icons.local_fire_department,
+              AppTheme.errorColor,
+            ),
+            _buildStatCard(
+              'Avg XP/Day',
+              avgXpPerDay.toStringAsFixed(1),
+              Icons.trending_up,
+              Colors.purple,
+            ),
+            _buildStatCard(
+              'Avg Session',
+              totalActivities > 0 ? '${(totalMinutes / totalActivities).toStringAsFixed(0)}min' : '0min',
+              Icons.access_time,
+              Colors.orange,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.start,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityTrendChart() {
+    final dailyData = _stats['dailyData'] as Map<DateTime, Map<String, int>>? ?? {};
+    
+    if (dailyData.isEmpty) {
+      return _buildEmptyChart('Activity Trend', 'No activity data available');
+    }
+
+    final spots = <FlSpot>[];
+    final sortedDays = dailyData.keys.toList()..sort();
+    
+    for (int i = 0; i < sortedDays.length; i++) {
+      final day = sortedDays[i];
+      final count = dailyData[day]?['count'] ?? 0;
+      spots.add(FlSpot(i.toDouble(), count.toDouble()));
+    }
+
+    return _buildChartContainer(
+      'Activity Trend',
+      SizedBox(
+        height: 200,
+        child: LineChart(
+          LineChartData(
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: 1,
+              getDrawingHorizontalLine: (value) {
+                return FlLine(
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                  strokeWidth: 1,
+                );
+              },
+            ),
+            titlesData: FlTitlesData(
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 35,
+                  getTitlesWidget: (value, meta) {
+                    return Text(
+                      value.toInt().toString(),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: math.max(1, (spots.length / 5).ceil()).toDouble(),
+                  getTitlesWidget: (value, meta) {
+                    final index = value.toInt();
+                    if (index >= 0 && index < sortedDays.length) {
+                      final date = sortedDays[index];
+                      return Text(
+                        '${date.day}/${date.month}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                          fontSize: 10,
+                        ),
+                      );
+                    }
+                    return const Text('');
+                  },
+                ),
+              ),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            borderData: FlBorderData(show: false),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                color: AppTheme.primaryColor,
+                barWidth: 3,
+                isStrokeCapRound: true,
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                ),
+                dotData: FlDotData(
+                  show: spots.length <= 31, // Only show dots for smaller datasets
+                  getDotPainter: (spot, percent, barData, index) {
+                    return FlDotCirclePainter(
+                      radius: 3,
+                      color: AppTheme.primaryColor,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLifeAreasChart() {
+    final lifeAreasData = _stats['lifeAreasData'] as Map<String, Map<String, dynamic>>? ?? {};
+    
+    if (lifeAreasData.isEmpty) {
+      return _buildEmptyChart('Life Areas Distribution', 'No life area data available');
+    }
+
+    final sections = <PieChartSectionData>[];
+    final total = lifeAreasData.values.fold<int>(0, (sum, data) => sum + (data['minutes'] as int));
+    
+    lifeAreasData.forEach((area, data) {
+      final minutes = data['minutes'] as int;
+      final percentage = total > 0 ? (minutes / total) * 100 : 0;
+      
+      sections.add(
+        PieChartSectionData(
+          value: percentage.toDouble(),
+          title: percentage > 5 ? '${percentage.toStringAsFixed(0)}%' : '',
+          color: data['color'] as Color,
+          radius: 60,
+          titleStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      );
+    });
+
+    return _buildChartContainer(
+      'Time Distribution by Life Areas',
+      Column(
+        children: [
+          SizedBox(
+            height: 200,
+            child: PieChart(
+              PieChartData(
+                sections: sections,
+                centerSpaceRadius: 40,
+                sectionsSpace: 2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: lifeAreasData.entries.map((entry) {
+              final area = entry.key;
+              final data = entry.value;
+              final minutes = data['minutes'] as int;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: data['color'] as Color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$area (${(minutes / 60).toStringAsFixed(1)}h)',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklyPatternChart() {
+    final weeklyPattern = _stats['weeklyPattern'] as List<int>? ?? [];
+    
+    if (weeklyPattern.isEmpty || weeklyPattern.every((count) => count == 0)) {
+      return _buildEmptyChart('Weekly Pattern', 'No weekly activity data available');
+    }
+
+    final weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final barGroups = <BarChartGroupData>[];
+    
+    for (int i = 0; i < weeklyPattern.length; i++) {
+      barGroups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: weeklyPattern[i].toDouble(),
+              color: AppTheme.primaryColor,
+              width: 30,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _buildChartContainer(
+      'Most Productive Days',
+      SizedBox(
+        height: 200,
+        child: BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: weeklyPattern.reduce(math.max).toDouble() * 1.2,
+            barGroups: barGroups,
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: 1,
+              getDrawingHorizontalLine: (value) {
+                return FlLine(
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                  strokeWidth: 1,
+                );
+              },
+            ),
+            titlesData: FlTitlesData(
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 35,
+                  getTitlesWidget: (value, meta) {
+                    return Text(
+                      value.toInt().toString(),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (value, meta) {
+                    final index = value.toInt();
+                    if (index >= 0 && index < weekDays.length) {
+                      return Text(
+                        weekDays[index],
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                          fontSize: 12,
+                        ),
+                      );
+                    }
+                    return const Text('');
+                  },
+                ),
+              ),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            borderData: FlBorderData(show: false),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHourlyHeatmap() {
+    final hourlyPattern = _stats['hourlyPattern'] as List<int>? ?? [];
+    
+    if (hourlyPattern.isEmpty || hourlyPattern.every((count) => count == 0)) {
+      return _buildEmptyChart('Activity Hours Heatmap', 'No hourly activity data available');
+    }
+
+    final maxValue = hourlyPattern.reduce(math.max);
+    
+    return _buildChartContainer(
+      'Most Active Hours',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Activity frequency by hour of day:'),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 80,
+            child: GridView.builder(
+              scrollDirection: Axis.horizontal,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 1,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+              ),
+              itemCount: 24,
+              itemBuilder: (context, index) {
+                final count = hourlyPattern[index];
+                final intensity = maxValue > 0 ? count / maxValue : 0.0;
+                
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1 + intensity * 0.7),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$index:00',
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                        ),
+                        if (count > 0)
+                          Text(
+                            count.toString(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopActivities() {
+    if (_activities.isEmpty) return const SizedBox();
+
+    // Count activity occurrences by title
+    final activityCounts = <String, int>{};
+    for (final activity in _activities) {
+      final parsed = ParsedActivityData.fromNotes(activity.notes);
+      final title = activity.activityName?.isNotEmpty == true 
+          ? activity.activityName! 
+          : parsed.displayTitle;
+      activityCounts[title] = (activityCounts[title] ?? 0) + 1;
+    }
+
+    final sortedActivities = activityCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final topActivities = sortedActivities.take(10).toList();
+
+    return _buildChartContainer(
+      'Most Frequent Activities',
+      Column(
+        children: topActivities.asMap().entries.map((entry) {
+          final index = entry.key;
+          final activityEntry = entry.value;
+          final title = activityEntry.key;
+          final count = activityEntry.value;
+          
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$count times',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildChartContainer(String title, Widget chart) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          chart,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyChart(String title, String message) {
+    return _buildChartContainer(
+      title,
+      SizedBox(
+        height: 200,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.analytics_outlined,
+                size: 48,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

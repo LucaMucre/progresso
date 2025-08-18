@@ -254,54 +254,88 @@ class _AuthPageState extends State<AuthPage> {
             ),
             const SizedBox(height: 32),
             
-            // Simplified form fields
+            // Enhanced form fields with icons and better styling
             Container(
               decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: colorScheme.outline.withValues(alpha: 0.15)),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withValues(alpha: 0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(28),
               child: Column(
                 children: [
-                  TextField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 16,
-                    ),
-                    autofillHints: const [AutofillHints.username, AutofillHints.email],
-                    decoration: InputDecoration(
-                      hintText: 'Your email',
-                      hintStyle: TextStyle(
-                        color: colorScheme.onSurface.withValues(alpha: 0.4),
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                  
+                  // Email field with icon
                   Container(
-                    height: 1,
-                    color: colorScheme.outline.withValues(alpha: 0.2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
+                    ),
+                    child: TextField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      autofillHints: const [AutofillHints.username, AutofillHints.email],
+                      decoration: InputDecoration(
+                        hintText: 'Enter your email',
+                        hintStyle: TextStyle(
+                          color: colorScheme.onSurface.withValues(alpha: 0.5),
+                          fontWeight: FontWeight.w400,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.email_outlined,
+                          color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          size: 22,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                      ),
+                    ),
                   ),
                   
-                  TextField(
-                    controller: _passCtrl,
-                    obscureText: true,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 16,
+                  const SizedBox(height: 16),
+                  
+                  // Password field with icon
+                  Container(
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
                     ),
-                    autofillHints: const [AutofillHints.password],
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      hintStyle: TextStyle(
-                        color: colorScheme.onSurface.withValues(alpha: 0.4),
+                    child: TextField(
+                      controller: _passCtrl,
+                      obscureText: true,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
                       ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                      autofillHints: const [AutofillHints.password],
+                      decoration: InputDecoration(
+                        hintText: 'Enter your password',
+                        hintStyle: TextStyle(
+                          color: colorScheme.onSurface.withValues(alpha: 0.5),
+                          fontWeight: FontWeight.w400,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.lock_outline,
+                          color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          size: 22,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                      ),
                     ),
                   ),
                 ],
