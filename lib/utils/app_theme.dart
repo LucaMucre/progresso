@@ -25,6 +25,60 @@ class AppTheme {
   static const Color glassSurface = Color(0x0AFFFFFF);
   static const Color glassBorder = Color(0x1AFFFFFF);
   
+  // Standard spacing scale (8pt grid system)
+  static const double spacing4 = 4.0;
+  static const double spacing8 = 8.0;
+  static const double spacing12 = 12.0;
+  static const double spacing16 = 16.0;
+  static const double spacing20 = 20.0;
+  static const double spacing24 = 24.0;
+  static const double spacing32 = 32.0;
+  static const double spacing48 = 48.0;
+  static const double spacing64 = 64.0;
+  
+  // Border radius scale
+  static const double radiusSmall = 8.0;
+  static const double radiusMedium = 12.0;
+  static const double radiusLarge = 16.0;
+  static const double radiusXLarge = 20.0;
+  static const double radiusRound = 24.0;
+  
+  // Elevation scale
+  static const double elevationLow = 2.0;
+  static const double elevationMedium = 4.0;
+  static const double elevationHigh = 8.0;
+  static const double elevationMax = 16.0;
+  
+  // Icon sizes
+  static const double iconSmall = 16.0;
+  static const double iconMedium = 20.0;
+  static const double iconLarge = 24.0;
+  static const double iconXLarge = 32.0;
+  
+  // Button heights
+  static const double buttonHeightSmall = 32.0;
+  static const double buttonHeightMedium = 40.0;
+  static const double buttonHeightLarge = 48.0;
+  
+  // Common widths/heights for interactive elements
+  static const double touchTargetSize = 44.0; // Minimum iOS touch target
+  static const double avatarSmall = 32.0;
+  static const double avatarMedium = 48.0;
+  static const double avatarLarge = 64.0;
+  static const double avatarXLarge = 96.0;
+  
+  // Dialog and container dimensions
+  static const double dialogWidth = 560.0;
+  static const double chartHeight = 200.0;
+  static const double imagePreviewHeight = 200.0;
+  static const double quillEditorHeight = 260.0;
+  static const double buttonHeightXLarge = 56.0;
+  static const double radiusRoundedButton = 28.0;
+  
+  // Additional accent colors
+  static const Color accentPurple = Color(0xFF8B5CF6);
+  static const Color accentOrange = Color(0xFFF59E0B);
+  
   /// Create light theme
   static ThemeData light() {
     final colorScheme = ColorScheme.fromSeed(

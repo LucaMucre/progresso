@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math' as math;
 import 'models/action_models.dart';
 import 'services/life_areas_service.dart';
+import 'services/db_service.dart' as db_service;
 import 'utils/app_theme.dart';
 import 'utils/parsed_activity_data.dart';
 
@@ -49,18 +49,16 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     setState(() => _isLoading = true);
     
     try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return;
-
-      // Load life areas and activities in parallel
+      // Load life areas and activities in parallel using local storage
       final results = await Future.wait([
         _loadLifeAreas(),
         _loadActivities(),
       ]);
       
-      _lifeAreas = results[0] as List<LifeArea>;
-      _activities = results[1] as List<ActionLog>;
+      setState(() {
+        _lifeAreas = results[0] as List<LifeArea>;
+        _activities = results[1] as List<ActionLog>;
+      });
       
       _calculateStatistics();
     } catch (e) {
@@ -72,18 +70,8 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Future<List<LifeArea>> _loadLifeAreas() async {
     try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return [];
-
-      final response = await client
-          .from('life_areas')
-          .select('*')
-          .eq('user_id', user.id);
-
-      return (response as List)
-          .map((item) => LifeArea.fromJson(item))
-          .toList();
+      // Use LifeAreasService which should work with local storage
+      return await LifeAreasService.getLifeAreas();
     } catch (e) {
       debugPrint('Error loading life areas: $e');
       return [];
@@ -92,26 +80,22 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Future<List<ActionLog>> _loadActivities() async {
     try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return [];
-
-      var query = client
-          .from('action_logs')
-          .select('*')
-          .eq('user_id', user.id);
-
-      // Apply date filter
+      // Use local storage via db_service
+      DateTime? since;
       if (_selectedDateFilter.days != null) {
-        final cutoffDate = DateTime.now().subtract(Duration(days: _selectedDateFilter.days!));
-        query = query.gte('occurred_at', cutoffDate.toIso8601String());
+        since = DateTime.now().subtract(Duration(days: _selectedDateFilter.days!));
       }
-
-      final response = await query.order('occurred_at', ascending: false);
-      final activities = (response as List)
-          .map((item) => ActionLog.fromJson(item))
-          .toList();
-
+      
+      var activities = await db_service.fetchLogs();
+      debugPrint('Statistics: Loaded ${activities.length} activities from local storage');
+      
+      // Apply date filter
+      if (since != null) {
+        debugPrint('Statistics: Applying date filter since $since');
+        activities = activities.where((activity) => activity.occurredAt.isAfter(since!)).toList();
+        debugPrint('Statistics: After date filter: ${activities.length} activities');
+      }
+      
       // Apply life area filter if selected
       if (_selectedLifeAreas.isNotEmpty) {
         return activities.where((activity) {
@@ -129,8 +113,12 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
   }
 
   void _calculateStatistics() {
+    debugPrint('Statistics: _calculateStatistics called with ${_activities.length} activities');
     if (_activities.isEmpty) {
-      _stats = {};
+      debugPrint('Statistics: No activities, clearing stats');
+      setState(() {
+        _stats = {};
+      });
       return;
     }
 
@@ -146,6 +134,8 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     final avgXpPerDay = _selectedDateFilter.days != null 
         ? totalXP / _selectedDateFilter.days! 
         : totalXP / (now.difference(startDate).inDays + 1);
+
+    debugPrint('Statistics: Calculated totalActivities=$totalActivities, totalXP=$totalXP');
 
     // Life areas distribution
     final lifeAreasData = <String, Map<String, dynamic>>{};
@@ -181,11 +171,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       weeklyPattern[weekday]++;
     }
 
-    // Hourly pattern
-    final hourlyPattern = List.generate(24, (index) => 0);
-    for (final activity in _activities) {
-      hourlyPattern[activity.occurredAt.hour]++;
-    }
+    // Hourly pattern calculation removed
 
     // Current streak calculation
     int currentStreak = 0;
@@ -205,7 +191,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       }
     }
 
-    _stats = {
+    final newStats = {
       'totalActivities': totalActivities,
       'totalXP': totalXP,
       'totalMinutes': totalMinutes,
@@ -214,8 +200,18 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       'lifeAreasData': lifeAreasData,
       'dailyData': dailyData,
       'weeklyPattern': weeklyPattern,
-      'hourlyPattern': hourlyPattern,
     };
+
+    debugPrint('Statistics: Setting new stats with totalActivities=${newStats['totalActivities']}');
+    
+    setState(() {
+      _stats = newStats;
+    });
+
+    // Verify the state was updated
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('Statistics: After setState, _stats[totalActivities]=${_stats['totalActivities']}');
+    });
   }
 
   Color _getColorForArea(String areaName) {
@@ -262,25 +258,18 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Future<void> _reloadActivitiesWithFilter() async {
     try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return;
-
-      var query = client
-          .from('action_logs')
-          .select('*')
-          .eq('user_id', user.id);
-
-      // Apply date filter
+      // Use local storage via db_service
+      DateTime? since;
       if (_selectedDateFilter.days != null) {
-        final cutoffDate = DateTime.now().subtract(Duration(days: _selectedDateFilter.days!));
-        query = query.gte('occurred_at', cutoffDate.toIso8601String());
+        since = DateTime.now().subtract(Duration(days: _selectedDateFilter.days!));
       }
-
-      final response = await query.order('occurred_at', ascending: false);
-      final activities = (response as List)
-          .map((item) => ActionLog.fromJson(item))
-          .toList();
+      
+      var activities = await db_service.fetchLogs();
+      
+      // Apply date filter
+      if (since != null) {
+        activities = activities.where((activity) => activity.occurredAt.isAfter(since!)).toList();
+      }
 
       // Apply life area filter if selected
       if (_selectedLifeAreas.isNotEmpty) {
@@ -322,17 +311,15 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildFilters(),
-                    const SizedBox(height: 24),
+                    SizedBox(height: AppTheme.spacing24),
                     _buildOverviewCards(),
-                    const SizedBox(height: 24),
+                    SizedBox(height: AppTheme.spacing24),
                     _buildActivityTrendChart(),
-                    const SizedBox(height: 24),
+                    SizedBox(height: AppTheme.spacing24),
                     _buildLifeAreasChart(),
-                    const SizedBox(height: 24),
+                    SizedBox(height: AppTheme.spacing24),
                     _buildWeeklyPatternChart(),
-                    const SizedBox(height: 24),
-                    _buildHourlyHeatmap(),
-                    const SizedBox(height: 24),
+                    SizedBox(height: AppTheme.spacing24),
                     _buildTopActivities(),
                   ],
                 ),
@@ -468,6 +455,8 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     final avgXpPerDay = _stats['avgXpPerDay'] ?? 0.0;
     final currentStreak = _stats['currentStreak'] ?? 0;
 
+    debugPrint('Statistics: _buildOverviewCards - totalActivities=$totalActivities, totalXP=$totalXP, _stats=${_stats.keys}');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -531,7 +520,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
@@ -839,76 +828,6 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     );
   }
 
-  Widget _buildHourlyHeatmap() {
-    final hourlyPattern = _stats['hourlyPattern'] as List<int>? ?? [];
-    
-    if (hourlyPattern.isEmpty || hourlyPattern.every((count) => count == 0)) {
-      return _buildEmptyChart('Activity Hours Heatmap', 'No hourly activity data available');
-    }
-
-    final maxValue = hourlyPattern.reduce(math.max);
-    
-    return _buildChartContainer(
-      'Most Active Hours',
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Activity frequency by hour of day:'),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 80,
-            child: GridView.builder(
-              scrollDirection: Axis.horizontal,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                childAspectRatio: 1,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: 4,
-              ),
-              itemCount: 24,
-              itemBuilder: (context, index) {
-                final count = hourlyPattern[index];
-                final intensity = maxValue > 0 ? count / maxValue : 0.0;
-                
-                return Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1 + intensity * 0.7),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$index:00',
-                          style: TextStyle(
-                            fontSize: 8,
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        if (count > 0)
-                          Text(
-                            count.toString(),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildTopActivities() {
     if (_activities.isEmpty) return const SizedBox();
@@ -951,7 +870,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
                   height: 24,
                   decoration: BoxDecoration(
                     color: AppTheme.primaryColor,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   ),
                   child: Center(
                     child: Text(
@@ -977,7 +896,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   ),
                   child: Text(
                     '$count times',

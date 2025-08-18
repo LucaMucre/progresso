@@ -12,7 +12,9 @@ import 'utils/web_file_picker_stub.dart'
     if (dart.library.html) 'utils/web_file_picker_web.dart' as web_file_picker;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:js' as js if (dart.library.html) 'dart:js';
+import 'utils/js_context_stub.dart' 
+    if (dart.library.html) 'utils/js_context_web.dart' as js_context;
+import 'utils/app_theme.dart';
 import 'services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'services/level_up_service.dart';
@@ -79,12 +81,7 @@ class _LogActionPageState extends State<LogActionPage> {
   
   void _preventPasswordManager() {
     if (kIsWeb) {
-      try {
-        // Call JavaScript function to aggressively prevent password manager
-        js.context.callMethod('preventPasswordManagerOnLogPage', []);
-      } catch (e) {
-        // Silently ignore if the function doesn't exist
-      }
+      js_context.preventPasswordManagerOnLogPage();
     }
   }
 
@@ -430,7 +427,7 @@ class _LogActionPageState extends State<LogActionPage> {
     return Container(
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         border: Border.all(color: theme.colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
@@ -507,15 +504,15 @@ class _LogActionPageState extends State<LogActionPage> {
       filled: true,
       fillColor: theme.colorScheme.surface,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         borderSide: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         borderSide: BorderSide(color: focusColor, width: 2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -631,7 +628,7 @@ class _LogActionPageState extends State<LogActionPage> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   border: Border.all(color: (areaColor ?? Theme.of(context).colorScheme.primary).withValues(alpha: 0.2)),
                   boxShadow: [
                     BoxShadow(
@@ -700,6 +697,10 @@ class _LogActionPageState extends State<LogActionPage> {
                       enableSuggestions: false,
                       keyboardType: TextInputType.text,
                       textInputAction: TextInputAction.next,
+                      onSubmitted: (_) {
+                        // Close keyboard and move focus to duration field
+                        FocusScope.of(context).nextFocus();
+                      },
                       decoration: _buildInputDecoration(
                         hint: 'e.g. Running, Reading, Meditation...',
                         icon: Icons.task_alt,
@@ -726,6 +727,10 @@ class _LogActionPageState extends State<LogActionPage> {
                     enableSuggestions: false,
                     autocorrect: false,
                     textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      // Close keyboard when done
+                      FocusScope.of(context).unfocus();
+                    },
                     inputFormatters: const [],
                     decoration: _buildInputDecoration(hint: 'e.g. 45', icon: Icons.timer_outlined, accentColor: accent),
                   ),
@@ -738,46 +743,50 @@ class _LogActionPageState extends State<LogActionPage> {
               accentColor: accent,
               title: 'Note (optional)',
               leadingIcon: Icons.notes,
-              child: Stack(
+              child: Column(
                 children: [
-                  Column(
-                    children: [
-                      // Toolbar
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        child: quill.QuillSimpleToolbar(
-                          controller: _quillCtrl,
-                          config: const quill.QuillSimpleToolbarConfig(
-                            multiRowsDisplay: false,
-                            showAlignmentButtons: false,
-                            showUnderLineButton: false,
-                            showStrikeThrough: false,
-                            showInlineCode: false,
-                            showCodeBlock: false,
-                            showSearchButton: false,
-                            showSubscript: false,
-                            showSuperscript: false,
-                            showQuote: false,
-                            showListCheck: false,
-                            showClipboardCut: false,
-                            showClipboardCopy: false,
-                            showClipboardPaste: false,
-                          ),
+                  // Toolbar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: quill.QuillSimpleToolbar(
+                      controller: _quillCtrl,
+                      config: const quill.QuillSimpleToolbarConfig(
+                        multiRowsDisplay: false,
+                        showAlignmentButtons: false,
+                        showUnderLineButton: false,
+                        showStrikeThrough: false,
+                        showInlineCode: false,
+                        showCodeBlock: false,
+                        showSearchButton: false,
+                        showSubscript: false,
+                        showSuperscript: false,
+                        showQuote: false,
+                        showListCheck: false,
+                        showClipboardCut: false,
+                        showClipboardCopy: false,
+                        showClipboardPaste: false,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // Editor area (WYSIWYG) - made more touch-friendly
+                  GestureDetector(
+                    onTap: () {
+                      // Ensure the QuillEditor gets focus when tapped
+                      _quillFocusNode.requestFocus();
+                    },
+                    child: SizedBox(
+                      height: 260,
+                      child: quill.QuillEditor.basic(
+                        controller: _quillCtrl,
+                        focusNode: _quillFocusNode,
+                        scrollController: _quillScrollController,
+                        config: const quill.QuillEditorConfig(
+                          placeholder: 'Your thoughts…',
+                          padding: EdgeInsets.all(12),
                         ),
                       ),
-                      const Divider(height: 1),
-                      // Editor area (WYSIWYG)
-                      SizedBox(
-                        height: 260,
-                        child: quill.QuillEditor.basic(
-                          controller: _quillCtrl,
-                          config: const quill.QuillEditorConfig(
-                            placeholder: 'Your thoughts…',
-                            padding: EdgeInsets.all(12),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -794,11 +803,11 @@ class _LogActionPageState extends State<LogActionPage> {
                 height: 200,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   border: Border.all(color: accent.withValues(alpha: 0.3)),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   child: kIsWeb && _selectedImageUrl != null
                       ? Image.network(
                           _selectedImageUrl!,
@@ -881,7 +890,7 @@ class _LogActionPageState extends State<LogActionPage> {
                 backgroundColor: accent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
               ),
               child: _loading
                 ? const SizedBox(

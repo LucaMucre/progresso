@@ -103,7 +103,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     
     // Debug: Check if imageUrl is available
     if (kDebugMode) {
-      print('ActivityDetailsDialog - imageUrl: ${widget.log.imageUrl}');
+      debugPrint('ActivityDetailsDialog - imageUrl: ${widget.log.imageUrl}');
     }
   }
 

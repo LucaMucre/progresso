@@ -15,6 +15,7 @@ dependencies:
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0
   supabase_flutter: ^2.9.1
+  
   flutter_dotenv: ^5.1.0
   image_picker: ^1.2.0
   shared_preferences: ^2.2.2
@@ -31,6 +32,8 @@ dependencies:
   package_info_plus: ^8.0.2
   web: ^1.1.0
   fl_chart: ^0.69.0
+  sqflite: ^2.3.0
+  path: ^1.8.3
 
 dev_dependencies:
   flutter_test:
@@ -40,11 +43,13 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
   freezed: ^2.5.7
   json_serializable: ^6.8.0
+  sqflite_common_ffi: ^2.3.0
 
 flutter:
   uses-material-design: true
   assets:
     - assets/default_avatar.png
+    - .env
   generate: true
 
 # Using non-synthetic localization package per l10n.yaml

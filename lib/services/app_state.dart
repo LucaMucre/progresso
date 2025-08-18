@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'db_service.dart';
 import 'offline_cache.dart';
+import 'migration_service.dart';
 
 part 'app_state.g.dart';
 
@@ -71,6 +72,11 @@ class LogsNotifier extends _$LogsNotifier {
   Future<List<ActionLog>> build() async {
     final user = ref.read(currentUserProvider);
     if (user == null) return [];
+    
+    // Auto-migrate if needed (only once)
+    if (isUsingLocalStorage) {
+      await MigrationService.autoMigrateIfNeeded();
+    }
     
     // Erst Cache laden für schnelle Anzeige
     final cachedLogs = await OfflineCache.getCachedLogs();

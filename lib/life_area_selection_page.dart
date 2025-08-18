@@ -30,10 +30,21 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
       });
       
       final areas = await LifeAreasService.getLifeAreas();
-      setState(() {
-        _lifeAreas = areas;
-        _loading = false;
-      });
+      
+      // If no life areas exist, create default ones
+      if (areas.isEmpty) {
+        await LifeAreasService.createDefaultLifeAreas();
+        final newAreas = await LifeAreasService.getLifeAreas();
+        setState(() {
+          _lifeAreas = newAreas;
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _lifeAreas = areas;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading life areas: $e');
       setState(() {

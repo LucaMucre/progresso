@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/life_areas_service.dart';
 import '../services/character_service.dart';
 import '../services/avatar_sync_service.dart';
+import '../services/db_service.dart' as db_service;
 import '../navigation.dart';
 import 'dart:convert'; // Added for jsonDecode
 import '../utils/animation_utils.dart';
@@ -299,16 +300,12 @@ class _BubblesGridState extends State<BubblesGrid> {
   Future<void> _loadAreaDurations() async {
     setState(() => _loadingDurations = true);
     try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) {
-        setState(() { _minutesByKey = {}; _loadingDurations = false; });
-        return;
-      }
-      final rows = await client
-          .from('action_logs')
-          .select('duration_min, notes')
-          .eq('user_id', user.id);
+      // Use local storage via db_service
+      final logs = await db_service.fetchLogs();
+      final List<Map<String, dynamic>> rows = logs.map((log) => {
+        'duration_min': log.durationMin ?? 0,
+        'notes': log.notes,
+      }).toList();
 
       final Map<String, double> agg = {};
       String resolveKey(Map<String, dynamic> obj) {
@@ -330,7 +327,7 @@ class _BubblesGridState extends State<BubblesGrid> {
           default: return area ?? 'unknown';
         }
       }
-      for (final r in (rows as List)) {
+      for (final r in rows) {
         final int mins = (r['duration_min'] as int?) ?? 0;
         String key = 'unknown';
         try {

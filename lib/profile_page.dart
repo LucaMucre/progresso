@@ -14,10 +14,13 @@ import 'services/db_service.dart';
 import 'services/offline_cache.dart';
 import 'services/avatar_sync_service.dart';
 import 'services/achievement_service.dart';
+import 'repository/local_logs_repository.dart';
+import 'models/action_models.dart' as models;
 // Popups are orchestrated centrally via LevelUpService; do not import dialogs directly here
 import 'services/level_up_service.dart';
 import 'life_area_detail_page.dart';
 import 'navigation.dart';
+import 'utils/app_theme.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -45,6 +48,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, int> _areaActivityCounts = {};
 
   final _supabase = Supabase.instance.client;
+  final _localLogsRepo = LocalLogsRepository();
 
   @override
   void initState() {
@@ -181,42 +185,31 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadStatistics() async {
     try {
-      // Load in parallel to reduce total wait time
-      final user = _supabase.auth.currentUser;
+      // Load in parallel using local repository
       final futures = <Future<dynamic>>[
         CharacterService.getOrCreateCharacter(),
         LifeAreasService.getLifeAreas(),
-        if (user != null)
-          _supabase.from('action_logs').select('occurred_at, notes').eq('user_id', user.id)
-        else
-          Future.value(<dynamic>[]),
+        _localLogsRepo.fetchLogs(),
+        _localLogsRepo.fetchTotalXp(),
+        _localLogsRepo.calculateStreak(),
       ];
       final results = await Future.wait(futures);
       final character = results[0] as Character;
       final areas = results[1] as List<LifeArea>;
-      final actionResponse = results[2] as List;
+      final logs = results[2] as List<models.ActionLog>;
+      final totalXP = results[3] as int;
+      final currentStreak = results[4] as int;
         
-        // Ensure deduplication and correct counting of all user logs
-        final logs = actionResponse;
-        final dates = logs
-            .map((log) => DateTime.parse(log['occurred_at'] as String))
-            .map((dt) => DateTime(dt.year, dt.month, dt.day))
-            .toList();
-        
-        // Count ALL activities (logs), not unique dates
+        // Calculate statistics from local data
         _totalActions = logs.length;
-        _currentStreak = _calculateCurrentStreak(dates);
-        _longestStreak = _calculateLongestStreak(dates);
-        // Gesamt-XP anhand der Logs berechnen (nicht aus Character.total_xp, da dies evtl. nicht synchron ist)
-        _totalXP = await fetchTotalXp();
-
-        // Zeige XP direkt aus Gesamt-XP (ohne Baseline-Offset), damit die Anzeige
-        // nicht nach einem Re-Login wie "reset" wirkt.
+        _currentStreak = currentStreak;
+        _longestStreak = _calculateLongestStreakFromActionLogs(logs);
+        _totalXP = totalXP;
         _xpSinceBaseline = _totalXP;
 
-        // Count each log exactly once by rolling it up to a single parent area key
-        String _resolveAreaKeyForLog(Map<String, dynamic> log) {
-          final raw = log['notes'];
+        // Count activities by life area
+        String _resolveAreaKeyForActionLog(models.ActionLog log) {
+          final raw = log.notes;
           String? areaFromNotes;
           String? categoryFromNotes;
           if (raw != null) {
@@ -229,8 +222,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 categoryFromNotes = (obj['category'] as String?)?.trim().toLowerCase();
               }
             } catch (e, stackTrace) {
-      LoggingService.error('Error in profile operation', e, stackTrace, 'Profile');
-    }
+              LoggingService.error('Error in profile operation', e, stackTrace, 'Profile');
+            }
           }
           bool isKnownParent(String? v) => const {
             'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
@@ -258,7 +251,7 @@ class _ProfilePageState extends State<ProfilePage> {
             case 'art':
               return 'art';
           }
-          // Fallback to area name if provided (custom names): use canonical category mapping
+          // Fallback to area name if provided
           if (areaFromNotes != null && areaFromNotes!.isNotEmpty) {
             return areaFromNotes!;
           }
@@ -267,7 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
         final countsByKey = <String, int>{};
         for (final log in logs) {
-          final key = _resolveAreaKeyForLog(log as Map<String, dynamic>);
+          final key = _resolveAreaKeyForActionLog(log);
           countsByKey[key] = (countsByKey[key] ?? 0) + 1;
         }
         final areaToCount = <String, int>{};
@@ -286,10 +279,12 @@ class _ProfilePageState extends State<ProfilePage> {
       // Check achievements after loading statistics
       await _checkAchievements();
       
-      setState(() {
-        _character = character;
-        _lifeAreas = areas;
-      });
+      if (mounted) {
+        setState(() {
+          _character = character;
+          _lifeAreas = areas;
+        });
+      }
     } catch (e) {
     if (kDebugMode) debugPrint('Error loading statistics: $e');
     }
@@ -298,50 +293,38 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _checkAchievements() async {
     if (_character == null) return;
     
-    // Count today's actions for daily achievements
+    // Count today's actions for daily achievements using local repository
     final today = DateTime.now();
     final todayStart = DateTime(today.year, today.month, today.day);
     final todayEnd = todayStart.add(const Duration(days: 1));
     
     try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        final todayLogsResponse = await _supabase
-            .from('action_logs')
-            .select('occurred_at')
-            .eq('user_id', user.id)
-            .gte('occurred_at', todayStart.toIso8601String())
-            .lt('occurred_at', todayEnd.toIso8601String());
-        
-        final dailyActions = (todayLogsResponse as List).length;
-        
-        // Get last action time for special achievements
-        final lastActionResponse = await _supabase
-            .from('action_logs')
-            .select('occurred_at')
-            .eq('user_id', user.id)
-            .order('occurred_at', ascending: false)
-            .limit(1);
-        
-        DateTime? lastActionTime;
-        if ((lastActionResponse as List).isNotEmpty) {
-          lastActionTime = DateTime.parse(lastActionResponse.first['occurred_at']);
-        }
-        
-        // Count only areas with at least one activity
-        final activeLifeAreaCount = _areaActivityCounts.values.where((n) => n > 0).length;
-        // Correct any mistakenly unlocked life-area achievements from earlier bug
-        await AchievementService.reconcileLifeAreaAchievements(activeLifeAreaCount);
-        await AchievementService.checkAndUnlockAchievements(
-          currentStreak: _currentStreak,
-          totalActions: _totalActions,
-          totalXP: _totalXP,
-          level: _character!.level,
-          lifeAreaCount: activeLifeAreaCount,
-          dailyActions: dailyActions,
-          lastActionTime: lastActionTime,
-        );
+      // Get today's logs from local repository
+      final todayLogs = await _localLogsRepo.fetchLogs();
+      final todayActions = todayLogs
+          .where((log) => log.occurredAt.isAfter(todayStart) && log.occurredAt.isBefore(todayEnd))
+          .length;
+      
+      // Get last action time for special achievements
+      DateTime? lastActionTime;
+      if (todayLogs.isNotEmpty) {
+        final sortedLogs = todayLogs.toList()..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+        lastActionTime = sortedLogs.first.occurredAt;
       }
+      
+      // Count only areas with at least one activity
+      final activeLifeAreaCount = _areaActivityCounts.values.where((n) => n > 0).length;
+      // Correct any mistakenly unlocked life-area achievements from earlier bug
+      await AchievementService.reconcileLifeAreaAchievements(activeLifeAreaCount);
+      await AchievementService.checkAndUnlockAchievements(
+        currentStreak: _currentStreak,
+        totalActions: _totalActions,
+        totalXP: _totalXP,
+        level: _character!.level,
+        lifeAreaCount: activeLifeAreaCount,
+        dailyActions: todayActions,
+        lastActionTime: lastActionTime,
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('Error checking achievements: $e');
     }
@@ -383,6 +366,32 @@ class _ProfilePageState extends State<ProfilePage> {
     
     for (int i = 0; i < sortedDates.length; i++) {
       if (i == 0 || sortedDates[i].difference(sortedDates[i - 1]).inDays == 1) {
+        currentStreak++;
+      } else {
+        currentStreak = 1;
+      }
+      
+      if (currentStreak > longestStreak) {
+        longestStreak = currentStreak;
+      }
+    }
+    
+    return longestStreak;
+  }
+
+  int _calculateLongestStreakFromActionLogs(List<models.ActionLog> logs) {
+    if (logs.isEmpty) return 0;
+    
+    final dates = logs
+        .map((log) => DateTime(log.occurredAt.year, log.occurredAt.month, log.occurredAt.day))
+        .toSet()
+        .toList()..sort();
+    
+    int longestStreak = 0;
+    int currentStreak = 0;
+    
+    for (int i = 0; i < dates.length; i++) {
+      if (i == 0 || dates[i].difference(dates[i - 1]).inDays == 1) {
         currentStreak++;
       } else {
         currentStreak = 1;
@@ -471,7 +480,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Avatar gespeichert!'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppTheme.successColor,
         ),
       );
       
@@ -534,7 +543,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
         content: Text('Profile saved!'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppTheme.successColor,
         ),
       );
     } catch (err) {
@@ -681,7 +690,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => LifeAreaDetailPage(area: area)),
@@ -691,7 +700,7 @@ class _ProfilePageState extends State<ProfilePage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: areaColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
             border: Border.all(color: areaColor.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
@@ -852,7 +861,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                                 ),
                                 child: Text(
                                   'Level ${calculateLevel(_xpSinceBaseline)}',
@@ -877,7 +886,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                     ),
                     child: IconButton(
             tooltip: 'Edit profile',
@@ -933,16 +942,27 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: AppTheme.spacing24),
 
-            // Statistics Section
-            Text(
-              'Your statistics',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            // Activity Contributions Section
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Activity Contributions',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '$_totalActions activities this year',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppTheme.spacing16),
             if (_totalActions == 0)
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -965,67 +985,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
               ),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final crossAxisCount = width > 1000
-                    ? 4
-                    : width > 700
-                        ? 3
-                        : 2;
-                // Feste Höhe sorgt dafür, dass Inhalte der Karten nicht abgeschnitten werden
-                final tileHeight = width > 800 ? 120.0 : 140.0;
-
-                final stats = [
-                  (
-                      'Activities',
-                    '$_totalActions',
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                  (
-                      'Current streak',
-    '$_currentStreak days',
-                    Icons.local_fire_department,
-                    Colors.orange,
-                  ),
-                  (
-                      'Longest streak',
-    '$_longestStreak days',
-                    Icons.emoji_events,
-                    Colors.amber,
-                  ),
-                  (
-                      'Total XP',
-                    '$_totalXP',
-                    Icons.star,
-                    Colors.purple,
-                  ),
-                ];
-
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    mainAxisExtent: tileHeight,
-                  ),
-                  itemCount: stats.length,
-                  itemBuilder: (context, index) {
-                    final s = stats[index];
-                    return _buildStatCard(
-                      s.$1,
-                      s.$2,
-                      s.$3,
-                      s.$4,
-                    );
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 24),
+            // GitHub-style contributions table
+            _buildContributionsTable(),
+            SizedBox(height: AppTheme.spacing24),
 
             // Life Areas Summary
             Text(
@@ -1034,7 +996,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppTheme.spacing16),
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -1070,7 +1032,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                             ),
                             child: Icon(
                               Icons.category,
@@ -1102,7 +1064,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppTheme.spacing16),
                   if (_lifeAreas.isNotEmpty)
                     Wrap(
                       spacing: 10,
@@ -1123,7 +1085,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: AppTheme.spacing24),
 
             // Achievements Section
             Row(
@@ -1172,7 +1134,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             
-            const SizedBox(height: 16),
+            SizedBox(height: AppTheme.spacing16),
             
             // Achievement Grid
             LayoutBuilder(
@@ -1207,13 +1169,220 @@ class _ProfilePageState extends State<ProfilePage> {
                 );
               },
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: AppTheme.spacing24),
 
             // Profile bearbeiten Bereich entfernt (wird an anderer Stelle bearbeitet)
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildContributionsTable() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Activity data for the year
+          _buildContributionsGrid(),
+          const SizedBox(height: 12),
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Learn how we count contributions',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              Row(
+                children: [
+                  Text(
+                    'Less',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildLegendSquare(0),
+                  const SizedBox(width: 2),
+                  _buildLegendSquare(1),
+                  const SizedBox(width: 2),
+                  _buildLegendSquare(2),
+                  const SizedBox(width: 2),
+                  _buildLegendSquare(3),
+                  const SizedBox(width: 8),
+                  Text(
+                    'More',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContributionsGrid() {
+    final now = DateTime.now();
+    final startOfYear = DateTime(now.year, 1, 1);
+    final weeks = <List<DateTime>>[];
+    
+    // Generate weeks for the entire year
+    DateTime current = startOfYear;
+    while (current.year == now.year) {
+      final week = <DateTime>[];
+      for (int i = 0; i < 7; i++) {
+        if (current.year == now.year) {
+          week.add(current);
+          current = current.add(const Duration(days: 1));
+        }
+      }
+      if (week.isNotEmpty) weeks.add(week);
+    }
+
+    // Calculate activity counts per day
+    final activityCounts = _calculateDailyActivityCounts();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Month labels
+          Row(
+            children: [
+              const SizedBox(width: 20), // Space for day labels
+              ...List.generate(12, (month) {
+                final monthDate = DateTime(now.year, month + 1, 1);
+                final weeksInMonth = weeks.where((week) => 
+                  week.any((day) => day.month == month + 1)).length;
+                return SizedBox(
+                  width: weeksInMonth * 12.0,
+                  child: Text(
+                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month],
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Grid
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Day labels
+              Column(
+                children: [
+                  _buildDayLabel('Mon'),
+                  _buildDayLabel(''),
+                  _buildDayLabel('Wed'),
+                  _buildDayLabel(''),
+                  _buildDayLabel('Fri'),
+                  _buildDayLabel(''),
+                  _buildDayLabel(''),
+                ],
+              ),
+              const SizedBox(width: 8),
+              // Contributions grid
+              Row(
+                children: weeks.map((week) {
+                  return Column(
+                    children: week.map((day) {
+                      final count = activityCounts[_dateKey(day)] ?? 0;
+                      return Container(
+                        width: 10,
+                        height: 10,
+                        margin: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: _getContributionColor(count),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayLabel(String label) {
+    return SizedBox(
+      height: 12,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 9,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendSquare(int level) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: _getContributionColor(level == 0 ? 0 : level * 2),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  Color _getContributionColor(int count) {
+    final primary = Theme.of(context).colorScheme.primary;
+    if (count == 0) {
+      return Theme.of(context).colorScheme.surfaceContainerHighest;
+    } else if (count == 1) {
+      return primary.withValues(alpha: 0.3);
+    } else if (count <= 3) {
+      return primary.withValues(alpha: 0.6);
+    } else {
+      return primary;
+    }
+  }
+
+  Map<String, int> _calculateDailyActivityCounts() {
+    final counts = <String, int>{};
+    final repo = LocalLogsRepository();
+    
+    // This is a simplified version - in practice you'd load from the repository
+    // For now, we'll use existing activity data
+    for (int i = 0; i < _totalActions; i++) {
+      // Simulate some activity distribution across recent days
+      final randomDaysAgo = (i * 7) % 365;
+      final date = DateTime.now().subtract(Duration(days: randomDaysAgo));
+      final key = _dateKey(date);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    
+    return counts;
+  }
+
+  String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   @override

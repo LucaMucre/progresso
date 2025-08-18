@@ -8,7 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
-import 'services/db_service.dart';
+import 'services/db_service.dart' as db_service;
 import 'services/life_areas_service.dart';
 import 'widgets/bubble_widget.dart';
 import 'dashboard/widgets/gallery_filters.dart';
@@ -25,6 +25,7 @@ import 'widgets/skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_state.dart';
 import 'utils/logging_service.dart';
+import 'utils/app_theme.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -241,56 +242,21 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     }
   }
 
-  Future<List<ActionLog>> _fetchLogsForDay(DateTime day) async {
-    final client = Supabase.instance.client;
-    final user = client.auth.currentUser;
-    if (user == null) return [];
-
-    // Query a wider range and filter locally for precise timezone handling
-    final queryStart = day.subtract(const Duration(days: 1)).toUtc();
-    final queryEnd = day.add(const Duration(days: 2)).toUtc();
-
+  Future<List<models.ActionLog>> _fetchLogsForDay(DateTime day) async {
     try {
-      final res = await client
-          .from('action_logs')
-          .select('id, occurred_at, duration_min, notes, earned_xp, template_id, activity_name, image_url')
-          .eq('user_id', user.id)
-          .gte('occurred_at', queryStart.toIso8601String())
-          .lt('occurred_at', queryEnd.toIso8601String())
-          .order('occurred_at');
-      
-      final allLogs = (res as List).map((m) => models.ActionLog.fromJson(m as Map<String, dynamic>)).toList();
+      // Use local storage via db_service
+      final logs = await db_service.fetchLogs();
       
       // Filter to only include logs that occurred on the specified day in local time
-      return allLogs.where((log) {
+      return logs.where((log) {
         final localTime = log.occurredAt.toLocal();
         final logDay = DateTime(localTime.year, localTime.month, localTime.day);
         final targetDay = DateTime(day.year, day.month, day.day);
         return logDay.isAtSameMomentAs(targetDay);
       }).toList();
-      
-    } on PostgrestException catch (e) {
-      // Fallback when activity_name column doesn't exist
-      if (e.message.contains('activity_name')) {
-        final res = await client
-            .from('action_logs')
-            .select('id, occurred_at, duration_min, notes, earned_xp, template_id, image_url')
-            .eq('user_id', user.id)
-            .gte('occurred_at', queryStart.toIso8601String())
-            .lt('occurred_at', queryEnd.toIso8601String())
-            .order('occurred_at');
-        
-        final allLogs = (res as List).map((m) => models.ActionLog.fromJson(m as Map<String, dynamic>)).toList();
-        
-        // Filter to only include logs that occurred on the specified day in local time
-        return allLogs.where((log) {
-          final localTime = log.occurredAt.toLocal();
-          final logDay = DateTime(localTime.year, localTime.month, localTime.day);
-          final targetDay = DateTime(day.year, day.month, day.day);
-          return logDay.isAtSameMomentAs(targetDay);
-        }).toList();
-      }
-      rethrow;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error fetching logs for day: $e');
+      return [];
     }
   }
 
@@ -312,7 +278,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         .eq('user_id', user.id),
     ]);
     
-    final logs = results[0] as List<ActionLog>;
+    final logs = results[0] as List<models.ActionLog>;
     final templatesRes = results[1] as List<dynamic>;
     final lifeAreasRes = results[2] as List<dynamic>;
 
@@ -336,7 +302,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       }
     }
 
-    String titleForLog(ActionLog log) {
+    String titleForLog(models.ActionLog log) {
       if (log.activityName != null && log.activityName!.trim().isNotEmpty) {
         return log.activityName!.trim();
       }
@@ -352,7 +318,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       return 'Activity';
     }
 
-    Color? tagColorForLog(ActionLog log) {
+    Color? tagColorForLog(models.ActionLog log) {
       try {
         if (log.notes != null && log.notes!.isNotEmpty) {
           final parsed = ParsedActivityData.fromNotes(log.notes);
@@ -561,7 +527,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: color.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                               border: Border.all(color: color.withValues(alpha: 0.25)),
                             ),
                             child: Row(
@@ -720,82 +686,42 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     DateTime month, {
     String? areaFilterName,
   }) async {
-    final client = Supabase.instance.client;
-    final user = client.auth.currentUser;
-    if (user == null) return {};
-
-    // Build range for the month [start, nextMonthStart) with timezone buffer
-    // Expand query range to cover potential timezone differences
-    final startOfMonthLocal = DateTime(month.year, month.month);
-    final startOfMonth = startOfMonthLocal.subtract(const Duration(days: 1)).toUtc();
-    final startOfNextMonthLocal = DateTime(month.year, month.month + 1);
-    final startOfNextMonth = startOfNextMonthLocal.add(const Duration(days: 1)).toUtc();
-
-    // Fetch templates once to resolve template_id to names
-    final templatesRes = await client
-        .from('action_templates')
-        .select('id,name')
-        .eq('user_id', user.id);
-
-    final Map<String, String> templateIdToName = {
-      for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
-    };
-
-    List logsRes;
     try {
-      // Preferred selection including activity_name (if the column exists)
-      logsRes = await client
-          .from('action_logs')
-          .select('occurred_at, template_id, activity_name, notes, duration_min')
-          .eq('user_id', user.id)
-          .gte('occurred_at', startOfMonth.toIso8601String())
-          .lt('occurred_at', startOfNextMonth.toIso8601String())
-          .order('occurred_at') as List;
-    } on PostgrestException catch (e) {
-      // Fallback for schemas without activity_name
-      if (e.message.contains('activity_name')) {
-        logsRes = await client
-            .from('action_logs')
-            .select('occurred_at, template_id, notes, duration_min')
-            .eq('user_id', user.id)
-            .gte('occurred_at', startOfMonth.toIso8601String())
-            .lt('occurred_at', startOfNextMonth.toIso8601String())
-            .order('occurred_at') as List;
-      } else {
-        rethrow;
-      }
-    } catch (e) {
-  if (kDebugMode) debugPrint('Error loading calendar data: $e');
-      return {};
-    }
+      // Use local storage via db_service
+      final logs = await db_service.fetchLogs();
+      final templates = await db_service.fetchTemplates();
 
-    // Load life areas for color tagging
-    final lifeAreasRes = await client
-        .from('life_areas')
-        .select('name,category,color')
-        .eq('user_id', user.id);
-    final List<_AreaTag> areaTags = (lifeAreasRes as List).map((m) => _AreaTag(
-      name: LifeAreasService.canonicalAreaName((m['name'] as String).trim()),
-      category: LifeAreasService.canonicalCategory((m['category'] as String).trim()),
-      color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
-    )).toList();
+      final Map<String, String> templateIdToName = {
+        for (final t in templates) t.id: t.name
+      };
 
-    final Map<DateTime, List<_DayEntry>> dayToTitles = {};
+      // Filter logs to the specified month
+      final filteredLogs = logs.where((log) {
+        final occurredAt = log.occurredAt.toLocal();
+        final dayKey = DateTime(occurredAt.year, occurredAt.month, occurredAt.day);
+        return dayKey.year == month.year && dayKey.month == month.month;
+      }).toList();
 
-    for (final row in logsRes) {
-      final occurredAt = DateTime.parse(row['occurred_at'] as String).toLocal();
-      final dayKey = DateTime(occurredAt.year, occurredAt.month, occurredAt.day);
-      
-      // Filter: only include activities that are actually in the requested month (local time)
-      if (dayKey.year != month.year || dayKey.month != month.month) {
-        continue;
-      }
-      final String? activityName = row['activity_name'] as String?; // may be null if not selected
-      final String? templateId = row['template_id'] as String?;
-      final String? notes = row['notes'] as String?;
-      final int? durationMin = row['duration_min'] as int?;
+      // Load life areas for color tagging
+      final lifeAreas = await LifeAreasService.getLifeAreas();
+      final List<_AreaTag> areaTags = lifeAreas.map((area) => _AreaTag(
+        name: LifeAreasService.canonicalAreaName(area.name.trim()),
+        category: LifeAreasService.canonicalCategory(area.category.trim()),
+        color: _parseHexColor(area.color),
+      )).toList();
 
-    String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Activity') : 'Activity');
+      final Map<DateTime, List<_DayEntry>> dayToTitles = {};
+
+      for (final log in filteredLogs) {
+        final occurredAt = log.occurredAt.toLocal();
+        final dayKey = DateTime(occurredAt.year, occurredAt.month, occurredAt.day);
+        
+        final String? activityName = log.activityName;
+        final String? templateId = log.templateId;
+        final String? notes = log.notes;
+        final int? durationMin = log.durationMin;
+
+        String title = activityName ?? (templateId != null ? (templateIdToName[templateId] ?? 'Activity') : 'Activity');
       Color? tagColor;
       _AreaTag? matched;
       if (notes != null && notes.isNotEmpty) {
@@ -838,29 +764,42 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         debugPrint('Entry: $title, areaKey: $areaKey, color: ${tagColor != null ? '#${tagColor!.value.toRadixString(16).padLeft(8, '0').substring(2)}' : 'null'}, duration: $durationMin');
       }
       
-      dayToTitles
-          .putIfAbsent(dayKey, () => <_DayEntry>[])
-          .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey, durationMin: durationMin));
-    }
+        dayToTitles
+            .putIfAbsent(dayKey, () => <_DayEntry>[])
+            .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey, durationMin: durationMin));
+      }
 
-    return dayToTitles;
+      return dayToTitles;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error loading calendar data: $e');
+      return {};
+    }
   }
 
     Future<List<Map<String, dynamic>>> _fetchAllImages({int limit = 60, int offset = 0}) async {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return [];
-
       try {
-        final res = await client
-            .from('action_logs')
-            .select('id, occurred_at, image_url, notes')
-            .eq('user_id', user.id)
-            .not('image_url', 'is', null)
-            .order('occurred_at', ascending: false)
-            .range(offset, offset + limit - 1);
+        // Use local storage via db_service
+        final logs = await db_service.fetchLogs();
+        
+        // Filter for logs with images, sort by date descending, then paginate
+        final logsWithImages = logs
+            .where((log) => log.imageUrl != null && log.imageUrl!.isNotEmpty)
+            .toList()
+          ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
 
-        return (res as List).cast<Map<String, dynamic>>();
+        // Apply pagination
+        final paginatedLogs = logsWithImages
+            .skip(offset)
+            .take(limit)
+            .map((log) => {
+              'id': log.id,
+              'occurred_at': log.occurredAt.toIso8601String(),
+              'image_url': log.imageUrl,
+              'notes': log.notes,
+            })
+            .toList();
+
+        return paginatedLogs;
       } catch (e) {
         if (kDebugMode) debugPrint('Error fetching images: $e');
         return [];
@@ -869,10 +808,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Widget _buildTableContainer(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppTheme.spacing20),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -943,7 +882,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           size: 48,
                           color: Colors.grey[400],
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: AppTheme.spacing16),
                         Text(
                           'No activities yet',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -974,36 +913,25 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<List<Map<String, dynamic>>> _loadAllActivities() async {
     try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return <Map<String, dynamic>>[];
-
-      List<dynamic> res;
-      try {
-        // Try with activity_name column first
-        res = await client
-            .from('action_logs')
-            .select('id, activity_name, occurred_at, duration_min, notes, image_url, earned_xp, template_id')
-            .eq('user_id', user.id)
-            .order('occurred_at', ascending: false)
-            .limit(500) as List;
-      } catch (e) {
-        if (kDebugMode) debugPrint('Falling back to query without activity_name: $e');
-        // Fallback without activity_name column if it doesn't exist
-        res = await client
-            .from('action_logs')
-            .select('id, occurred_at, duration_min, notes, image_url, earned_xp, template_id')
-            .eq('user_id', user.id)
-            .order('occurred_at', ascending: false)
-            .limit(500) as List;
-      }
-
-      final List<Map<String, dynamic>> result = [];
-      for (final item in res) {
-        result.add(item as Map<String, dynamic>);
-      }
+      // Use local storage via db_service
+      final logs = await db_service.fetchLogs();
       
-      if (kDebugMode) debugPrint('Loaded ${result.length} activities for table view');
+      // Convert to the expected format, limit to 500 most recent
+      final result = logs
+          .take(500)
+          .map((log) => {
+            'id': log.id,
+            'activity_name': log.activityName,
+            'occurred_at': log.occurredAt.toIso8601String(),
+            'duration_min': log.durationMin,
+            'notes': log.notes,
+            'image_url': log.imageUrl,
+            'earned_xp': log.earnedXp,
+            'template_id': log.templateId,
+          })
+          .toList();
+      
+      if (kDebugMode) debugPrint('Loaded ${result.length} activities for table view from local storage');
       return result;
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading all activities: $e');
@@ -1015,7 +943,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -1266,10 +1194,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Widget _buildGalleryContainer(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppTheme.spacing20),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -1330,7 +1258,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           size: 48,
                           color: Theme.of(context).colorScheme.error,
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: AppTheme.spacing16),
                         Text(
                           'Error loading photos',
                           style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -1356,7 +1284,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                   size: 48,
                                   color: Theme.of(context).colorScheme.error,
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(height: AppTheme.spacing16),
                                 Text(
                                   'Error loading photos',
                                   style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -1500,7 +1428,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1512,7 +1440,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: Color(int.parse(area['color'].substring(1), radix: 16) + 0xFF000000),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1604,10 +1532,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Widget _buildCalendarContainer(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppTheme.spacing20),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4)),
         ],
@@ -1681,7 +1609,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
       }
                     }
-                    final fromNotes = extractTitleFromNotes(l.notes);
+                    final parsedData = ParsedActivityData.fromNotes(l.notes);
+                    final fromNotes = parsedData.displayTitle;
                     final title = l.activityName ?? fromNotes ?? 'Activity';
                     Color? color;
                     try {
@@ -1796,7 +1725,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Colors.brown.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
           ),
           child: const Icon(Icons.emoji_events, color: Colors.brown, size: 24),
         );
@@ -1805,7 +1734,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Colors.grey.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
           ),
           child: const Icon(Icons.emoji_events, color: Colors.grey, size: 24),
         );
@@ -1814,7 +1743,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Colors.amber.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
           ),
           child: const Icon(Icons.emoji_events, color: Colors.amber, size: 24),
         );
@@ -1973,7 +1902,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       ].map((d) {
                         final Color chipColor = Color(int.parse((d['color'] as String).replaceAll('#', '0xFF')));
                         return InkWell(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                           onTap: () {
                             setDialogState(() {
                               nameController.text = d['name'] as String;
@@ -1986,7 +1915,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: chipColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                               border: Border.all(color: chipColor.withValues(alpha: 0.5)),
                             ),
                             child: Row(
@@ -2011,7 +1940,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: AppTheme.spacing16),
                     
                     // Category Field
                     TextField(
@@ -2089,7 +2018,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                               color: isSelected 
                                   ? Color(int.parse(selectedColor.replaceAll('#', '0xFF'))).withValues(alpha: 0.2)
                                   : Colors.grey.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                               border: isSelected 
                                   ? Border.all(color: Color(int.parse(selectedColor.replaceAll('#', '0xFF'))), width: 2)
                                   : null,
@@ -2311,93 +2240,71 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
          ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppTheme.spacing20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            // Life Areas Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Life Areas Section - Two-line layout
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Life areas',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Manage your personal areas',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
+                // First line: Title and Add button
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Theme.of(context).colorScheme.surface,
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: ToggleButtons(
-                        isSelected: [_viewMode == 0, _viewMode == 1, _viewMode == 2, _viewMode == 3],
-                        onPressed: (index) {
-                          setState(() {
-                            _viewMode = index;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        selectedColor: Theme.of(context).colorScheme.onPrimary,
-                        fillColor: Theme.of(context).colorScheme.primary,
+                    Text(
+                      'Life Areas',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                         color: Theme.of(context).colorScheme.onSurface,
-                        constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
-                        children: const [
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            child: Icon(Icons.bubble_chart),
-                          ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            child: Icon(Icons.calendar_today),
-                          ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            child: Icon(Icons.photo_library),
-                          ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            child: Icon(Icons.table_rows),
+                      ),
+                    ),
+                    Container(
+                      height: 44,
+                      width: 44,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       child: IconButton(
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        onPressed: () {
-                          _showAddLifeAreaDialog(context);
-                        },
-                        tooltip: 'Neuen Bereich hinzufügen',
+                        icon: const Icon(Icons.add_rounded, size: 24),
+                        color: Colors.white,
+                        onPressed: () => _showAddLifeAreaDialog(context),
+                        padding: EdgeInsets.zero,
+                        tooltip: 'Add new area',
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                // Second line: View selector toolbar
+                Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildTabButton(0, Icons.apps_rounded, 'Grid'),
+                      _buildTabButton(1, Icons.calendar_month_rounded, 'Calendar'),
+                      _buildTabButton(2, Icons.photo_library_rounded, 'Gallery'),
+                      _buildTabButton(3, Icons.list_alt_rounded, 'List'),
+                    ],
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppTheme.spacing16),
 
             // Life Areas content (Bubbles, Calendar, Gallery, or Table)
             _viewMode == 1
@@ -2407,10 +2314,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     : _viewMode == 3
                         ? _buildTableContainer(context)
                         : Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(AppTheme.spacing20),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.08),
@@ -2468,7 +2375,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                   size: 48,
                                   color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(height: AppTheme.spacing16),
                                 Text(
                                   'No life areas yet',
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -2513,11 +2420,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     ),
                   ),
 
-            const SizedBox(height: 24),
+            SizedBox(height: AppTheme.spacing24),
 
             // Global Statistics Section
             _buildGlobalStatisticsSection(context),
-            const SizedBox(height: 24),
+            SizedBox(height: AppTheme.spacing24),
 
             // Quick Actions for All Life Areas
             Column(
@@ -2537,13 +2444,13 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppTheme.spacing16),
 
             // Quick Actions Grid
             Container(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.08),
@@ -2596,7 +2503,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                             border: Border.all(
                               color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
                             ),
@@ -2604,7 +2511,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
@@ -2728,10 +2635,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         ),
         const SizedBox(height: 16),
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppTheme.spacing20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.08),
@@ -2751,7 +2658,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   ],
                 ),
                 error: (e, st) => const Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: EdgeInsets.all(AppTheme.spacing20),
                   child: Center(child: Text('Error loading statistics')),
                 ),
                 data: (logs) {
@@ -2794,7 +2701,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: AppTheme.spacing16),
                       _buildGlobalActivityGraph(context),
                       const SizedBox(height: 12),
                       _buildGlobalDurationGraph(context),
@@ -2820,7 +2727,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         border: Border.all(
           color: color.withValues(alpha: 0.3),
           width: 1,
@@ -3220,7 +3127,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<Map<String, dynamic>> _calculateGlobalStatistics() async {
     try {
-      final logs = await fetchLogs();
+      final logs = await db_service.fetchLogs();
       
       final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp);
       final activityCount = logs.length;
@@ -3241,13 +3148,13 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<List<int>> _getGlobalLast7DaysActivity() async {
     try {
-      final logs = await fetchLogs();
+      final logs = await db_service.fetchLogs();
       final now = DateTime.now();
       final last7Days = List.generate(7, (index) {
         return DateTime(now.year, now.month, now.day - index);
       }).reversed.toList();
       
-      return last7Days.map((date) {
+      return last7Days.map<int>((date) {
         final targetDate = DateTime(date.year, date.month, date.day);
         return logs.where((log) {
           final local = log.occurredAt.toLocal();
@@ -3265,13 +3172,13 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<List<int>> _getGlobalLast7DaysDurationMinutes() async {
     try {
-      final logs = await fetchLogs();
+      final logs = await db_service.fetchLogs();
       final now = DateTime.now();
       final last7Days = List.generate(7, (index) {
         return DateTime(now.year, now.month, now.day - index);
       }).reversed.toList();
 
-      return last7Days.map((date) {
+      return last7Days.map<int>((date) {
         final targetDate = DateTime(date.year, date.month, date.day);
         final minutes = logs.where((log) {
           final local = log.occurredAt.toLocal();
@@ -3290,7 +3197,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   
   Future<Map<String, dynamic>> _getGlobalLast7DaysDurationStacks() async {
     try {
-      final logs = await fetchLogs();
+      final logs = await db_service.fetchLogs();
       final now = DateTime.now();
       final last7Days = List.generate(7, (index) => DateTime(now.year, now.month, now.day - index)).reversed.toList();
 
@@ -3307,7 +3214,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               ))
           .toList();
 
-      Color resolveColorForLog(ActionLog log) {
+      Color resolveColorForLog(models.ActionLog log) {
         try {
           if (log.notes != null && log.notes!.isNotEmpty) {
             final obj = jsonDecode(log.notes!);
@@ -3342,7 +3249,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           final mins = l.durationMin ?? 0;
           if (mins <= 0) continue;
           final color = resolveColorForLog(l);
-          colorToMinutes[color.value] = (colorToMinutes[color.value] ?? 0) + mins;
+          colorToMinutes[color.value] = (colorToMinutes[color.value] ?? 0) + mins.toInt();
         }
         final list = colorToMinutes.entries
             .map((e) => _StackSlice(minutes: e.value, color: Color(e.key)))
@@ -3440,7 +3347,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return InkWell(
           onTap: () => _showImageFullscreen(context, data, images, index),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
             child: CachedNetworkImage(
               imageUrl: _thumbUrl(imageUrl, width: 600, quality: 80),
               fit: BoxFit.cover,
@@ -3455,6 +3362,52 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildTabButton(int mode, IconData icon, String label) {
+    final isSelected = _viewMode == mode;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _viewMode = mode;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? Theme.of(context).colorScheme.primary
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected 
+                  ? Colors.white 
+                  : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

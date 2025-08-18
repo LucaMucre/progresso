@@ -4,50 +4,99 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import '../widgets/modern_snackbar.dart';
+import '../utils/logging_service.dart';
 
 class ErrorService {
-  static void showErrorSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'OK',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
-  }
-
-  static void showSuccessSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  static void showErrorDialog(BuildContext context, String title, String message) {
-    showDialog(
+  /// Show error message using modern UI components
+  static void showError(BuildContext context, dynamic error, {String? title, StackTrace? stackTrace}) {
+    final message = getErrorMessage(error);
+    logError(error, stackTrace, 'UI Error');
+    
+    ModernSnackBar.showError(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+      message: message,
+      title: title,
     );
+  }
+
+  /// Show success message using modern UI components
+  static void showSuccess(BuildContext context, String message, {String? title}) {
+    ModernSnackBar.showSuccess(
+      context: context,
+      message: message,
+      title: title,
+    );
+  }
+
+  /// Show warning message using modern UI components
+  static void showWarning(BuildContext context, String message, {String? title}) {
+    ModernSnackBar.showWarning(
+      context: context,
+      message: message,
+      title: title,
+    );
+  }
+
+  /// Show info message using modern UI components
+  static void showInfo(BuildContext context, String message, {String? title}) {
+    ModernSnackBar.showInfo(
+      context: context,
+      message: message,
+      title: title,
+    );
+  }
+
+  /// Legacy method - deprecated, use showError instead
+  @Deprecated('Use showError instead')
+  static void showErrorSnackBar(BuildContext context, String message) {
+    showError(context, message);
+  }
+
+  /// Legacy method - deprecated, use showSuccess instead  
+  @Deprecated('Use showSuccess instead')
+  static void showSuccessSnackBar(BuildContext context, String message) {
+    showSuccess(context, message);
+  }
+
+  /// Show error dialog using modern UI components
+  static Future<void> showErrorDialog(
+    BuildContext context, 
+    String title, 
+    String message, {
+    String? confirmText,
+  }) {
+    return ModernConfirmDialog.show(
+      context: context,
+      title: title,
+      message: message,
+      confirmText: confirmText ?? 'OK',
+      cancelText: '',
+      icon: Icons.error_outline,
+      confirmColor: Theme.of(context).colorScheme.error,
+    ).then((_) {});
+  }
+
+  /// Show confirmation dialog using modern UI components
+  static Future<bool> showConfirmDialog(
+    BuildContext context,
+    String title,
+    String message, {
+    String? confirmText,
+    String? cancelText,
+    Color? confirmColor,
+    IconData? icon,
+  }) async {
+    final result = await ModernConfirmDialog.show(
+      context: context,
+      title: title,
+      message: message,
+      confirmText: confirmText ?? 'Confirm',
+      cancelText: cancelText ?? 'Cancel',
+      confirmColor: confirmColor,
+      icon: icon,
+    );
+    return result ?? false;
   }
 
   static String getErrorMessage(dynamic error) {
@@ -114,13 +163,25 @@ class ErrorService {
     return 'An unexpected error occurred. Please try again.';
   }
 
-  static void logError(Object error, [StackTrace? st]) {
-    if (kDebugMode) {
-      // In Debug: direkte Ausgabe zur Konsole
-      if (kDebugMode) debugPrint('Error: $error');
-      if (st != null && kDebugMode) debugPrint(st.toString());
+  /// Enhanced error logging with context
+  static void logError(Object error, [StackTrace? stackTrace, String? context]) {
+    try {
+      // Use the app's logging service for consistent formatting
+      LoggingService.error(
+        context ?? 'Unknown Error',
+        error,
+        stackTrace,
+        'ErrorService',
+      );
+    } catch (e) {
+      // Fallback to debug print if LoggingService fails
+      if (kDebugMode) {
+        debugPrint('Error logging failed: $e');
+        debugPrint('Original error: $error');
+        if (stackTrace != null) debugPrint(stackTrace.toString());
+      }
     }
-    _maybeCapture(error, st);
+    _maybeCapture(error, stackTrace);
   }
 
   static Future<void> _maybeCapture(Object error, StackTrace? st) async {
@@ -134,18 +195,52 @@ class ErrorService {
     } catch (_) {}
   }
 
-  // Globale Fehlerbehandlung
-  static void handleGlobalError(BuildContext context, dynamic error, StackTrace? stackTrace) {
-    final message = getErrorMessage(error);
+  /// Enhanced global error handling
+  static void handleGlobalError(BuildContext context, dynamic error, [StackTrace? stackTrace]) {
+    logError(error, stackTrace, 'Global Error');
+    showError(context, error, stackTrace: stackTrace);
+  }
+
+  /// Handle async operations with consistent error handling
+  static Future<T?> handleAsync<T>(
+    BuildContext context,
+    Future<T> Function() operation, {
+    String? loadingMessage,
+    String? successMessage,
+    String? errorTitle,
+    bool showLoading = false,
+    bool showSuccess = false,
+  }) async {
+    OverlayEntry? loadingOverlay;
     
-    // Log für Debugging
-    if (kDebugMode) debugPrint('Global Error: $error');
-    if (stackTrace != null) {
-      if (kDebugMode) debugPrint('StackTrace: $stackTrace');
+    try {
+      // Show loading overlay if requested
+      if (showLoading && loadingMessage != null) {
+        loadingOverlay = OverlayEntry(
+          builder: (context) => ModernLoadingOverlay(
+            message: loadingMessage,
+            isVisible: true,
+          ),
+        );
+        Overlay.of(context).insert(loadingOverlay);
+      }
+
+      final result = await operation();
+
+      // Show success message if requested
+      if (showSuccess && successMessage != null) {
+        ErrorService.showSuccess(context, successMessage);
+      }
+
+      return result;
+    } catch (error, stackTrace) {
+      logError(error, stackTrace, 'Async Operation');
+      showError(context, error, title: errorTitle, stackTrace: stackTrace);
+      return null;
+    } finally {
+      // Remove loading overlay
+      loadingOverlay?.remove();
     }
-    
-    // User-freundliche Nachricht anzeigen
-    showErrorSnackBar(context, message);
   }
 
   // Supabase-spezifische Fehlerbehandlung

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/action_models.dart';
 import 'services/life_areas_service.dart';
+import 'services/db_service.dart' as db_service;
 import 'widgets/activity_details_dialog.dart';
 import 'utils/app_theme.dart';
 import 'utils/logging_service.dart';
@@ -46,31 +47,35 @@ class _InsightsPageState extends State<InsightsPage> {
       // Load life areas for filter
       final lifeAreas = await LifeAreasService.getLifeAreas();
       
-      // Load all activities with notes or detailed titles
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      // Load all activities from local storage
+      final logs = await db_service.fetchLogs();
+      final templates = await db_service.fetchTemplates();
+      
+      // Create a map of template IDs to templates for easy lookup
+      final templateMap = {for (final template in templates) template.id: template};
 
-      final response = await _supabase
-          .from('action_logs')
-          .select('''
-            id,
-            notes,
-            duration_min,
-            earned_xp,
-            occurred_at,
-            template_id,
-            image_url,
-            action_templates (
-              name,
-              category
-            )
-          ''')
-          .eq('user_id', userId)
-          .order('occurred_at', ascending: false);
+      // Convert ActionLog objects to the expected map format
+      final activities = logs.map((log) {
+        final template = log.templateId != null ? templateMap[log.templateId] : null;
+        
+        return {
+          'id': log.id,
+          'notes': log.notes,
+          'duration_min': log.durationMin,
+          'earned_xp': log.earnedXp,
+          'occurred_at': log.occurredAt.toIso8601String(),
+          'template_id': log.templateId,
+          'image_url': log.imageUrl,
+          'action_templates': template != null ? {
+            'name': template.name,
+            'category': template.category,
+          } : null,
+        };
+      }).toList();
 
       setState(() {
         _lifeAreas = lifeAreas;
-        _activities = List<Map<String, dynamic>>.from(response);
+        _activities = activities;
         _filteredActivities = _activities;
         _isLoading = false;
       });

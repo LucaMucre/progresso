@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:js_interop' if (dart.library.html) 'dart:js_interop';
 import 'utils/app_theme.dart';
+import 'services/error_service.dart';
+import 'utils/js_interop_stub.dart' 
+    if (dart.library.html) 'utils/js_interop_web.dart' as js_interop;
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -23,52 +25,39 @@ class _AuthPageState extends State<AuthPage> {
   void _promptSavePasswordNow(String email, String password) {
     if (!kIsWeb) return;
     try {
-      // Use js_interop for modern web integration
-      if (kIsWeb) {
-        // Call JavaScript functions if available
-        // js.context.callMethod('triggerImmediatePasswordSavePrompt', [email, password]);
-        // js.context.callMethod('storePasswordCredential', [email, password]);
-        // TODO: Migrate to dart:js_interop when web-specific functionality is needed
-      }
+      js_interop.triggerImmediatePasswordSavePrompt(email, password);
+      js_interop.storePasswordCredential(email, password);
     } catch (_) {}
   }
 
   Future<void> _forgotPassword() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter your email')));
+      ErrorService.showWarning(context, 'Please enter your email');
       return;
     }
-    try {
-      // Magic-Link zum Passwort-Reset in der App. Der Link führt zurück in die App,
-      // onAuthStateChange liefert dann USER_UPDATED, worauf wir einen Dialog zeigen.
-      final origin = Uri.base.origin; // funktioniert für Web & Desktop (http://localhost:...)
-      await Supabase.instance.client.auth.resetPasswordForEmail(email, redirectTo: origin);
-      if (!mounted) return;
-      // Kurzer Hinweis-Dialog statt nur Snackbar
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Email sent'),
-          content: Text('We sent a reset link to "$email".'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx), 
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.primaryColor,
-              ),
-              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ],
-        ),
-      );
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
+
+    await ErrorService.handleAsync(
+      context,
+      () async {
+        // Magic-Link zum Passwort-Reset in der App. Der Link führt zurück in die App,
+        // onAuthStateChange liefert dann USER_UPDATED, worauf wir einen Dialog zeigen.
+        final origin = Uri.base.origin; // funktioniert für Web & Desktop (http://localhost:...)
+        await Supabase.instance.client.auth.resetPasswordForEmail(email, redirectTo: origin);
+        
+        if (!mounted) return;
+        // Show success dialog using modern UI
+        await ErrorService.showErrorDialog(
+          context,
+          'Email sent',
+          'We sent a reset link to "$email".',
+          confirmText: 'OK',
+        );
+      },
+      loadingMessage: 'Sending reset email...',
+      showLoading: true,
+      errorTitle: 'Reset Failed',
+    );
   }
 
   Future<void> _submit() async {
@@ -275,7 +264,7 @@ class _AuthPageState extends State<AuthPage> {
                   Container(
                     decoration: BoxDecoration(
                       color: colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
                       border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
                     ),
                     child: TextField(
@@ -310,7 +299,7 @@ class _AuthPageState extends State<AuthPage> {
                   Container(
                     decoration: BoxDecoration(
                       color: colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
                       border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
                     ),
                     child: TextField(
@@ -349,7 +338,7 @@ class _AuthPageState extends State<AuthPage> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppTheme.errorColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   border: Border.all(color: AppTheme.errorColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
@@ -531,5 +520,12 @@ class _AuthPageState extends State<AuthPage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
   }
 }
