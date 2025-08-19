@@ -4,24 +4,18 @@ import 'dart:async';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-
 import 'life_area_detail_page.dart';
 import 'log_action_page.dart';
 import 'services/db_service.dart' as db_service;
 import 'services/life_areas_service.dart';
 import 'widgets/bubble_widget.dart';
-import 'dashboard/widgets/gallery_filters.dart';
 import 'widgets/activity_details_dialog.dart';
 import 'services/level_up_service.dart';
 import 'models/action_models.dart' as models;
 import 'services/achievement_service.dart';
 import 'utils/parsed_activity_data.dart';
-import 'widgets/optimized_image.dart';
 import 'utils/image_utils.dart';
 import 'navigation.dart';
-import 'dashboard/widgets/calendar_header.dart';
-import 'dashboard/widgets/calendar_grid.dart';
 import 'dashboard/widgets/dashboard_calendar_widget.dart';
 import 'dashboard/widgets/dashboard_gallery_widget.dart';
 import 'widgets/skeleton.dart';
@@ -48,11 +42,18 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   int _viewMode = 0;
   // Optional filter: show only activities for this life area name
   String? _selectedAreaFilterName;
+  // Activity contributions data
+  int _totalActions = 0;
+  
+  // Shared cache for logs to prevent multiple fetches
+  Future<List<models.ActionLog>>? _cachedLogsFuture;
 
   // Ensure default life areas are only created once even if multiple builders call _loadLifeAreas()
   Future<void>? _ensureDefaultsFuture;
   // Debounce timer for realtime refreshes
   Timer? _realtimeDebounce;
+  // Realtime subscription for cleanup
+  RealtimeChannel? _realtimeSubscription;
 
   @override
   void didChangeDependencies() {
@@ -66,6 +67,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   @override
   void dispose() {
     _realtimeDebounce?.cancel();
+    _realtimeSubscription?.unsubscribe();
     routeObserver.unsubscribe(this);
     super.dispose();
   }
@@ -100,6 +102,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   void initState() {
     super.initState();
     _lifeAreasFuture = _loadLifeAreas();
+    _loadCachedLogs(); // Initialize shared cache
     _globalStatsFuture = _calculateGlobalStatistics();
     _globalActivity7dFuture = _getGlobalLast7DaysActivity();
     _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
@@ -133,7 +136,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     // Realtime: Änderungen an action_logs triggern Refresh (sanft ohne aggressive setState)
     try {
       final client = Supabase.instance.client;
-      client
+      _realtimeSubscription = client
           .channel('realtime-logs')
           .onPostgresChanges(
             event: PostgresChangeEvent.insert,
@@ -146,6 +149,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 if (!mounted) return;
                 setState(() {
                   _refreshCounter++;
+                  _refreshLogsCache(); // Refresh shared cache
                   _globalStatsFuture = _calculateGlobalStatistics();
                   _globalActivity7dFuture = _getGlobalLast7DaysActivity();
                   _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
@@ -164,6 +168,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 if (!mounted) return;
                 setState(() {
                   _refreshCounter++;
+                  _refreshLogsCache(); // Refresh shared cache
                   _globalStatsFuture = _calculateGlobalStatistics();
                   _globalActivity7dFuture = _getGlobalLast7DaysActivity();
                   _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
@@ -182,6 +187,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 if (!mounted) return;
                 setState(() {
                   _refreshCounter++;
+                  _refreshLogsCache(); // Refresh shared cache
                   _globalStatsFuture = _calculateGlobalStatistics();
                   _globalActivity7dFuture = _getGlobalLast7DaysActivity();
                   _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
@@ -196,6 +202,24 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   }
 
 
+  /// Get cached logs or fetch if not available
+  Future<List<models.ActionLog>> _getCachedLogs() {
+    if (_cachedLogsFuture == null) {
+      _loadCachedLogs();
+    }
+    return _cachedLogsFuture!;
+  }
+  
+  /// Load logs into cache
+  void _loadCachedLogs() {
+    _cachedLogsFuture = db_service.fetchLogs();
+  }
+  
+  /// Refresh the logs cache when data changes
+  void _refreshLogsCache() {
+    _cachedLogsFuture = null;
+    _loadCachedLogs();
+  }
   
   Future<void> _signOut() async {
     try {
@@ -229,7 +253,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   Future<List<models.ActionLog>> _fetchLogsForDay(DateTime day) async {
     try {
       // Use local storage via db_service
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       
       // Filter to only include logs that occurred on the specified day in local time
       return logs.where((log) {
@@ -671,7 +695,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   }) async {
     try {
       // Use local storage via db_service
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       final templates = await db_service.fetchTemplates();
 
       final Map<String, String> templateIdToName = {
@@ -762,7 +786,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     Future<List<Map<String, dynamic>>> _fetchAllImages({int limit = 60, int offset = 0}) async {
       try {
         // Use local storage via db_service
-        final logs = await db_service.fetchLogs();
+        final logs = await _getCachedLogs();
         
         // Filter for logs with images, sort by date descending, then paginate
         final logsWithImages = logs
@@ -897,7 +921,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   Future<List<Map<String, dynamic>>> _loadAllActivities() async {
     try {
       // Use local storage via db_service
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       
       // Convert to the expected format, limit to 500 most recent
       final result = logs
@@ -992,48 +1016,113 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           
           // Table Body
           SizedBox(
-            height: 400, // Fixed height for scrolling
+            height: 320, // Reduced height for scrolling (proportional to main container reduction)
             child: ListView.builder(
               itemCount: activities.length,
               itemBuilder: (context, index) {
                 final activity = activities[index];
                 final isEven = index % 2 == 0;
                 
-                // Extract activity name from activity_name field or notes - optimized parsing
-                String activityName = activity['activity_name'] as String? ?? '';
-                if (activityName.isEmpty) {
-                  final parsed = ParsedActivityData.fromNotes(activity['notes'] as String?);
-                  activityName = parsed.displayTitle;
+                // Extract activity name from notes since activity_name column doesn't exist in local DB
+                String activityName = 'Activity';
+                final notesStr = activity['notes'] as String?;
+                if (kDebugMode) debugPrint('Activity Table Debug: raw notes = "$notesStr"');
+                
+                if (notesStr != null && notesStr.isNotEmpty) {
+                  // Try to parse as JSON first
+                  try {
+                    final jsonData = jsonDecode(notesStr);
+                    if (jsonData is Map<String, dynamic>) {
+                      // Look for title field
+                      if (jsonData['title'] != null && jsonData['title'].toString().trim().isNotEmpty) {
+                        activityName = jsonData['title'].toString().trim();
+                        if (kDebugMode) debugPrint('Activity Table Debug: Found title in JSON = "$activityName"');
+                      } else {
+                        // Try to extract from Quill delta format
+                        final delta = jsonData['delta'] ?? jsonData['ops'];
+                        if (delta is List && delta.isNotEmpty) {
+                          final textParts = <String>[];
+                          for (final op in delta) {
+                            if (op is Map && op['insert'] is String) {
+                              textParts.add(op['insert'].toString());
+                            }
+                          }
+                          if (textParts.isNotEmpty) {
+                            final allText = textParts.join('').trim();
+                            final firstLine = allText.split('\n').first.trim();
+                            if (firstLine.isNotEmpty && firstLine.length <= 50) {
+                              activityName = firstLine;
+                              if (kDebugMode) debugPrint('Activity Table Debug: Extracted from Quill delta = "$activityName"');
+                            }
+                          }
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    // If JSON parsing fails, try to use first line as title
+                    final lines = notesStr.split('\n');
+                    if (lines.isNotEmpty) {
+                      final firstLine = lines.first.trim();
+                      if (firstLine.isNotEmpty && firstLine.length <= 100) {
+                        activityName = firstLine.length > 50 ? '${firstLine.substring(0, 50)}...' : firstLine;
+                        if (kDebugMode) debugPrint('Activity Table Debug: Used first line as title = "$activityName"');
+                      }
+                    }
+                  }
                 }
+                
+                if (kDebugMode) debugPrint('Activity Table Debug: Final activity name = "$activityName"');
                 final imageUrl = activity['image_url'] as String?;
                 final occurredAt = DateTime.parse(activity['occurred_at'] as String);
                 final durationMin = activity['duration_min'] as int?;
                 
-                // Extract life area information using actual life areas
-                String areaName = 'Activity';
-                String areaColor = '#6366f1';
+                // Extract life area information
+                String areaName = 'General';
+                Color areaColor = const Color(0xFF6366f1); // Default blue
                 
-                // Extract life area information from notes - optimized parsing
-                final parsed = ParsedActivityData.fromNotes(activity['notes'] as String?);
-                final extractedArea = parsed.effectiveAreaName;
-                final extractedCategory = parsed.category;
-                
-                // Convert LifeAreas to AreaTags for matching
-                final areaTags = lifeAreas.map((la) => _AreaTag(
-                  name: la.name,
-                  category: la.category,
-                  color: _parseHexColor(la.color),
-                )).toList();
-                
-                // Try to match with actual life areas
-                final matchedArea = _matchAreaTag(areaTags, extractedArea, extractedCategory);
-                if (matchedArea != null) {
-                  areaName = matchedArea.name;
-                  areaColor = '#${matchedArea.color.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
-                } else if (extractedArea.isNotEmpty) {
-                  areaName = extractedArea;
-                } else if (extractedCategory != null && extractedCategory.trim().isNotEmpty) {
-                  areaName = extractedCategory.trim();
+                // Try to extract area/category from the same notes
+                if (notesStr != null && notesStr.isNotEmpty) {
+                  try {
+                    final jsonData = jsonDecode(notesStr);
+                    if (jsonData is Map<String, dynamic>) {
+                      final area = jsonData['area'] as String?;
+                      final category = jsonData['category'] as String?;
+                      final lifeArea = jsonData['life_area'] as String?;
+                      
+                      if (kDebugMode) debugPrint('Activity Table Debug: JSON area="$area", category="$category", life_area="$lifeArea"');
+                      
+                      // Try to match with actual life areas
+                      final searchName = area?.trim() ?? lifeArea?.trim() ?? '';
+                      final searchCategory = category?.trim() ?? '';
+                      
+                      if (searchName.isNotEmpty || searchCategory.isNotEmpty) {
+                        // Find matching life area
+                        LifeArea? matchedLifeArea;
+                        for (final la in lifeAreas) {
+                          if (searchName.isNotEmpty && la.name.toLowerCase() == searchName.toLowerCase()) {
+                            matchedLifeArea = la;
+                            break;
+                          }
+                          if (searchCategory.isNotEmpty && la.category.toLowerCase() == searchCategory.toLowerCase()) {
+                            matchedLifeArea = la;
+                            break;
+                          }
+                        }
+                        
+                        if (matchedLifeArea != null) {
+                          areaName = matchedLifeArea.name;
+                          areaColor = Color(int.parse(matchedLifeArea.color.replaceFirst('#', '0xFF')));
+                          if (kDebugMode) debugPrint('Activity Table Debug: Matched life area "$areaName" with color "${matchedLifeArea.color}"');
+                        } else {
+                          // Use the extracted name even if no exact match
+                          areaName = searchName.isNotEmpty ? searchName : searchCategory;
+                          if (kDebugMode) debugPrint('Activity Table Debug: Using extracted area name "$areaName" with default color');
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    if (kDebugMode) debugPrint('Activity Table Debug: Error parsing JSON for area: $e');
+                  }
                 }
                 
                 return InkWell(
@@ -1066,7 +1155,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isEven ? Colors.grey[50] : Colors.white,
+                      color: areaColor.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: areaColor.withValues(alpha: 0.8),
+                        width: 2.0,
+                      ),
                     ),
                     child: Row(
                     children: [
@@ -1113,7 +1207,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                               height: 12,
                               margin: const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(
-                                color: Color(int.parse(areaColor.replaceFirst('#', '0xFF'))),
+                                color: areaColor,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -1702,258 +1796,163 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            // Life Areas Section - Two-line layout
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // First line: Title and Add button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Life Areas',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    Container(
-                      height: 44,
-                      width: 44,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+            // Activity Contributions Section
+            _buildSectionContainer(
+              child: _buildActivityContributionsSection(),
+            ),
+            SizedBox(height: AppTheme.spacing32),
+
+            // Life Areas Section
+            _buildSectionContainer(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section header with title and add button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Life Areas',
+                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Organize your activities by life domains',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                           ),
                         ],
                       ),
-                      child: IconButton(
-                        icon: const Icon(Icons.add_rounded, size: 24),
-                        color: Colors.white,
-                        onPressed: () => _showAddLifeAreaDialog(context),
-                        padding: EdgeInsets.zero,
-                        tooltip: 'Add new area',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Second line: View selector toolbar
-                Container(
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildTabButton(0, Icons.apps_rounded, 'Grid'),
-                      _buildTabButton(1, Icons.calendar_month_rounded, 'Calendar'),
-                      _buildTabButton(2, Icons.photo_library_rounded, 'Gallery'),
-                      _buildTabButton(3, Icons.list_alt_rounded, 'List'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: AppTheme.spacing16),
-
-            // Life Areas content (Bubbles, Calendar, Gallery, or Table)
-            _viewMode == 1
-          ? Container(
-              padding: const EdgeInsets.all(AppTheme.spacing20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: DashboardCalendarWidget(
-                selectedAreaFilterName: _selectedAreaFilterName,
-                onAreaSelected: (v) => setState(() => _selectedAreaFilterName = v),
-                onOpenDay: _openDayDetails,
-              ),
-            )
-                : _viewMode == 2
-                    ? Container(
-                        padding: const EdgeInsets.all(AppTheme.spacing20),
+                      Container(
+                        height: 44,
+                        width: 44,
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                        child: DashboardGalleryWidget(
-                          selectedAreaFilterName: _selectedAreaFilterName,
-                          onAreaSelected: (name) => setState(() {
-                            _selectedAreaFilterName = name;
-                            _refreshCounter++;
-                          }),
-                          onImageTap: (thumbUrl, width, quality) => _thumbUrl(thumbUrl, width: width, quality: quality),
-                          fetchAllImages: _fetchAllImages,
+                        child: IconButton(
+                          icon: const Icon(Icons.add_rounded, size: 24),
+                          color: Colors.white,
+                          onPressed: () => _showAddLifeAreaDialog(context),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Add new area',
                         ),
-                      )
-                    : _viewMode == 3
-                        ? _buildTableContainer(context)
-                        : Container(
-                    padding: const EdgeInsets.all(AppTheme.spacing20),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: FutureBuilder<List<LifeArea>>(
-                       key: ValueKey(_refreshCounter), // still used for explicit refreshes
-                       future: _lifeAreasFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: Column(
-                              children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 16),
-                                Text('Loading life areas...'),
-                              ],
-                            ),
-                          );
-                        }
-
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Column(
-                              children: [
-                                Icon(Icons.error, color: Colors.red, size: 48),
-                                const SizedBox(height: 8),
-                                Text('Error loading life areas'),
-                                const SizedBox(height: 8),
-                                                           ElevatedButton(
-                                   onPressed: () {
-                                     // Force rebuild
-                                     setState(() {
-                                       _refreshCounter++;
-                                     });
-                                   },
-                                   child: const Text('Try again'),
-                                 ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        final areas = snapshot.data ?? [];
-                        
-                        if (areas.isEmpty) {
-                          return Center(
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.add_circle_outline,
-                                  size: 48,
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-                                ),
-                                SizedBox(height: AppTheme.spacing16),
-                                Text(
-                                  'No life areas yet',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ElevatedButton(
-                                   onPressed: () async {
-                                     try {
-                                       await LifeAreasService.createDefaultLifeAreas();
-                                       // Refresh cached future
-                                       setState(() {
-                                         _lifeAreasFuture = _loadLifeAreas();
-                                         _refreshCounter++;
-                                       });
-                                     } catch (e) {
-  if (kDebugMode) debugPrint('Error creating default areas: $e');
-                                     }
-                                   },
-                                   child: const Text('Create default areas'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                       return BubblesGrid(
-                           areas: areas,
-                           onBubbleTap: (area) => _onBubbleTap(context, area),
-                           onDelete: (area) {
-                             // Optimistic UI update: refresh cached futures immediately
-                             setState(() {
-                               _lifeAreasFuture = _loadLifeAreas();
-                               _globalStatsFuture = _calculateGlobalStatistics();
-                               _globalActivity7dFuture = _getGlobalLast7DaysActivity();
-                               _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
-                             });
-                           },
-                         );
-                      },
-                    ),
+                      ),
+                    ],
                   ),
+                  SizedBox(height: AppTheme.spacing20),
 
-
-            // Quick Actions for All Life Areas
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Quick access to all activities',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+            // Life Areas content (Bubbles, Calendar, Gallery, or Table) - Fixed height container
+            Container(
+              height: 450,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
                 ),
-                Text(
-                  'Direct activities across all life areas',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: Curves.easeInOut,
+                switchOutCurve: Curves.easeInOut,
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.1, 0.0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _buildCurrentView(),
+              ),
             ),
+
             SizedBox(height: AppTheme.spacing16),
 
-            // Quick Actions Grid
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
+            // View selector toolbar - moved below content for better accessibility
+            Center(
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTabButton(0, Icons.apps_rounded, 'Grid'),
+                    _buildTabButton(1, Icons.calendar_month_rounded, 'Calendar'),
+                    _buildTabButton(2, Icons.photo_library_rounded, 'Gallery'),
+                    _buildTabButton(3, Icons.list_alt_rounded, 'List'),
+                  ],
+                ),
+              ),
+            ),
+
                 ],
               ),
-              child: FutureBuilder<List<LifeArea>>(
-                future: _loadLifeAreas(),
-                builder: (context, snapshot) {
+            ),
+            SizedBox(height: AppTheme.spacing32),
+
+            // Quick Actions Section
+            _buildSectionContainer(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section header
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quick Actions',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Fast access to log activities in any life area',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: AppTheme.spacing20),
+
+                  // Quick Actions Grid
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: FutureBuilder<List<LifeArea>>(
+                      future: _loadLifeAreas(),
+                      builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Padding(
                       padding: EdgeInsets.all(40),
@@ -2082,7 +2081,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       }).toList(),
                     ),
                   );
-                },
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -2289,8 +2291,8 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                     ),
                                     child: Center(
                                       child: Container(
-                                        width: 8,
-                                        height: 8,
+                                        width: 10,
+                                        height: 10,
                                         decoration: BoxDecoration(
                                           color: Colors.blue,
                                           shape: BoxShape.circle,
@@ -2524,7 +2526,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<Map<String, dynamic>> _calculateGlobalStatistics() async {
     try {
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       
       final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp);
       final activityCount = logs.length;
@@ -2545,7 +2547,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<List<int>> _getGlobalLast7DaysActivity() async {
     try {
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       final now = DateTime.now();
       final last7Days = List.generate(7, (index) {
         return DateTime(now.year, now.month, now.day - index);
@@ -2569,7 +2571,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<List<int>> _getGlobalLast7DaysDurationMinutes() async {
     try {
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       final now = DateTime.now();
       final last7Days = List.generate(7, (index) {
         return DateTime(now.year, now.month, now.day - index);
@@ -2594,22 +2596,48 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   
   Future<Map<String, dynamic>> _getGlobalLast7DaysDurationStacks() async {
     try {
-      final logs = await db_service.fetchLogs();
+      final logs = await _getCachedLogs();
       final now = DateTime.now();
       final last7Days = List.generate(7, (index) => DateTime(now.year, now.month, now.day - index)).reversed.toList();
 
-      // Collect area colors
-      final lifeAreasRes = await Supabase.instance.client
-          .from('life_areas')
-          .select('name,category,color')
-          .eq('user_id', Supabase.instance.client.auth.currentUser!.id);
-      final List<_AreaTag> areaTags = (lifeAreasRes as List)
-          .map((m) => _AreaTag(
-                name: (m['name'] as String).trim(),
-                category: (m['category'] as String).trim(),
-                color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
-              ))
-          .toList();
+      // Collect area colors - handle null user safely
+      final client = Supabase.instance.client;
+      final currentUser = client.auth.currentUser;
+      
+      List<_AreaTag> areaTags = [];
+      if (currentUser != null) {
+        try {
+          final lifeAreasRes = await client
+              .from('life_areas')
+              .select('name,category,color')
+              .eq('user_id', currentUser.id);
+          areaTags = (lifeAreasRes as List)
+              .map((m) => _AreaTag(
+                    name: (m['name'] as String).trim(),
+                    category: (m['category'] as String).trim(),
+                    color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
+                  ))
+              .toList();
+        } catch (e) {
+          // If life areas fetch fails, continue with empty areaTags
+          if (kDebugMode) debugPrint('Failed to fetch life areas for stacks: $e');
+        }
+      } else {
+        // Anonymous user - try to get life areas from local storage
+        try {
+          final lifeAreas = await LifeAreasService.getLifeAreas();
+          areaTags = lifeAreas
+              .map((area) => _AreaTag(
+                    name: area.name.trim(),
+                    category: area.category.trim(),
+                    color: _parseHexColor(area.color),
+                  ))
+              .toList();
+        } catch (e) {
+          // If local life areas fail, continue with empty areaTags
+          if (kDebugMode) debugPrint('Failed to fetch local life areas for stacks: $e');
+        }
+      }
 
       Color resolveColorForLog(models.ActionLog log) {
         try {
@@ -2772,6 +2800,839 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         ),
       ),
     );
+  }
+
+  Widget _buildCurrentView() {
+    switch (_viewMode) {
+      case 1: // Calendar
+        return FutureBuilder(
+          future: Future.wait([
+            _getCachedLogs(),
+            _lifeAreasFuture ?? Future.value(<LifeArea>[]),
+          ]),
+          builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            
+            final logs = snapshot.data?[0] as List<models.ActionLog>? ?? <models.ActionLog>[];
+            final areas = snapshot.data?[1] as List<LifeArea>? ?? <LifeArea>[];
+            
+            return DashboardCalendarWidget(
+              selectedAreaFilterName: _selectedAreaFilterName,
+              logs: logs,
+              lifeAreas: areas,
+              onAreaSelected: (areaName) {
+                setState(() {
+                  _selectedAreaFilterName = areaName;
+                });
+              },
+              onOpenDay: (date, logs) {
+                // Handle day opening if needed
+              },
+            );
+          },
+        );
+      case 2: // Gallery
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SingleChildScrollView(
+            child: DashboardGalleryWidget(
+              selectedAreaFilterName: _selectedAreaFilterName,
+              onAreaSelected: (areaName) {
+                setState(() {
+                  _selectedAreaFilterName = areaName;
+                });
+              },
+              onImageTap: (thumbUrl, width, quality) {
+                // Handle image tap if needed
+              },
+              fetchAllImages: _fetchAllImages,
+            ),
+          ),
+        );
+      case 3: // Table/List
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.table_rows,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Activity Table',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Scrollable content that fits within the fixed container height
+            Expanded(
+              child: _buildActivitiesTableContent(),
+            ),
+          ],
+        );
+      case 0: // Bubbles (default)
+      default:
+        return FutureBuilder<List<LifeArea>>(
+            key: ValueKey(_refreshCounter),
+            future: _lifeAreasFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64),
+                      const SizedBox(height: 16),
+                      Text('Error: ${snapshot.error}'),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => setState(() {
+                          _lifeAreasFuture = LifeAreasService.getLifeAreas();
+                        }),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              
+              final areas = snapshot.data ?? [];
+              if (areas.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.category_outlined, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('No life areas found'),
+                      SizedBox(height: 8),
+                      Text('Create your first life area to get started.'),
+                    ],
+                  ),
+                );
+              }
+              
+              return BubblesGrid(
+                areas: areas,
+                onBubbleTap: (area) => _onBubbleTap(context, area),
+                onDelete: (area) {
+                  setState(() {
+                    _refreshCounter++;
+                    _lifeAreasFuture = LifeAreasService.getLifeAreas();
+                  });
+                },
+              );
+            },
+          );
+    }
+  }
+
+  Widget _buildActivitiesTableContent() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _loadAllActivities(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64),
+                const SizedBox(height: 16),
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    if (mounted) {
+                      setState(() {
+                        _globalStatsFuture = _calculateGlobalStatistics();
+                        _globalActivity7dFuture = _getGlobalLast7DaysActivity();
+                        _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
+                      });
+                    }
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final activities = snapshot.data ?? [];
+        
+        if (activities.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 64,
+                  color: Colors.grey,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'No activities yet',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Start logging activities to see them here.',
+                  style: TextStyle(color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
+        return FutureBuilder<List<LifeArea>>(
+          future: LifeAreasService.getLifeAreas(),
+          builder: (context, lifeAreasSnapshot) {
+            final lifeAreas = lifeAreasSnapshot.data ?? [];
+            
+            return ListView.builder(
+              itemCount: activities.length,
+              itemBuilder: (context, index) {
+                final activity = activities[index];
+                final imageUrl = activity['image_url'] as String?;
+                final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+                final notesJson = activity['notes'] as String?;
+                
+                // Extract area from notes JSON since area column doesn't exist in local DB
+                String area = 'General';
+                LifeArea? matchedLifeArea;
+                
+                if (notesJson != null && notesJson.isNotEmpty) {
+                  try {
+                    final jsonData = jsonDecode(notesJson);
+                    if (jsonData is Map<String, dynamic>) {
+                      final areaFromNotes = jsonData['area'] as String?;
+                      final categoryFromNotes = jsonData['category'] as String?;
+                      final lifeAreaFromNotes = jsonData['life_area'] as String?;
+                      
+                      
+                      // Try to match with actual life areas
+                      final searchName = areaFromNotes?.trim() ?? lifeAreaFromNotes?.trim() ?? '';
+                      final searchCategory = categoryFromNotes?.trim() ?? '';
+                      
+                      if (searchName.isNotEmpty || searchCategory.isNotEmpty) {
+                        for (final la in lifeAreas) {
+                          if (searchName.isNotEmpty && la.name.toLowerCase() == searchName.toLowerCase()) {
+                            matchedLifeArea = la;
+                            area = la.name;
+                            break;
+                          }
+                          if (searchCategory.isNotEmpty && la.category.toLowerCase() == searchCategory.toLowerCase()) {
+                            matchedLifeArea = la;
+                            area = la.name;
+                            break;
+                          }
+                        }
+                        
+                        // If no exact match, use the extracted name
+                        if (matchedLifeArea == null && searchName.isNotEmpty) {
+                          area = searchName;
+                        } else if (matchedLifeArea == null && searchCategory.isNotEmpty) {
+                          area = searchCategory;
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    // Ignore JSON parsing errors, use defaults
+                  }
+                }
+                
+                // Use matched life area or create default
+                final lifeArea = matchedLifeArea ?? LifeArea(
+                  id: '',
+                  name: area,
+                  category: '',
+                  color: '#6366f1', // Default blue instead of gray
+                  icon: 'category',
+                  userId: '',
+                  orderIndex: 0,
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+                final color = Color(int.parse(lifeArea.color.replaceAll('#', '0xFF')));
+                
+                
+                // Extract title from notes JSON since activity_name column doesn't exist in local DB
+                String title = 'Activity';
+                String previewText = '';
+                
+                if (notesJson != null && notesJson.isNotEmpty) {
+                  try {
+                    final jsonData = jsonDecode(notesJson);
+                    if (jsonData is Map<String, dynamic>) {
+                      // Look for title field first
+                      if (jsonData['title'] != null && jsonData['title'].toString().trim().isNotEmpty) {
+                        title = jsonData['title'].toString().trim();
+                      } else {
+                        // Try to extract from Quill delta format  
+                        final delta = jsonData['delta'] ?? jsonData['ops'];
+                        if (delta is List && delta.isNotEmpty) {
+                          final textParts = <String>[];
+                          for (final op in delta) {
+                            if (op is Map && op['insert'] is String) {
+                              textParts.add(op['insert'].toString());
+                            }
+                          }
+                          if (textParts.isNotEmpty) {
+                            final allText = textParts.join('').trim();
+                            final firstLine = allText.split('\n').first.trim();
+                            if (firstLine.isNotEmpty && firstLine.length <= 50) {
+                              title = firstLine;
+                            }
+                            // Join all text for preview
+                            previewText = allText.replaceAll('\n', ' ').trim();
+                            if (title != 'Activity') {
+                              previewText = previewText.replaceFirst(title, '').trim();
+                            }
+                            if (previewText.length > 80) {
+                              previewText = '${previewText.substring(0, 80)}...';
+                            }
+                          }
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    // If JSON parsing fails, try to use first line as title
+                    final lines = notesJson.split('\n');
+                    if (lines.isNotEmpty) {
+                      final firstLine = lines.first.trim();
+                      if (firstLine.isNotEmpty && firstLine.length <= 100) {
+                        title = firstLine.length > 50 ? '${firstLine.substring(0, 50)}...' : firstLine;
+                      }
+                    }
+                  }
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    // More visible background with life area color
+                    color: color.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.8),
+                      width: 2.0,
+                    ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _navigateToActivityDetails(activity),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Left side: Image preview only (if available)
+                            if (hasImage) ...[
+                              Container(
+                                width: 45,
+                                height: 45,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: ImageUtils.buildImageWidget(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    placeholder: Container(
+                                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                      child: Icon(
+                                        Icons.image,
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    errorWidget: Container(
+                                      color: Theme.of(context).colorScheme.errorContainer,
+                                      child: Icon(
+                                        Icons.broken_image,
+                                        color: Theme.of(context).colorScheme.onErrorContainer,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                            ],
+                            
+                            // Main content: Activity details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Activity title and life area in one row
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          title,
+                                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: Theme.of(context).colorScheme.onSurface,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Duration badge (if available)
+                                      if (activity['duration_minutes'] != null && activity['duration_minutes'] > 0) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: color.withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            '${activity['duration_minutes']}min',
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: color,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  
+                                  const SizedBox(height: 2),
+                                  
+                                  // Life area and date in one row
+                                  Row(
+                                    children: [
+                                      // Life area name
+                                      Text(
+                                        area,
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: color,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      
+                                      const SizedBox(width: 8),
+                                      
+                                      Text(
+                                        '•',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                      
+                                      const SizedBox(width: 8),
+                                      
+                                      // Date and time
+                                      Text(
+                                        DateFormat('MMM d • HH:mm').format(
+                                          DateTime.tryParse(activity['occurred_at']?.toString() ?? '') ?? DateTime.now(),
+                                        ),
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  
+                                  // Preview text if available (shorter)
+                                  if (previewText.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      previewText,
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                                        height: 1.2,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            
+                            // Arrow indicator
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _navigateToActivityDetails(Map<String, dynamic> activity) {
+    // Convert the activity map to an ActionLog object
+    final actionLog = models.ActionLog(
+      id: activity['id']?.toString() ?? '',
+      occurredAt: DateTime.tryParse(activity['occurred_at']?.toString() ?? '') ?? DateTime.now(),
+      durationMin: activity['duration_minutes'] as int?,
+      notes: activity['notes']?.toString(),
+      earnedXp: activity['earned_xp'] as int? ?? 0,
+      templateId: activity['template_id']?.toString(),
+      activityName: activity['title']?.toString(),
+      imageUrl: activity['image_url']?.toString(),
+    );
+
+    // Show activity details dialog
+    showDialog(
+      context: context,
+      builder: (context) => ActivityDetailsDialog(
+        log: actionLog,
+        onUpdate: () {
+          // Refresh the activities list after update
+          setState(() {
+            // Trigger rebuild of the activities list
+          });
+        },
+      ),
+    );
+  }
+
+  // Section container wrapper for better visual separation
+  Widget _buildSectionContainer({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppTheme.spacing20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+
+  // Activity Contributions methods
+  Widget _buildActivityContributionsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                'Activity Contributions',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            FutureBuilder<List<models.ActionLog>>(
+              future: _getCachedLogs(),
+              builder: (context, snapshot) {
+                final totalActions = snapshot.data?.length ?? 0;
+                return Flexible(
+                  child: Text(
+                    '$totalActions activities this year',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        SizedBox(height: AppTheme.spacing16),
+        FutureBuilder<List<models.ActionLog>>(
+          future: _getCachedLogs(),
+          builder: (context, snapshot) {
+            final totalActions = snapshot.data?.length ?? 0;
+            if (totalActions == 0) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.add_circle_outline, size: 28, color: Colors.grey.withValues(alpha: 0.6)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'No activities yet. Tap the + button to add your first activity.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.withValues(alpha: 0.8)),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return _buildContributionsTable(snapshot.data ?? []);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContributionsTable(List<models.ActionLog> logs) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Activity data for the year
+          SizedBox(
+            height: 120, // Fixed height for the contributions grid
+            child: _buildContributionsGrid(logs),
+          ),
+          const SizedBox(height: 12),
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Learn how we count contributions',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Less',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildLegendSquare(0),
+                  const SizedBox(width: 2),
+                  _buildLegendSquare(1),
+                  const SizedBox(width: 2),
+                  _buildLegendSquare(2),
+                  const SizedBox(width: 2),
+                  _buildLegendSquare(3),
+                  const SizedBox(width: 8),
+                  Text(
+                    'More',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContributionsGrid(List<models.ActionLog> logs) {
+    final now = DateTime.now();
+    final startOfYear = DateTime(now.year, 1, 1);
+    final weeks = <List<DateTime>>[];
+    
+    // Generate weeks for the entire year
+    DateTime current = startOfYear;
+    while (current.year == now.year) {
+      final week = <DateTime>[];
+      for (int i = 0; i < 7; i++) {
+        if (current.year == now.year) {
+          week.add(current);
+          current = current.add(const Duration(days: 1));
+        }
+      }
+      if (week.isNotEmpty) weeks.add(week);
+    }
+
+    // Calculate activity counts per day from actual logs
+    final activityCounts = _calculateDailyActivityCountsFromLogs(logs);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: double.infinity),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          // Month labels
+          Row(
+            children: [
+              const SizedBox(width: 20), // Space for day labels
+              ...List.generate(12, (month) {
+                final weeksInMonth = weeks.where((week) => 
+                  week.any((day) => day.month == month + 1)).length;
+                return SizedBox(
+                  width: weeksInMonth * 12.0,
+                  child: Text(
+                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month],
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Grid
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Day labels
+              Column(
+                children: [
+                  _buildDayLabel('Mon'),
+                  _buildDayLabel(''),
+                  _buildDayLabel('Wed'),
+                  _buildDayLabel(''),
+                  _buildDayLabel('Fri'),
+                  _buildDayLabel(''),
+                  _buildDayLabel(''),
+                ],
+              ),
+              const SizedBox(width: 8),
+              // Contributions grid
+              Row(
+                children: weeks.map((week) {
+                  return Column(
+                    children: week.map((day) {
+                      final count = activityCounts[_dateKey(day)] ?? 0;
+                      return Container(
+                        width: 10,
+                        height: 10,
+                        margin: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: _getContributionColor(count),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  Widget _buildDayLabel(String label) {
+    return SizedBox(
+      height: 12,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 9,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendSquare(int level) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: _getContributionColor(level == 0 ? 0 : level * 2),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  Color _getContributionColor(int count) {
+    final primary = Theme.of(context).colorScheme.primary;
+    if (count == 0) {
+      return Theme.of(context).colorScheme.surfaceContainerHighest;
+    } else if (count == 1) {
+      return primary.withValues(alpha: 0.3);
+    } else if (count <= 3) {
+      return primary.withValues(alpha: 0.6);
+    } else {
+      return primary;
+    }
+  }
+
+  Map<String, int> _calculateDailyActivityCountsFromLogs(List<models.ActionLog> logs) {
+    final counts = <String, int>{};
+    
+    for (final log in logs) {
+      final key = _dateKey(log.occurredAt);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    
+    return counts;
+  }
+
+  String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }
 
