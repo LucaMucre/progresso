@@ -184,4 +184,24 @@ class LocalTemplatesRepository {
       return 0;
     }
   }
+
+  /// Holt alle lokalen Templates für Migration
+  Future<List<ActionTemplate>> getAllLocalTemplates() async {
+    try {
+      return await fetchTemplates(); // Nutzt bestehende Methode
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to get all local templates', e, stackTrace, 'LocalTemplatesRepository');
+      return [];
+    }
+  }
+
+  /// Löscht alle lokalen Templates (für Migration)
+  Future<void> clearAllLocalTemplates() async {
+    try {
+      await clearAllTemplates(); // Nutzt die bestehende Methode
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to clear all local templates', e, stackTrace, 'LocalTemplatesRepository');
+      rethrow;
+    }
+  }
 }

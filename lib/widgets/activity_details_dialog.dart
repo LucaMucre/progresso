@@ -10,9 +10,13 @@ import '../utils/web_bytes_stub.dart'
 import '../utils/web_file_picker_stub.dart'
     if (dart.library.html) '../utils/web_file_picker_web.dart' as web_file_picker;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/db_service.dart';
+import '../services/anonymous_user_service.dart';
+import '../services/life_areas_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'optimized_image.dart';
+import '../utils/image_utils.dart';
 
 // Fullscreen image viewer widget
 class _FullscreenImageViewer extends StatelessWidget {
@@ -21,6 +25,30 @@ class _FullscreenImageViewer extends StatelessWidget {
   
   const _FullscreenImageViewer({this.imageUrl, this.imageFile})
       : assert(imageUrl != null || imageFile != null, 'Either imageUrl or imageFile must be provided');
+  
+  bool _isBase64DataUrl(String url) {
+    return url.startsWith('data:image/') && url.contains('base64,');
+  }
+
+  Widget _buildFullscreenImage(String imageUrl) {
+    return ImageUtils.buildImageWidget(
+      imageUrl: imageUrl,
+      fit: BoxFit.contain,
+      errorWidget: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error, color: Colors.white, size: 64),
+            SizedBox(height: 16),
+            Text(
+              'Failed to load image',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -37,24 +65,7 @@ class _FullscreenImageViewer extends StatelessWidget {
       body: Center(
         child: InteractiveViewer(
           child: imageUrl != null
-              ? OptimizedImage(
-                  imageUrl: imageUrl!,
-                  fit: BoxFit.contain,
-                  enableThumbnails: false, // Keep original resolution for fullscreen
-                  errorWidget: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error, color: Colors.white, size: 64),
-                        SizedBox(height: 16),
-                        Text(
-                          'Failed to load image',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
+              ? _buildFullscreenImage(imageUrl!)
               : Image.file(
                   imageFile!,
                   fit: BoxFit.contain,
@@ -107,6 +118,37 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     }
   }
 
+  bool _isBase64DataUrl(String url) {
+    return url.startsWith('data:image/') && url.contains('base64,');
+  }
+
+  Widget _buildImageWidget({
+    required String imageUrl,
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.cover,
+    BorderRadius? borderRadius,
+    Widget? errorWidget,
+  }) {
+    Widget image = ImageUtils.buildImageWidget(
+      imageUrl: imageUrl,
+      width: width,
+      height: height,
+      fit: fit,
+      errorWidget: errorWidget ?? _buildImageErrorWidget(),
+    );
+    
+    if (borderRadius != null && ImageUtils.isBase64DataUrl(imageUrl)) {
+      // Only apply ClipRRect to base64 images, network images handle borderRadius internally
+      image = ClipRRect(
+        borderRadius: borderRadius,
+        child: image,
+      );
+    }
+    
+    return image;
+  }
+
   void _showFullscreenImage({String? imageUrl, File? imageFile}) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -128,25 +170,48 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
         final areaName = obj['area'] as String?;
         final category = obj['category'] as String?;
         if (areaName != null || category != null) {
-          // Try to resolve color from life_areas
-          Supabase.instance.client
-              .from('life_areas')
-              .select('name,category,color')
-              .eq('user_id', Supabase.instance.client.auth.currentUser!.id)
-              .then((res) {
-            if (!mounted) return;
-            for (final m in (res as List)) {
-              final name = (m['name'] as String?)?.toLowerCase();
-              final cat = (m['category'] as String?)?.toLowerCase();
-              if ((areaName != null && name == areaName.toLowerCase()) ||
-                  (category != null && cat == category.toLowerCase())) {
-                setState(() {
-                  _areaColor = Color(int.parse((m['color'] as String).replaceAll('#', '0xFF')));
-                });
-                break;
+          final user = Supabase.instance.client.auth.currentUser;
+          if (user != null) {
+            // For authenticated users, query the database
+            Supabase.instance.client
+                .from('life_areas')
+                .select('name,category,color')
+                .eq('user_id', user.id)
+                .then((res) {
+              if (!mounted) return;
+              for (final m in (res as List)) {
+                final name = (m['name'] as String?)?.toLowerCase();
+                final cat = (m['category'] as String?)?.toLowerCase();
+                if ((areaName != null && name == areaName.toLowerCase()) ||
+                    (category != null && cat == category.toLowerCase())) {
+                  setState(() {
+                    _areaColor = Color(int.parse((m['color'] as String).replaceAll('#', '0xFF')));
+                  });
+                  break;
+                }
               }
-            }
-          }).catchError((_) {});
+            }).catchError((_) {});
+          } else {
+            // For anonymous users, load from local storage
+            _loadAreaColorForAnonymousUser(areaName, category);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadAreaColorForAnonymousUser(String? areaName, String? category) async {
+    try {
+      final areas = await LifeAreasService.getLifeAreas();
+      for (final area in areas) {
+        if ((areaName != null && area.name.toLowerCase() == areaName.toLowerCase()) ||
+            (category != null && area.category.toLowerCase() == category.toLowerCase())) {
+          if (mounted) {
+            setState(() {
+              _areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
+            });
+          }
+          break;
         }
       }
     } catch (_) {}
@@ -162,9 +227,29 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       return;
     }
 
-    // Fallback to template name if available
+    // Try to extract title from notes JSON for anonymous users
+    final notes = widget.log.notes;
+    if (notes != null && notes.isNotEmpty) {
+      try {
+        final obj = jsonDecode(notes);
+        if (obj is Map<String, dynamic>) {
+          final title = obj['title'] as String?;
+          if (title != null && title.trim().isNotEmpty) {
+            if (mounted) {
+              setState(() {
+                _activityTitle = title.trim();
+              });
+            }
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Fallback to template name if available (for authenticated users)
+    final user = Supabase.instance.client.auth.currentUser;
     final templateId = widget.log.templateId;
-    if (templateId != null) {
+    if (user != null && templateId != null) {
       try {
         final res = await Supabase.instance.client
             .from('action_templates')
@@ -187,7 +272,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     // Default
     if (mounted) {
       setState(() {
-    _activityTitle = 'Activity';
+        _activityTitle = 'Activity';
       });
     }
   }
@@ -598,13 +683,11 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                                             width: double.infinity,
                                             height: double.infinity,
                                           ))
-                                    : OptimizedImage(
+                                    : _buildImageWidget(
                                         imageUrl: widget.log.imageUrl!,
                                         fit: BoxFit.cover,
                                         width: double.infinity,
                                         height: 300,
-                                        memCacheWidth: 800,
-                                        memCacheHeight: 600,
                                         borderRadius: BorderRadius.circular(12),
                                         errorWidget: _buildImageErrorWidget(),
                                       ),

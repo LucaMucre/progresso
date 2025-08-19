@@ -18,9 +18,12 @@ import 'models/action_models.dart' as models;
 import 'services/achievement_service.dart';
 import 'utils/parsed_activity_data.dart';
 import 'widgets/optimized_image.dart';
+import 'utils/image_utils.dart';
 import 'navigation.dart';
 import 'dashboard/widgets/calendar_header.dart';
 import 'dashboard/widgets/calendar_grid.dart';
+import 'dashboard/widgets/dashboard_calendar_widget.dart';
+import 'dashboard/widgets/dashboard_gallery_widget.dart';
 import 'widgets/skeleton.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_state.dart';
@@ -43,8 +46,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   Future<Map<String, dynamic>>? _globalDurationStacksFuture;
   // View mode for life areas container: 0 = bubbles, 1 = calendar, 2 = gallery, 3 = table
   int _viewMode = 0;
-  // Current month displayed in the calendar view
-  DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   // Optional filter: show only activities for this life area name
   String? _selectedAreaFilterName;
 
@@ -200,27 +201,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (e) {
-      if (kDebugMode) debugPrint('SignOut Fehler: $e');
+      LoggingService.error('SignOut Fehler', e);
     }
   }
 
-  void _goToPreviousMonth() {
-    setState(() {
-      _calendarMonth = DateTime(
-        _calendarMonth.year,
-        _calendarMonth.month - 1,
-      );
-    });
-  }
-
-  void _goToNextMonth() {
-    setState(() {
-      _calendarMonth = DateTime(
-        _calendarMonth.year,
-        _calendarMonth.month + 1,
-      );
-    });
-  }
 
   // Supabase Image Transformations thumbnail helper
   String _thumbUrl(String publicUrl, {int width = 600, int quality = 80}) {
@@ -255,19 +239,18 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return logDay.isAtSameMomentAs(targetDay);
       }).toList();
     } catch (e) {
-      if (kDebugMode) debugPrint('Error fetching logs for day: $e');
+      LoggingService.error('Error fetching logs for day', e);
       return [];
     }
   }
 
-  Future<void> _openDayDetails(DateTime day) async {
+  Future<void> _openDayDetails(DateTime day, List<models.ActionLog> dayLogs) async {
     final client = Supabase.instance.client;
     final user = client.auth.currentUser;
     if (user == null) return;
 
-    // Fetch data in parallel for better performance
+    // Fetch template and life area data for context
     final results = await Future.wait<dynamic>([
-      _fetchLogsForDay(day),
       client
         .from('action_templates')
         .select('id,name,category')
@@ -278,9 +261,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         .eq('user_id', user.id),
     ]);
     
-    final logs = results[0] as List<models.ActionLog>;
-    final templatesRes = results[1] as List<dynamic>;
-    final lifeAreasRes = results[2] as List<dynamic>;
+    final logs = dayLogs; // Use the passed logs
+    final templatesRes = results[0] as List<dynamic>;
+    final lifeAreasRes = results[1] as List<dynamic>;
 
     final templateMap = {
       for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
@@ -295,10 +278,10 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       color: _parseHexColor((m['color'] as String?) ?? '#2196F3'),
     )).toList();
     
+    LoggingService.info('Loaded ${areaTags.length} area tags');
     if (kDebugMode) {
-      debugPrint('AREA TAGS DEBUG: Loaded ${areaTags.length} area tags');
       for (final tag in areaTags) {
-        debugPrint('  - ${tag.name} (${tag.category}) -> ${tag.color}');
+        LoggingService.debug('Area tag: ${tag.name} (${tag.category}) -> ${tag.color}');
       }
     }
 
@@ -1101,7 +1084,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 clipBehavior: Clip.antiAlias,
-                                child: OptimizedImage(
+                                child: ImageUtils.buildImageWidget(
                                   imageUrl: imageUrl,
                                   width: 32,
                                   height: 32,
@@ -1190,532 +1173,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   String _formatTime(DateTime date) {
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  Widget _buildGalleryContainer(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacing20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.photo_library,
-                color: Theme.of(context).colorScheme.primary,
-                size: 24,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Photo Gallery',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const Spacer(),
-              Text(
-                'All your memories',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Gallery filter chips by life area
-          GalleryFilters(
-            selectedAreaFilterName: _selectedAreaFilterName,
-            onSelected: (name) => setState(() {
-              _selectedAreaFilterName = name;
-              _refreshCounter++;
-            }),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 400, // Fixed height for gallery
-            child: Consumer(
-              builder: (context, ref, _) {
-                final logsAsync = ref.watch(logsNotifierProvider);
-                return logsAsync.when(
-                  loading: () => const Center(child: SkeletonCard(height: 180)),
-                  error: (e, st) => Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        SizedBox(height: AppTheme.spacing16),
-                        Text(
-                          'Error loading photos',
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
-                        ),
-                      ],
-                    ),
-                  ),
-                  data: (_) {
-                    return FutureBuilder<List<Map<String, dynamic>>>(
-                      key: ValueKey(_refreshCounter),
-                      future: _fetchAllImages(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: SkeletonCard(height: 180));
-                        }
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  size: 48,
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                                SizedBox(height: AppTheme.spacing16),
-                                Text(
-                                  'Error loading photos',
-                                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        List<Map<String, dynamic>> images = List<Map<String, dynamic>>.from(snapshot.data ?? const []);
-                        // Apply client-side filter by life area if selected
-                        if (_selectedAreaFilterName != null && _selectedAreaFilterName!.trim().isNotEmpty) {
-                          final selectedCanonical = LifeAreasService.canonicalAreaName(_selectedAreaFilterName);
-                          images = images.where((img) {
-                            final area = _extractActivityArea(img);
-                            final name = area['name'] as String?;
-                            return LifeAreasService.canonicalAreaName(name) == selectedCanonical;
-                          }).toList();
-                        }
-                        if (images.isEmpty) {
-                          return const Center(child: Text('No photos yet'));
-                        }
-                        return _buildImageGrid(images);
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-    String _extractActivityTitle(Map<String, dynamic> imageData) {
-    // Parse title from notes JSON
-    try {
-      final notes = imageData['notes'];
-      if (notes != null) {
-        final obj = jsonDecode(notes);
-        if (obj is Map<String, dynamic> && obj['title'] != null) {
-          return obj['title'].toString();
-        }
-      }
-    } catch (e, stackTrace) {
-      LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
-    }
-
-    return 'Activity';
-  }
-
-  Map<String, dynamic> _extractActivityArea(Map<String, dynamic> imageData) {
-    // Parse area from notes JSON
-    try {
-      final notes = imageData['notes'];
-      if (notes != null) {
-        final obj = jsonDecode(notes);
-        if (obj is Map<String, dynamic> && obj['area'] != null) {
-          final areaName = obj['area'].toString();
-          
-          // Default life areas with their properties
-          final defaultAreas = [
-            {'name': 'Fitness', 'icon': Icons.fitness_center, 'color': '#FF5722'},
-            {'name': 'Nutrition', 'icon': Icons.restaurant, 'color': '#4CAF50'},
-            {'name': 'Learning', 'icon': Icons.school, 'color': '#2196F3'},
-            {'name': 'Finance', 'icon': Icons.account_balance, 'color': '#FFC107'},
-            {'name': 'Art', 'icon': Icons.palette, 'color': '#9C27B0'},
-            {'name': 'Relationships', 'icon': Icons.people, 'color': '#E91E63'},
-            {'name': 'Spirituality', 'icon': Icons.self_improvement, 'color': '#607D8B'},
-            {'name': 'Career', 'icon': Icons.work, 'color': '#795548'},
-          ];
-          
-          // Find matching area
-          final area = defaultAreas.firstWhere(
-            (a) => a['name'] == areaName || 
-                   LifeAreasService.canonicalAreaName(a['name'] as String?) == LifeAreasService.canonicalAreaName(areaName),
-            orElse: () => {'name': 'General', 'icon': Icons.circle, 'color': '#666666'},
-          );
-          
-          return {
-            'name': area['name'],
-            'icon': area['icon'],
-            'color': area['color'],
-          };
-        }
-      }
-    } catch (e, stackTrace) {
-      LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
-    }
-
-    return {
-      'name': 'General',
-      'icon': Icons.circle,
-      'color': '#666666',
-    };
-  }
-
-  void _showImageFullscreen(BuildContext context, Map<String, dynamic> imageData, List<Map<String, dynamic>> allImages, int initialIndex) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (context) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            PageView.builder(
-              controller: PageController(initialPage: initialIndex),
-              itemCount: allImages.length,
-              itemBuilder: (context, index) {
-                final data = allImages[index];
-                final imageUrl = data['image_url'] as String;
-                final date = DateTime.parse(data['occurred_at']);
-                final title = _extractActivityTitle(data);
-                final area = _extractActivityArea(data);
-
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    InteractiveViewer(
-                      child: CachedNetworkImage(
-                        imageUrl: _thumbUrl(imageUrl, width: 2000, quality: 90),
-                        fit: BoxFit.contain,
-                        placeholder: (context, url) => const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                        errorWidget: (context, url, error) => const Center(
-                          child: Icon(
-                            Icons.broken_image,
-                            color: Colors.white,
-                            size: 64,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Bottom info overlay
-                    Positioned(
-                      bottom: 40,
-                      left: 20,
-                      right: 20,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Color(int.parse(area['color'].substring(1), radix: 16) + 0xFF000000),
-                                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        area['icon'],
-                                        color: Colors.white,
-                                        size: 14,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        area['name'],
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              DateFormat('EEEE, MMMM d, y • h:mm a').format(date),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-            // Close button
-            Positioned(
-              top: 40,
-              right: 20,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-            ),
-            // Image counter
-            Positioned(
-              top: 40,
-              left: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${initialIndex + 1} of ${allImages.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCalendarContainer(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacing20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FutureBuilder<List<LifeArea>>(
-            future: _lifeAreasFuture,
-            builder: (context, snap) {
-              final areas = snap.data ?? const <LifeArea>[];
-              return CalendarHeader(
-                month: _calendarMonth,
-                onPrev: _goToPreviousMonth,
-                onNext: _goToNextMonth,
-                areaNames: areas.map((a) => a.name).toList(),
-                selectedAreaName: _selectedAreaFilterName,
-                onAreaSelected: (v) => setState(() => _selectedAreaFilterName = v),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Expanded(child: Center(child: Text('Mo'))),
-              Expanded(child: Center(child: Text('Di'))),
-              Expanded(child: Center(child: Text('Mi'))),
-              Expanded(child: Center(child: Text('Do'))),
-              Expanded(child: Center(child: Text('Fr'))),
-              Expanded(child: Center(child: Text('Sa'))),
-              Expanded(child: Center(child: Text('So'))),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FutureBuilder<List<LifeArea>>(
-            future: _lifeAreasFuture,
-            builder: (context, areasSnapshot) {
-              final areas = areasSnapshot.data ?? const <LifeArea>[];
-              
-              return Consumer(
-                builder: (context, ref, _) {
-                  final logsAsync = ref.watch(logsNotifierProvider);
-                  return logsAsync.when(
-                    loading: () {
-                      return const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    },
-                    error: (e, st) {
-                      return const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(child: Text('Error loading calendar')),
-                      );
-                    },
-                    data: (logs) {
-                  final data = <DateTime, List<_DayEntry>>{};
-                  for (final l in logs) {
-                    final d = l.occurredAt.toLocal();
-                    final key = DateTime(d.year, d.month, d.day);
-                    if (key.year != _calendarMonth.year || key.month != _calendarMonth.month) continue;
-                    if (_selectedAreaFilterName != null) {
-                      try {
-                        if (l.notes != null) {
-                          final obj = jsonDecode(l.notes!);
-                          final area = obj is Map<String, dynamic> ? (obj['area'] as String?) : null;
-                          if (area != null && area != _selectedAreaFilterName) continue;
-                        }
-                      } catch (e, stackTrace) {
-        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
-      }
-                    }
-                    final parsedData = ParsedActivityData.fromNotes(l.notes);
-                    final fromNotes = parsedData.displayTitle;
-                    final title = l.activityName ?? fromNotes ?? 'Activity';
-                    Color? color;
-                    try {
-                      if (l.notes != null && l.notes!.isNotEmpty) {
-                        final obj = jsonDecode(l.notes!);
-                        if (obj is Map<String, dynamic>) {
-                          final area = obj['area'] as String?;
-                          final cat = obj['category'] as String?;
-
-                          // Try to match with actual life areas first
-                          if (area != null) {
-                            for (final lifeArea in areas) {
-                              if (lifeArea.name.toLowerCase() == area.toLowerCase()) {
-                                try {
-                                  String colorHex = lifeArea.color;
-                                  if (colorHex.startsWith('#')) {
-                                    colorHex = colorHex.substring(1);
-                                  }
-                                  if (colorHex.length == 6) {
-                                    colorHex = 'FF$colorHex';
-                                  }
-                                  color = Color(int.parse(colorHex, radix: 16));
-                                  break;
-                                } catch (e) {
-                                  // Fallback to category matching if color parsing fails
-                                }
-                              }
-                            }
-                          }
-                          
-                          // Fallback to category matching if area not found
-                          if (color == null && cat != null) {
-                            for (final lifeArea in areas) {
-                              if (lifeArea.category.toLowerCase() == cat.toLowerCase()) {
-                                try {
-                                  String colorHex = lifeArea.color;
-                                  if (colorHex.startsWith('#')) {
-                                    colorHex = colorHex.substring(1);
-                                  }
-                                  if (colorHex.length == 6) {
-                                    colorHex = 'FF$colorHex';
-                                  }
-                                  color = Color(int.parse(colorHex, radix: 16));
-                                  break;
-                                } catch (e) {
-                                  // Continue to next area
-                                }
-                              }
-                            }
-                          }
-                          
-                          // Final fallback to default color
-                          if (color == null) {
-                            color = const Color(0xFF9CA3AF); // Neutral gray
-                          }
-                        }
-                      }
-                    } catch (e, stackTrace) {
-        LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
-      }
-                    (data[key] ??= []).add(_DayEntry(title: title, color: color, durationMin: l.durationMin));
-                  }
-                  final mapped = <DateTime, List<CalendarDayEntry>>{};
-                  data.forEach((k, v) {
-                    mapped[k] = v.map((e) => CalendarDayEntry(title: e.title, color: e.color)).toList();
-                  });
-                  // Dominante Farbe je Tag basierend auf kumulierter Zeit ableiten (nutzt Nutzerfarben)
-                  final Map<DateTime, Color> dominant = {};
-                  data.forEach((day, dayEntries) {
-                    final durationByColor = <int, int>{}; // color value -> total duration in minutes
-                    for (final e in dayEntries) {
-                      final c = e.color?.value;
-                      if (c == null) continue;
-                      final duration = e.durationMin ?? 1; // fallback to 1 minute if no duration
-                      durationByColor[c] = (durationByColor[c] ?? 0) + duration;
-                    }
-                    if (durationByColor.isNotEmpty) {
-                      int bestColor = durationByColor.entries.first.key;
-                      int bestDuration = 0;
-                      durationByColor.forEach((color, duration) { 
-                        if (duration > bestDuration) { 
-                          bestDuration = duration; 
-                          bestColor = color; 
-                        } 
-                      });
-                      dominant[day] = Color(bestColor);
-                    }
-                  });
-                      return RepaintBoundary(
-                        child: CalendarGrid(
-                          month: _calendarMonth,
-                          dayEntries: mapped,
-                          dayDominantColors: dominant.isEmpty ? null : dominant,
-                          onOpenDay: _openDayDetails,
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _badgeIcon(int badge) {
@@ -2308,9 +1765,49 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
             // Life Areas content (Bubbles, Calendar, Gallery, or Table)
             _viewMode == 1
-          ? _buildCalendarContainer(context)
+          ? Container(
+              padding: const EdgeInsets.all(AppTheme.spacing20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: DashboardCalendarWidget(
+                selectedAreaFilterName: _selectedAreaFilterName,
+                onAreaSelected: (v) => setState(() => _selectedAreaFilterName = v),
+                onOpenDay: _openDayDetails,
+              ),
+            )
                 : _viewMode == 2
-                    ? _buildGalleryContainer(context)
+                    ? Container(
+                        padding: const EdgeInsets.all(AppTheme.spacing20),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: DashboardGalleryWidget(
+                          selectedAreaFilterName: _selectedAreaFilterName,
+                          onAreaSelected: (name) => setState(() {
+                            _selectedAreaFilterName = name;
+                            _refreshCounter++;
+                          }),
+                          onImageTap: (thumbUrl, width, quality) => _thumbUrl(thumbUrl, width: width, quality: quality),
+                          fetchAllImages: _fetchAllImages,
+                        ),
+                      )
                     : _viewMode == 3
                         ? _buildTableContainer(context)
                         : Container(
@@ -2420,11 +1917,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     ),
                   ),
 
-            SizedBox(height: AppTheme.spacing24),
-
-            // Global Statistics Section
-            _buildGlobalStatisticsSection(context),
-            SizedBox(height: AppTheme.spacing24),
 
             // Quick Actions for All Life Areas
             Column(
@@ -2601,6 +2093,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Future<List<LifeArea>> _loadLifeAreas() async {
     try {
+      // Ensure anonymous users have default life areas
+      await LifeAreasService.ensureDefaultLifeAreasForAnonymous();
+      
       // Migrate existing default German areas to English names/categories once
       await LifeAreasService.migrateDefaultsToEnglish();
       final areas = await LifeAreasService.getLifeAreas();
@@ -2617,104 +2112,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     }
   }
 
-  Widget _buildGlobalStatisticsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Statistics',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          'All activities across all life areas',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Colors.grey[600],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(AppTheme.spacing20),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Consumer(
-            builder: (context, ref, _) {
-              final logsAsync = ref.watch(logsNotifierProvider);
-              return logsAsync.when(
-                loading: () => Column(
-                  children: const [
-                    SkeletonCard(height: 100),
-                    SkeletonCard(height: 100),
-                  ],
-                ),
-                error: (e, st) => const Padding(
-                  padding: EdgeInsets.all(AppTheme.spacing20),
-                  child: Center(child: Text('Error loading statistics')),
-                ),
-                data: (logs) {
-                  final totalXp = logs.fold<int>(0, (sum, l) => sum + l.earnedXp);
-                  final activityCount = logs.length;
-                  final totalDurationMinutes = logs.where((l) => l.durationMin != null).fold<int>(0, (s, l) => s + (l.durationMin ?? 0));
-
-                  return Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildGlobalStatCard(
-                              context,
-                              icon: Icons.star,
-                              title: 'Total XP',
-                              value: '$totalXp',
-                              color: Colors.amber,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildGlobalStatCard(
-                              context,
-                              icon: Icons.trending_up,
-                              title: 'Activities',
-                              value: '$activityCount',
-                              color: Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildGlobalStatCard(
-                              context,
-                              icon: Icons.timer,
-                              title: 'Time',
-                              value: _formatDuration(totalDurationMinutes.toDouble()),
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: AppTheme.spacing16),
-                      _buildGlobalActivityGraph(context),
-                      const SizedBox(height: 12),
-                      _buildGlobalDurationGraph(context),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildGlobalStatCard(
     BuildContext context, {
@@ -3330,40 +2727,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     return Color(int.parse(hex.replaceAll('#', '0xFF')));
   }
 
-  Widget _buildImageGrid(List<Map<String, dynamic>> images) {
-    final crossAxisCount = 3;
-    final spacing = 8.0;
-    return GridView.builder(
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        mainAxisSpacing: spacing,
-        crossAxisSpacing: spacing,
-        childAspectRatio: 1,
-      ),
-      itemCount: images.length,
-      itemBuilder: (context, index) {
-        final data = images[index];
-        final imageUrl = data['image_url'] as String;
-        return InkWell(
-          onTap: () => _showImageFullscreen(context, data, images, index),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-            child: CachedNetworkImage(
-              imageUrl: _thumbUrl(imageUrl, width: 600, quality: 80),
-              fit: BoxFit.cover,
-              placeholder: (context, url) => Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              ),
-              errorWidget: (context, url, error) => Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: const Icon(Icons.broken_image),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildTabButton(int mode, IconData icon, String label) {
     final isSelected = _viewMode == mode;
@@ -3442,6 +2805,14 @@ class _StreakConsumer extends StatelessWidget {
       },
     );
   }
+}
+
+class _DayEntry {
+  final String title;
+  final Color? color;
+  final String? areaKey; // canonical key to identify life area (name|category)
+  final int? durationMin; // duration in minutes for tie-breaking
+  const _DayEntry({required this.title, this.color, this.areaKey, this.durationMin});
 }
 
 class _CalendarDayCell extends StatelessWidget {
@@ -3686,13 +3057,6 @@ class _CalendarDayCell extends StatelessWidget {
   }
 }
 
-class _DayEntry {
-  final String title;
-  final Color? color;
-  final String? areaKey; // canonical key to identify life area (name|category)
-  final int? durationMin; // duration in minutes for tie-breaking
-  const _DayEntry({required this.title, this.color, this.areaKey, this.durationMin});
-}
 
 class _AreaTag {
   final String name;

@@ -14,7 +14,10 @@ import 'services/db_service.dart';
 import 'services/offline_cache.dart';
 import 'services/avatar_sync_service.dart';
 import 'services/achievement_service.dart';
+import 'services/anonymous_user_service.dart';
+import 'services/anonymous_migration_service.dart';
 import 'repository/local_logs_repository.dart';
+import 'auth_page.dart';
 import 'models/action_models.dart' as models;
 // Popups are orchestrated centrally via LevelUpService; do not import dialogs directly here
 import 'services/level_up_service.dart';
@@ -46,6 +49,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int _cacheBust = 0;
   RealtimeChannel? _usersChannel;
   Map<String, int> _areaActivityCounts = {};
+  bool _isAnonymous = false;
 
   final _supabase = Supabase.instance.client;
   final _localLogsRepo = LocalLogsRepository();
@@ -53,6 +57,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
+    _initializeAnonymousStatus();
     _primeFromCacheThenReload();
     // react to global log changes
     logsChangedTick.addListener(_onExternalLogsChanged);
@@ -72,6 +77,15 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     // Lokaler Broadcast: reagiert sofort auf Avatar-Änderungen
     AvatarSyncService.avatarVersion.addListener(_loadProfile);
+  }
+
+  Future<void> _initializeAnonymousStatus() async {
+    try {
+      _isAnonymous = await AnonymousUserService.isAnonymousUser();
+      if (mounted) setState(() {});
+    } catch (e) {
+      LoggingService.error('Fehler beim Prüfen des anonymen Status', e);
+    }
   }
 
   void _onExternalLogsChanged() {
@@ -777,6 +791,9 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Anonymous User Registration Banner
+            if (_isAnonymous) _buildAnonymousUserBanner(),
+            
             // Profile Header
             Container(
               padding: const EdgeInsets.all(24),
@@ -1366,16 +1383,18 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Map<String, int> _calculateDailyActivityCounts() {
     final counts = <String, int>{};
-    final repo = LocalLogsRepository();
     
-    // This is a simplified version - in practice you'd load from the repository
-    // For now, we'll use existing activity data
-    for (int i = 0; i < _totalActions; i++) {
-      // Simulate some activity distribution across recent days
-      final randomDaysAgo = (i * 7) % 365;
-      final date = DateTime.now().subtract(Duration(days: randomDaysAgo));
-      final key = _dateKey(date);
-      counts[key] = (counts[key] ?? 0) + 1;
+    // Since this is called during build, we'll need to use a different approach
+    // We'll calculate from the existing activities if available
+    if (_totalActions > 0) {
+      // For now, add activity counts to recent days as a placeholder
+      // This should be replaced with a proper async state management solution
+      final now = DateTime.now();
+      for (int i = 0; i < _totalActions && i < 30; i++) {
+        final date = now.subtract(Duration(days: i * 2));
+        final key = _dateKey(date);
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
     }
     
     return counts;
@@ -1383,6 +1402,278 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String _dateKey(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildAnonymousUserBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.cloud_outlined,
+                color: Theme.of(context).colorScheme.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Guest Mode',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Save your progress to the cloud',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: _showRegistrationDialog,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+              ),
+              child: Text(
+                'Sign up',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showRegistrationDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Account'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_upload_outlined, size: 64, color: Colors.blue),
+            const SizedBox(height: 16),
+            const Text(
+              'Create an account to save your progress to the cloud.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: const Column(
+                children: [
+                  Text('✓ Alle bisherigen Daten bleiben erhalten'),
+                  Text('✓ Synchronisation zwischen Geräten'),
+                  Text('✓ Backup in der Cloud'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Later'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Create Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _navigateToRegistration();
+    }
+  }
+
+  Future<void> _navigateToRegistration() async {
+    try {
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AuthPage(),
+        ),
+      );
+
+      if (result == true) {
+        await _migrateAnonymousData();
+      }
+    } catch (e) {
+      LoggingService.error('Fehler bei der Navigation zur Registrierung', e);
+    }
+  }
+
+  Future<void> _migrateAnonymousData() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        throw Exception('Kein authentifizierter User für Migration gefunden');
+      }
+
+      final shouldMigrate = await _showMigrationDialog();
+      if (!shouldMigrate) return;
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          title: Text('Daten werden übertragen...'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Bitte warten, während deine Daten übertragen werden.'),
+            ],
+          ),
+        ),
+      );
+
+      await AnonymousMigrationService.migrateAnonymousDataToAccount(user.id);
+
+      if (mounted) Navigator.pop(context);
+
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('✅ Migration erfolgreich!'),
+            content: const Text(
+              'Alle deine Daten wurden erfolgreich zu deinem Account übertragen.',
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fertig'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      await _initializeAnonymousStatus();
+      
+    } catch (e) {
+      LoggingService.error('Fehler bei der Datenmigration', e);
+      
+      if (mounted) Navigator.pop(context);
+      
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('❌ Migration fehlgeschlagen'),
+            content: Text('Fehler bei der Datenübertragung: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  Future<bool> _showMigrationDialog() async {
+    try {
+      final canMigrate = await AnonymousMigrationService.canMigrateData();
+      if (!canMigrate) return false;
+
+      final preview = await AnonymousMigrationService.getMigrationPreview();
+
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Daten übertragen'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(preview),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                  ),
+                  child: const Column(
+                    children: [
+                      Text('ℹ️ Nach der Übertragung:'),
+                      Text('• Deine Daten sind in der Cloud gesichert'),
+                      Text('• Synchronisation zwischen Geräten möglich'),
+                      Text('• Lokale Daten werden gelöscht'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Daten übertragen'),
+            ),
+          ],
+        ),
+      );
+
+      return result ?? false;
+    } catch (e) {
+      LoggingService.error('Fehler beim Anzeigen des Migrations-Dialogs', e);
+      return false;
+    }
   }
 
   @override

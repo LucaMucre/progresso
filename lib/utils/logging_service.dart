@@ -4,6 +4,14 @@ import 'package:flutter/foundation.dart';
 class LoggingService {
   static const String _tag = 'Progresso';
 
+  /// Log debug messages (debug mode only)
+  static void debug(String message, [String? component]) {
+    if (kDebugMode) {
+      final prefix = component != null ? '[$_tag:$component]' : '[$_tag]';
+      debugPrint('$prefix DEBUG: $message');
+    }
+  }
+
   /// Log info messages (debug mode only)
   static void info(String message, [String? component]) {
     if (kDebugMode) {

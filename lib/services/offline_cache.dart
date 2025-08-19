@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -49,6 +50,48 @@ class OfflineCache {
     return uid == null ? baseKey : '${baseKey}_$uid';
   }
 
+  // Cache compression helpers
+  static List<int> _compressData(String jsonString) {
+    if (!kIsWeb) {
+      try {
+        return gzip.encode(utf8.encode(jsonString));
+      } catch (e) {
+        LoggingService.warning('Compression failed, using uncompressed data: $e');
+        return utf8.encode(jsonString);
+      }
+    } else {
+      // Web fallback - no compression
+      return utf8.encode(jsonString);
+    }
+  }
+
+  static String _decompressData(List<int> compressedData) {
+    if (!kIsWeb) {
+      try {
+        return utf8.decode(gzip.decode(compressedData));
+      } catch (e) {
+        // Try as uncompressed data
+        try {
+          return utf8.decode(compressedData);
+        } catch (e2) {
+          LoggingService.error('Decompression failed', e2);
+          return '[]'; // Fallback to empty array
+        }
+      }
+    } else {
+      // Web fallback - assume uncompressed
+      return utf8.decode(compressedData);
+    }
+  }
+
+  static String _encodeForStorage(List<int> data) {
+    return base64.encode(data);
+  }
+
+  static List<int> _decodeFromStorage(String encodedData) {
+    return base64.decode(encodedData);
+  }
+
   // Templates cachen
   static Future<void> cacheTemplates(List<ActionTemplate> templates) async {
     try {
@@ -65,21 +108,26 @@ class OfflineCache {
       }).toList();
       
       final jsonString = jsonEncode(templatesJson);
+      final compressedData = _compressData(jsonString);
       
-      // Check size limits
-      if (jsonString.length > _maxItemSize) {
-        LoggingService.warning('Templates cache data exceeds max item size, truncating', 'OfflineCache');
+      // Check size limits (compressed)
+      if (compressedData.length > _maxItemSize) {
+        LoggingService.warning('Templates cache data exceeds max item size even after compression, skipping', 'OfflineCache');
         return; // Skip caching oversized data
       }
       
-      // Check total cache size
+      LoggingService.debug('Cache compression: ${jsonString.length} -> ${compressedData.length} bytes (${(compressedData.length / jsonString.length * 100).toStringAsFixed(1)}%)');
+      
+      // Check total cache size (compressed)
       final currentSize = await getCacheSize();
-      if (currentSize + jsonString.length > _maxCacheSize) {
+      if (currentSize + compressedData.length > _maxCacheSize) {
         LoggingService.warning('Cache size limit reached, clearing old cache', 'OfflineCache');
         await _clearOldestCache();
       }
       
-      await prefs.setString(key, jsonString);
+      // Store compressed data
+      final encodedData = _encodeForStorage(compressedData);
+      await prefs.setString(key, encodedData);
       await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
       await prefs.setInt(_cacheVersionKey, _currentVersion);
       
@@ -107,11 +155,14 @@ class OfflineCache {
       return [];
     }
     
-    final templatesJson = prefs.getString(key);
-    if (templatesJson == null) return [];
+    final encodedData = prefs.getString(key);
+    if (encodedData == null) return [];
     
     try {
-      final List<dynamic> templatesList = jsonDecode(templatesJson);
+      // Decode compressed data  
+      final compressedData = _decodeFromStorage(encodedData);
+      final jsonString = _decompressData(compressedData);
+      final List<dynamic> templatesList = jsonDecode(jsonString);
       return templatesList.map((json) => models.ActionTemplate.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e, stackTrace) {
       LoggingService.error('Error loading cached templates', e, stackTrace, 'OfflineCache');
@@ -122,20 +173,46 @@ class OfflineCache {
 
   // Logs cachen
   static Future<void> cacheLogs(List<ActionLog> logs) async {
-    final prefs = await _prefs;
-    final key = await _nsKey(_logsKey);
-    final logsJson = logs.map((l) => {
-      'id': l.id,
-      'occurred_at': l.occurredAt.toIso8601String(),
-      'duration_min': l.durationMin,
-      'notes': l.notes,
-      'earned_xp': l.earnedXp,
-      'template_id': l.templateId,
-    }).toList();
-    
-    await prefs.setString(key, jsonEncode(logsJson));
-    await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
-    await prefs.setInt(_cacheVersionKey, _currentVersion);
+    try {
+      final prefs = await _prefs;
+      final key = await _nsKey(_logsKey);
+      final logsJson = logs.map((l) => {
+        'id': l.id,
+        'occurred_at': l.occurredAt.toIso8601String(),
+        'duration_min': l.durationMin,
+        'notes': l.notes,
+        'earned_xp': l.earnedXp,
+        'template_id': l.templateId,
+      }).toList();
+      
+      final jsonString = jsonEncode(logsJson);
+      final compressedData = _compressData(jsonString);
+      
+      // Check size limits (compressed)
+      if (compressedData.length > _maxItemSize) {
+        LoggingService.warning('Logs cache data exceeds max item size even after compression, skipping', 'OfflineCache');
+        return; // Skip caching oversized data
+      }
+      
+      LoggingService.debug('Logs cache compression: ${jsonString.length} -> ${compressedData.length} bytes (${(compressedData.length / jsonString.length * 100).toStringAsFixed(1)}%)', 'OfflineCache');
+      
+      // Check total cache size (compressed)
+      final currentSize = await getCacheSize();
+      if (currentSize + compressedData.length > _maxCacheSize) {
+        LoggingService.warning('Cache size limit reached, clearing old cache', 'OfflineCache');
+        await _clearOldestCache();
+      }
+      
+      // Store compressed data
+      final encodedData = _encodeForStorage(compressedData);
+      await prefs.setString(key, encodedData);
+      await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt(_cacheVersionKey, _currentVersion);
+      
+      LoggingService.info('Logs cached successfully (${logs.length} items)', 'OfflineCache');
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to cache logs', e, stackTrace, 'OfflineCache');
+    }
   }
 
   // Logs aus Cache laden
@@ -156,11 +233,14 @@ class OfflineCache {
       return [];
     }
     
-    final logsJson = prefs.getString(key);
-    if (logsJson == null) return [];
+    final encodedData = prefs.getString(key);
+    if (encodedData == null) return [];
     
     try {
-      final List<dynamic> logsList = jsonDecode(logsJson);
+      // Decode compressed data
+      final compressedData = _decodeFromStorage(encodedData);
+      final jsonString = _decompressData(compressedData);
+      final List<dynamic> logsList = jsonDecode(jsonString);
       return logsList.map((json) => models.ActionLog.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e, stackTrace) {
       LoggingService.error('Error loading cached logs', e, stackTrace, 'OfflineCache');
@@ -171,11 +251,31 @@ class OfflineCache {
 
   // Profile cachen
   static Future<void> cacheProfile(Map<String, dynamic> profile) async {
-    final prefs = await _prefs;
-    final key = await _nsKey(_profileKey);
-    await prefs.setString(key, jsonEncode(profile));
-    await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
-    await prefs.setInt(_cacheVersionKey, _currentVersion);
+    try {
+      final prefs = await _prefs;
+      final key = await _nsKey(_profileKey);
+      
+      final jsonString = jsonEncode(profile);
+      final compressedData = _compressData(jsonString);
+      
+      // Check size limits (compressed)
+      if (compressedData.length > _maxItemSize) {
+        LoggingService.warning('Profile cache data exceeds max item size even after compression, skipping', 'OfflineCache');
+        return; // Skip caching oversized data
+      }
+      
+      LoggingService.debug('Profile cache compression: ${jsonString.length} -> ${compressedData.length} bytes (${(compressedData.length / jsonString.length * 100).toStringAsFixed(1)}%)', 'OfflineCache');
+      
+      // Store compressed data
+      final encodedData = _encodeForStorage(compressedData);
+      await prefs.setString(key, encodedData);
+      await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt(_cacheVersionKey, _currentVersion);
+      
+      LoggingService.info('Profile cached successfully', 'OfflineCache');
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to cache profile', e, stackTrace, 'OfflineCache');
+    }
   }
 
   // Profile aus Cache laden
@@ -196,11 +296,14 @@ class OfflineCache {
       return null;
     }
     
-    final profileJson = prefs.getString(key);
-    if (profileJson == null) return null;
+    final encodedData = prefs.getString(key);
+    if (encodedData == null) return null;
     
     try {
-      return jsonDecode(profileJson) as Map<String, dynamic>;
+      // Decode compressed data
+      final compressedData = _decodeFromStorage(encodedData);
+      final jsonString = _decompressData(compressedData);
+      return jsonDecode(jsonString) as Map<String, dynamic>;
     } catch (e, stackTrace) {
       LoggingService.error('Error loading cached profile', e, stackTrace, 'OfflineCache');
       await clearCache();
@@ -321,19 +424,6 @@ class OfflineCache {
     }
   }
   
-  /// Compress large cache data (for future implementation)
-  static String _compressJson(String jsonString) {
-    // For now, just return the original string
-    // In the future, could implement gzip compression
-    return jsonString;
-  }
-  
-  /// Decompress cache data (for future implementation)  
-  static String _decompressJson(String compressedString) {
-    // For now, just return the original string
-    // In the future, could implement gzip decompression
-    return compressedString;
-  }
   
   /// Reset SharedPreferences instance (for testing)
   static void resetInstance() {

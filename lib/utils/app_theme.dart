@@ -79,6 +79,73 @@ class AppTheme {
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color accentOrange = Color(0xFFF59E0B);
   
+  // Glassmorphism effects
+  static BoxDecoration glassContainer({
+    Color? color,
+    double opacity = 0.1,
+    double blur = 10.0,
+    double borderOpacity = 0.2,
+    double borderRadius = 16.0,
+  }) {
+    return BoxDecoration(
+      color: (color ?? Colors.white).withValues(alpha: opacity),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: (color ?? Colors.white).withValues(alpha: borderOpacity),
+        width: 1.0,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.1),
+          blurRadius: 20.0,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 1.0,
+          offset: const Offset(0, 1),
+        ),
+      ],
+    );
+  }
+  
+  // Enhanced elevation shadows for modern depth
+  static List<BoxShadow> modernShadow({
+    double elevation = 4.0,
+    Color? color,
+  }) {
+    final shadowColor = color ?? Colors.black;
+    return [
+      BoxShadow(
+        color: shadowColor.withValues(alpha: 0.06),
+        blurRadius: elevation * 2,
+        offset: Offset(0, elevation / 2),
+      ),
+      BoxShadow(
+        color: shadowColor.withValues(alpha: 0.04),
+        blurRadius: elevation,
+        offset: Offset(0, elevation / 4),
+      ),
+    ];
+  }
+  
+  // Smooth gradient overlays
+  static BoxDecoration gradientContainer({
+    required List<Color> colors,
+    double borderRadius = 16.0,
+    double elevation = 4.0,
+  }) {
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: colors,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(borderRadius),
+      boxShadow: modernShadow(elevation: elevation),
+    );
+  }
+  
   /// Create light theme
   static ThemeData light() {
     final colorScheme = ColorScheme.fromSeed(
@@ -331,32 +398,6 @@ class AppTheme {
     );
   }
   
-  // Utility methods for modern UI effects
-  
-  /// Create glassmorphism effect
-  static BoxDecoration glassContainer({
-    required BuildContext context,
-    double opacity = 0.1,
-    double borderOpacity = 0.2,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return BoxDecoration(
-      color: colorScheme.surface.withValues(alpha: opacity),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: colorScheme.outline.withValues(alpha: borderOpacity),
-        width: 1,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: colorScheme.shadow.withValues(alpha: 0.1),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    );
-  }
-  
   /// Create modern card shadow
   static List<BoxShadow> modernCardShadow(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -372,23 +413,6 @@ class AppTheme {
         offset: const Offset(0, 2),
       ),
     ];
-  }
-  
-  /// Create gradient container
-  static BoxDecoration gradientContainer({
-    required List<Color> colors,
-    BorderRadius? borderRadius,
-    List<BoxShadow>? boxShadow,
-  }) {
-    return BoxDecoration(
-      gradient: LinearGradient(
-        colors: colors,
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderRadius: borderRadius ?? BorderRadius.circular(16),
-      boxShadow: boxShadow,
-    );
   }
   
   /// Success notification style

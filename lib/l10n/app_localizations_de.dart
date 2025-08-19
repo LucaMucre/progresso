@@ -30,10 +30,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get navChat => 'Chat';
 
   @override
-  String get navProfile => 'Profil';
+  String get navProfile => 'Profile';
 
   @override
-  String get navSettings => 'Einstellungen';
+  String get navSettings => 'Settings';
 
   @override
   String get chatTitle => 'Chat';

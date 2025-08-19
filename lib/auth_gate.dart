@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'auth_page.dart';
 import 'home_shell.dart';
 import 'services/achievement_service.dart';
+import 'services/anonymous_user_service.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -143,7 +143,7 @@ class _AuthGateState extends State<AuthGate> {
               ),
               SizedBox(height: 8),
               Text(
-                'Bitte starte Supabase lokal mit:\nflutter pub global activate supabase\nsupabase start',
+                'App läuft im lokalen Modus ohne Cloud-Sync',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -153,10 +153,23 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     try {
-      final session = Supabase.instance.client.auth.currentSession;
-      return session == null
-        ? const AuthPage()
-        : const HomeShell();
+      // ===== NEUER ANONYMER START =====
+      // Immer direkt zur HomeShell - keine Authentifizierung erforderlich
+      // Anonyme User erhalten eine persistente lokale ID
+      
+      // Stelle sicher, dass eine anonyme User-ID existiert
+      Future(() async {
+        try {
+          await AnonymousUserService.getOrCreateAnonymousUserId();
+          if (kDebugMode) debugPrint('Anonymous user ID initialisiert');
+        } catch (e) {
+          if (kDebugMode) debugPrint('Fehler bei anonymer User-ID: $e');
+        }
+      });
+      
+      // Direkt zur Hauptapp - sowohl für anonyme als auch authentifizierte User
+      return const HomeShell();
+      
     } catch (e) {
       return Scaffold(
         appBar: AppBar(title: const Text('Progresso')),
@@ -167,12 +180,12 @@ class _AuthGateState extends State<AuthGate> {
               Icon(Icons.error_outline, size: 64, color: Colors.red),
               SizedBox(height: 16),
               Text(
-    'Error loading app',
+                'Error loading app',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 8),
               Text(
-                'Bitte überprüfe deine Supabase-Konfiguration',
+                'App läuft im lokalen Modus',
                 textAlign: TextAlign.center,
               ),
             ],

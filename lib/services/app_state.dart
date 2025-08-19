@@ -2,19 +2,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import 'db_service.dart';
 import 'offline_cache.dart';
 import 'migration_service.dart';
 
 part 'app_state.g.dart';
 
-// Supabase Client Provider (langlebig)
+// Supabase Client Provider (langlebig - ohne autoDispose)
 @riverpod
 SupabaseClient supabaseClient(SupabaseClientRef ref) {
   return Supabase.instance.client;
 }
 
-// User Provider (langlebig)
+// User Provider (langlebig - ohne autoDispose)
 @riverpod
 User? currentUser(CurrentUserRef ref) {
   return ref.watch(supabaseClientProvider).auth.currentUser;
@@ -25,6 +26,12 @@ User? currentUser(CurrentUserRef ref) {
 class TemplatesNotifier extends _$TemplatesNotifier {
   @override
   Future<List<ActionTemplate>> build() async {
+    // Auto-dispose after 5 minutes of inactivity
+    final timer = Timer(const Duration(minutes: 5), () {
+      ref.invalidateSelf();
+    });
+    ref.onDispose(() => timer.cancel());
+    
     final user = ref.read(currentUserProvider);
     if (user == null) return [];
     
@@ -70,6 +77,12 @@ class TemplatesNotifier extends _$TemplatesNotifier {
 class LogsNotifier extends _$LogsNotifier {
   @override
   Future<List<ActionLog>> build() async {
+    // Auto-dispose after 3 minutes of inactivity (logs change more frequently)
+    final timer = Timer(const Duration(minutes: 3), () {
+      ref.invalidateSelf();
+    });
+    ref.onDispose(() => timer.cancel());
+    
     final user = ref.read(currentUserProvider);
     if (user == null) return [];
     
@@ -120,6 +133,12 @@ class LogsNotifier extends _$LogsNotifier {
 class XpNotifier extends _$XpNotifier {
   @override
   Future<int> build() async {
+    // Auto-dispose after 2 minutes of inactivity (frequent updates)
+    final timer = Timer(const Duration(minutes: 2), () {
+      ref.invalidateSelf();
+    });
+    ref.onDispose(() => timer.cancel());
+    
     final user = ref.read(currentUserProvider);
     if (user == null) return 0;
     
@@ -140,6 +159,12 @@ class XpNotifier extends _$XpNotifier {
 class StreakNotifier extends _$StreakNotifier {
   @override
   Future<int> build() async {
+    // Auto-dispose after 2 minutes of inactivity (frequent updates)
+    final timer = Timer(const Duration(minutes: 2), () {
+      ref.invalidateSelf();
+    });
+    ref.onDispose(() => timer.cancel());
+    
     final user = ref.read(currentUserProvider);
     if (user == null) return 0;
     
@@ -157,6 +182,12 @@ class StreakNotifier extends _$StreakNotifier {
 class UserProfileNotifier extends _$UserProfileNotifier {
   @override
   Future<Map<String, dynamic>?> build() async {
+    // Auto-dispose after 10 minutes of inactivity (longer-lived for sessions)
+    final timer = Timer(const Duration(minutes: 10), () {
+      ref.invalidateSelf();
+    });
+    ref.onDispose(() => timer.cancel());
+    
     final user = ref.read(currentUserProvider);
     if (user == null) return null;
     

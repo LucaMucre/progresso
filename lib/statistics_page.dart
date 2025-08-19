@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'dart:ui';
 import 'dart:math' as math;
 import 'models/action_models.dart';
 import 'services/life_areas_service.dart';
@@ -155,13 +156,30 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
     // Daily activity chart data
     final dailyData = <DateTime, Map<String, int>>{};
+    // Daily data per life area for stacked bar chart
+    final dailyLifeAreasData = <DateTime, Map<String, int>>{};
+    
     for (final activity in _activities) {
       final day = DateTime(activity.occurredAt.year, activity.occurredAt.month, activity.occurredAt.day);
+      final parsed = ParsedActivityData.fromNotes(activity.notes);
+      final areaName = parsed.effectiveAreaName.isNotEmpty 
+          ? parsed.effectiveAreaName 
+          : 'Other';
+      final minutes = activity.durationMin ?? 0;
+      
+      // Overall daily data
       dailyData[day] = {
         'count': (dailyData[day]?['count'] ?? 0) + 1,
         'xp': (dailyData[day]?['xp'] ?? 0) + activity.earnedXp,
-        'minutes': (dailyData[day]?['minutes'] ?? 0) + (activity.durationMin ?? 0),
+        'minutes': (dailyData[day]?['minutes'] ?? 0) + minutes,
       };
+      
+      // Daily data per life area
+      if (dailyLifeAreasData[day] == null) {
+        dailyLifeAreasData[day] = {};
+      }
+      dailyLifeAreasData[day]![areaName] = 
+          (dailyLifeAreasData[day]![areaName] ?? 0) + minutes;
     }
 
     // Weekly pattern (0 = Monday, 6 = Sunday)
@@ -199,6 +217,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       'currentStreak': currentStreak,
       'lifeAreasData': lifeAreasData,
       'dailyData': dailyData,
+      'dailyLifeAreasData': dailyLifeAreasData,
       'weeklyPattern': weeklyPattern,
     };
 
@@ -215,13 +234,14 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
   }
 
   Color _getColorForArea(String areaName) {
+    // First try to find the actual life area and use its color
     final area = _lifeAreas.firstWhere(
       (area) => area.name.toLowerCase() == areaName.toLowerCase(),
       orElse: () => LifeArea(
         id: '', 
         name: '', 
         category: '', 
-        color: '#6366f1', 
+        color: '#64748B', 
         userId: '', 
         icon: '',
         createdAt: DateTime.now(),
@@ -230,11 +250,40 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       ),
     );
     
-    try {
-      return Color(int.parse(area.color.replaceAll('#', '0xFF')));
-    } catch (_) {
-      return AppTheme.primaryColor;
+    // Use the actual life area color if found
+    if (area.id.isNotEmpty) {
+      try {
+        return Color(int.parse(area.color.replaceAll('#', '0xFF')));
+      } catch (_) {
+        // If color parsing fails, continue to fallback
+      }
     }
+    
+    // Fallback color palette for common areas (only if life area not found)
+    final fallbackColors = {
+      'fitness': const Color(0xFF10B981), // Emerald
+      'nutrition': const Color(0xFF06B6D4), // Cyan  
+      'learning': const Color(0xFF8B5CF6), // Purple
+      'finance': const Color(0xFFF59E0B), // Amber
+      'art': const Color(0xFFEF4444), // Red
+      'relationships': const Color(0xFFEC4899), // Pink
+      'spirituality': const Color(0xFF6366F1), // Indigo
+      'career': const Color(0xFF0EA5E9), // Sky
+      'other': const Color(0xFF64748B), // Slate
+    };
+    
+    // Try to match fallback by name (case insensitive)
+    final colorKey = fallbackColors.keys.firstWhere(
+      (key) => key.toLowerCase() == areaName.toLowerCase(),
+      orElse: () => '',
+    );
+    
+    if (colorKey.isNotEmpty) {
+      return fallbackColors[colorKey]!;
+    }
+    
+    // Final fallback to primary color
+    return AppTheme.primaryColor;
   }
 
   void _updateFilters() async {
@@ -315,6 +364,8 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
                     _buildOverviewCards(),
                     SizedBox(height: AppTheme.spacing24),
                     _buildActivityTrendChart(),
+                    SizedBox(height: AppTheme.spacing24),
+                    _buildDailyStackedBarChart(),
                     SizedBox(height: AppTheme.spacing24),
                     _buildLifeAreasChart(),
                     SizedBox(height: AppTheme.spacing24),
@@ -828,6 +879,171 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     );
   }
 
+  Widget _buildDailyStackedBarChart() {
+    final dailyLifeAreasData = _stats['dailyLifeAreasData'] as Map<DateTime, Map<String, int>>? ?? {};
+    final lifeAreasData = _stats['lifeAreasData'] as Map<String, Map<String, dynamic>>? ?? {};
+    
+    if (dailyLifeAreasData.isEmpty) {
+      return _buildEmptyChart('Daily Activity Hours', 'No daily activity data available');
+    }
+
+    final sortedDays = dailyLifeAreasData.keys.toList()..sort();
+    final lifeAreaNames = <String>{};
+    
+    // Collect all life area names
+    for (final dayData in dailyLifeAreasData.values) {
+      lifeAreaNames.addAll(dayData.keys);
+    }
+    
+    final sortedLifeAreas = lifeAreaNames.toList()..sort();
+    final barGroups = <BarChartGroupData>[];
+    
+    // Create stacked bar chart data
+    for (int dayIndex = 0; dayIndex < sortedDays.length; dayIndex++) {
+      final day = sortedDays[dayIndex];
+      final dayData = dailyLifeAreasData[day]!;
+      final barRods = <BarChartRodStackItem>[];
+      
+      double stackY = 0.0;
+      for (final lifeArea in sortedLifeAreas) {
+        final minutes = dayData[lifeArea] ?? 0;
+        if (minutes > 0) {
+          final hours = minutes / 60.0;
+          final color = _getColorForArea(lifeArea);
+          
+          barRods.add(BarChartRodStackItem(
+            stackY,
+            stackY + hours,
+            color,
+          ));
+          stackY += hours;
+        }
+      }
+      
+      barGroups.add(
+        BarChartGroupData(
+          x: dayIndex,
+          barRods: [
+            BarChartRodData(
+              toY: stackY,
+              width: 25,
+              rodStackItems: barRods,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Calculate max Y value
+    final maxHours = barGroups.isEmpty ? 1.0 : barGroups
+        .map((group) => group.barRods.first.toY)
+        .reduce(math.max) * 1.2;
+
+    return _buildChartContainer(
+      'Daily Activity Hours by Life Area',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 300,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxHours,
+                barGroups: barGroups,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: math.max(1.0, maxHours / 6),
+                  getDrawingHorizontalLine: (value) {
+                    return FlLine(
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                      strokeWidth: 1,
+                    );
+                  },
+                ),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      interval: math.max(1.0, maxHours / 6),
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          '${value.toInt()}h',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (value, meta) {
+                        if (value.toInt() >= 0 && value.toInt() < sortedDays.length) {
+                          final day = sortedDays[value.toInt()];
+                          final monthDay = '${day.month}/${day.day}';
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              monthDay,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                fontSize: 11,
+                              ),
+                            ),
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                borderData: FlBorderData(show: false),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Legend
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: sortedLifeAreas.map((lifeArea) {
+              final color = _getColorForArea(lifeArea);
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    lifeArea,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildTopActivities() {
     if (_activities.isEmpty) return const SizedBox();
@@ -917,22 +1133,28 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Widget _buildChartContainer(String title, Widget chart) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+      padding: const EdgeInsets.all(24),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: AppTheme.glassContainer(
+        color: Theme.of(context).colorScheme.primary,
+        opacity: 0.02,
+        borderRadius: 20.0,
+        borderOpacity: 0.05,
+      ).copyWith(
+        boxShadow: AppTheme.modernShadow(elevation: 1.0),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           chart,
         ],
       ),

@@ -130,13 +130,53 @@ class _LogActionPageState extends State<LogActionPage> {
     }
   }
 
+  Future<String?> _storeImageForAnonymousUser() async {
+    try {
+      Uint8List bytes;
+      
+      if (kIsWeb && _selectedImageUrl != null) {
+        // Convert blob URL to bytes using web helper
+        final fetched = await web_bytes.fetchBytesFromUrl(_selectedImageUrl!);
+        if (fetched == null) {
+          throw Exception('Could not convert image');
+        }
+        bytes = fetched;
+      } else if (_selectedImage != null) {
+        bytes = await _selectedImage!.readAsBytes();
+        // Compress if too large
+        if (bytes.length > 800000) {
+          try {
+            final result = await FlutterImageCompress.compressWithList(
+              bytes,
+              quality: 80,
+              minWidth: 1600,
+              minHeight: 1600,
+            );
+            if (result.isNotEmpty) bytes = Uint8List.fromList(result);
+          } catch (_) {}
+        }
+      } else {
+        throw Exception('No image selected');
+      }
+      
+      // Convert to base64 data URL for local storage
+      final base64String = base64Encode(bytes);
+      return 'data:image/jpeg;base64,$base64String';
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error storing image for anonymous user: $e');
+      throw Exception('Failed to store image: $e');
+    }
+  }
 
   Future<String?> _uploadImage() async {
     if (_selectedImage == null && _selectedImageUrl == null) return null;
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('User nicht angemeldet');
+      if (user == null) {
+        // For anonymous users, store image as base64 data URL locally
+        return await _storeImageForAnonymousUser();
+      }
 
       String fileName;
       Uint8List bytes;
@@ -769,22 +809,20 @@ class _LogActionPageState extends State<LogActionPage> {
                     ),
                   ),
                   const Divider(height: 1),
-                  // Editor area (WYSIWYG) - made more touch-friendly
-                  GestureDetector(
-                    onTap: () {
-                      // Ensure the QuillEditor gets focus when tapped
-                      _quillFocusNode.requestFocus();
-                    },
-                    child: SizedBox(
-                      height: 260,
-                      child: quill.QuillEditor.basic(
-                        controller: _quillCtrl,
-                        focusNode: _quillFocusNode,
-                        scrollController: _quillScrollController,
-                        config: const quill.QuillEditorConfig(
-                          placeholder: 'Your thoughts…',
-                          padding: EdgeInsets.all(12),
-                        ),
+                  // Editor area (WYSIWYG) - optimized for faster keyboard response
+                  Container(
+                    height: 260,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: quill.QuillEditor.basic(
+                      controller: _quillCtrl,
+                      focusNode: _quillFocusNode,
+                      scrollController: _quillScrollController,
+                      config: const quill.QuillEditorConfig(
+                        placeholder: 'Your thoughts…',
+                        padding: EdgeInsets.all(12),
                       ),
                     ),
                   ),

@@ -123,13 +123,12 @@ class _ModernCardState extends State<ModernCard>
     final colorScheme = Theme.of(context).colorScheme;
     
     if (widget.glassMorphism) {
-      return AppTheme.glassContainer(context: context);
+      return AppTheme.glassContainer();
     }
     
     if (widget.gradient && widget.gradientColors != null) {
       return AppTheme.gradientContainer(
         colors: widget.gradientColors!,
-        boxShadow: AppTheme.modernCardShadow(context),
       );
     }
     

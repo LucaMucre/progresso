@@ -233,4 +233,48 @@ class LocalLogsRepository {
       rethrow;
     }
   }
+
+  /// Holt alle lokalen Logs für Migration
+  Future<List<ActionLog>> getAllLocalLogs() async {
+    try {
+      return await _db.getLogs(); // Ohne limit für alle Logs
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to get all local logs', e, stackTrace, 'LocalLogsRepository');
+      return [];
+    }
+  }
+
+  /// Löscht alle lokalen Logs (für Migration)
+  Future<void> clearAllLocalLogs() async {
+    try {
+      await clearAllData(); // Nutzt die bestehende Methode
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to clear all local logs', e, stackTrace, 'LocalLogsRepository');
+      rethrow;
+    }
+  }
+
+  /// Holt lokale Statistiken für anonyme User
+  Future<Map<String, int>> getLocalStatistics() async {
+    try {
+      final totalActions = await getLogCount();
+      final totalXp = await fetchTotalXp();
+      final currentStreak = await calculateStreak();
+      
+      return {
+        'totalActions': totalActions,
+        'totalXP': totalXp,
+        'currentStreak': currentStreak,
+        'longestStreak': currentStreak, // Vereinfacht für jetzt
+      };
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to get local statistics', e, stackTrace, 'LocalLogsRepository');
+      return {
+        'totalActions': 0,
+        'totalXP': 0,
+        'currentStreak': 0,
+        'longestStreak': 0,
+      };
+    }
+  }
 }

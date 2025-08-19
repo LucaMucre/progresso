@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'anonymous_user_service.dart';
 // Web-only localStorage access via conditional imports
 import '../utils/web_storage_stub.dart'
     if (dart.library.html) '../utils/web_storage_web.dart' as web_store;
@@ -306,9 +307,15 @@ class AchievementService {
   
   static List<Achievement> get allAchievements => _allAchievements;
   
-  static String _prefsKeyForUser() {
+  static Future<String> _prefsKeyForUser() async {
     final uid = _supabase.auth.currentUser?.id;
-    return uid != null ? 'unlocked_achievements_$uid' : 'unlocked_achievements';
+    if (uid != null) {
+      return 'unlocked_achievements_$uid';
+    } else {
+      // For anonymous users, use anonymous user ID
+      final anonymousId = await AnonymousUserService.getOrCreateAnonymousUserId();
+      return 'unlocked_achievements_$anonymousId';
+    }
   }
 
   static Future<void> loadUnlockedAchievements() async {
@@ -316,24 +323,19 @@ class AchievementService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final currentUid = _supabase.auth.currentUser?.id;
+      final effectiveUserId = currentUid ?? await AnonymousUserService.getOrCreateAnonymousUserId();
       if (kDebugMode) debugPrint('DEBUG: Current user ID: $currentUid');
-      if (currentUid == null) {
-        _unlockedAchievements = {};
-        _loadedFromStorage = true;
-        _loadedUserId = null;
-        if (kDebugMode) debugPrint('DEBUG: No user - cleared achievements');
-        return;
-      }
+      if (kDebugMode) debugPrint('DEBUG: Effective user ID (incl. anonymous): $effectiveUserId');
       
       // FORCE clear memory state if user changed
-      if (_loadedUserId != currentUid) {
+      if (_loadedUserId != effectiveUserId) {
         _unlockedAchievements = {};
         _loadedFromStorage = false;
         if (kDebugMode) debugPrint('DEBUG: User changed, forcing reload');
       }
       
       // Migrate from legacy global key if present and user-specific key missing
-      final userKey = _prefsKeyForUser();
+      final userKey = await _prefsKeyForUser();
       if (kDebugMode) debugPrint('DEBUG: Using key: $userKey');
       String? unlockedJson = prefs.getString(userKey);
       if (kDebugMode) debugPrint('DEBUG: Local JSON: $unlockedJson');
@@ -371,30 +373,33 @@ class AchievementService {
       }
 
       // Try to load from remote (if table exists). Remote is source of truth.
+      // Only for authenticated users
       try {
-        final remote = await _supabase
-            .from('user_achievements')
-            .select('achievement_id')
-            .eq('user_id', currentUid)
-            .then((rows) => (rows as List)
-                .map((r) => r['achievement_id'] as String)
-                .toSet());
-        if (kDebugMode) debugPrint('DEBUG: Remote achievements: $remote');
-        if (remote.isNotEmpty) {
-          _unlockedAchievements = remote;
-          // Mirror to local for offline
-          await prefs.setString(_prefsKeyForUser(), jsonEncode(_unlockedAchievements.toList()));
-          if (kDebugMode) debugPrint('DEBUG: Updated from remote and saved locally');
+        if (currentUid != null) {
+          final remote = await _supabase
+              .from('user_achievements')
+              .select('achievement_id')
+              .eq('user_id', currentUid)
+              .then((rows) => (rows as List)
+                  .map((r) => r['achievement_id'] as String)
+                  .toSet());
+          if (kDebugMode) debugPrint('DEBUG: Remote achievements: $remote');
+          if (remote.isNotEmpty) {
+            _unlockedAchievements = remote;
+            // Mirror to local for offline
+            await prefs.setString(await _prefsKeyForUser(), jsonEncode(_unlockedAchievements.toList()));
+            if (kDebugMode) debugPrint('DEBUG: Updated from remote and saved locally');
+          }
         }
       } catch (e) {
         if (kDebugMode) debugPrint('DEBUG: Remote load failed (table may not exist): $e');
       }
       _loadedFromStorage = true;
-      _loadedUserId = currentUid; // remember which user's data is in memory
+      _loadedUserId = effectiveUserId; // remember which user's data is in memory (including anonymous)
       if (kDebugMode) debugPrint('DEBUG: Final unlocked achievements: $_unlockedAchievements');
       
       // VERIFY: Read back what was actually saved
-      final verifyKey = _prefsKeyForUser();
+      final verifyKey = await _prefsKeyForUser();
       final verifyData = prefs.getString(verifyKey);
       if (kDebugMode) debugPrint('DEBUG: VERIFICATION - Key: $verifyKey, Data: $verifyData');
     } catch (e) {
@@ -405,8 +410,9 @@ class AchievementService {
   static Future<void> _ensureLoaded() async {
     // If user changed (login/logout), force reload for the new user
     final currentUid = _supabase.auth.currentUser?.id;
-    if (kDebugMode) debugPrint('DEBUG: _ensureLoaded - currentUid: $currentUid, _loadedUserId: $_loadedUserId, _loadedFromStorage: $_loadedFromStorage');
-    if (_loadedUserId != currentUid) {
+    final effectiveUserId = currentUid ?? await AnonymousUserService.getOrCreateAnonymousUserId();
+    if (kDebugMode) debugPrint('DEBUG: _ensureLoaded - currentUid: $currentUid, effectiveUserId: $effectiveUserId, _loadedUserId: $_loadedUserId, _loadedFromStorage: $_loadedFromStorage');
+    if (_loadedUserId != effectiveUserId) {
       _loadedFromStorage = false;
       if (kDebugMode) debugPrint('DEBUG: User changed or first load, reloading achievements');
     }
@@ -420,7 +426,7 @@ class AchievementService {
     if (kDebugMode) debugPrint('DEBUG: Saving achievements: $_unlockedAchievements');
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = _prefsKeyForUser();
+      final key = await _prefsKeyForUser();
       final json = jsonEncode(_unlockedAchievements.toList());
       final success = await prefs.setString(key, json);
       if (kDebugMode) debugPrint('DEBUG: Saved to key $key: $json (success: $success)');

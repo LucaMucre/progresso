@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'anonymous_user_service.dart';
+import 'local_character_service.dart';
 
 class CharacterStats {
   final int strength;
@@ -114,11 +116,21 @@ class Character {
 class CharacterService {
   static final SupabaseClient _client = Supabase.instance.client;
 
-  // Character erstellen oder abrufen
+  // Character erstellen oder abrufen (unterstützt anonyme und authentifizierte User)
   static Future<Character> getOrCreateCharacter() async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
+    
+    // Wenn kein authentifizierter User: verwende lokalen Character
+    if (user == null) {
+      final isAnonymous = await AnonymousUserService.isAnonymousUser();
+      if (isAnonymous) {
+        return await LocalCharacterService.getOrCreateLocalCharacter();
+      } else {
+        throw Exception('Kein User angemeldet und nicht im anonymen Modus');
+      }
+    }
 
+    // Authentifizierter User: verwende Remote Character
     try {
       // Versuche existierenden Character zu finden
       final response = await _client
@@ -191,11 +203,21 @@ class CharacterService {
     }
   }
 
-  // Character Stats aktualisieren
+  // Character Stats aktualisieren (unterstützt anonyme und authentifizierte User)
   static Future<void> updateCharacterStats(CharacterStats newStats) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
+    
+    // Wenn kein authentifizierter User: verwende lokalen Character
+    if (user == null) {
+      final isAnonymous = await AnonymousUserService.isAnonymousUser();
+      if (isAnonymous) {
+        return await LocalCharacterService.updateLocalCharacterStats(newStats);
+      } else {
+        throw Exception('Kein User angemeldet und nicht im anonymen Modus');
+      }
+    }
 
+    // Authentifizierter User: verwende Remote Update
     await _client
         .from('characters')
         .update({
@@ -205,11 +227,21 @@ class CharacterService {
         .eq('user_id', user.id);
   }
 
-  // XP hinzufügen und Stats entsprechend erhöhen
+  // XP hinzufügen und Stats entsprechend erhöhen (unterstützt anonyme und authentifizierte User)
   static Future<void> addXpAndUpdateStats(int xp, String statType) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
+    
+    // Wenn kein authentifizierter User: verwende lokalen Character
+    if (user == null) {
+      final isAnonymous = await AnonymousUserService.isAnonymousUser();
+      if (isAnonymous) {
+        return await LocalCharacterService.addXpAndUpdateLocalStats(xp, statType);
+      } else {
+        throw Exception('Kein User angemeldet und nicht im anonymen Modus');
+      }
+    }
 
+    // Authentifizierter User: verwende Remote Update
     // Aktuellen Character laden
     final character = await getOrCreateCharacter();
     

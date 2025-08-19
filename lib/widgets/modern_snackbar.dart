@@ -225,7 +225,7 @@ class ModernLoadingOverlay extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(24),
             margin: const EdgeInsets.all(32),
-            decoration: AppTheme.glassContainer(context: context, opacity: 0.95),
+            decoration: AppTheme.glassContainer(opacity: 0.95),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -315,7 +315,7 @@ class ModernConfirmDialog extends StatelessWidget {
         backgroundColor: Colors.transparent,
         child: Container(
           padding: const EdgeInsets.all(24),
-          decoration: AppTheme.glassContainer(context: context, opacity: 0.95),
+          decoration: AppTheme.glassContainer(opacity: 0.95),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
