@@ -88,13 +88,13 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       }
       
       var activities = await db_service.fetchLogs();
-      debugPrint('Statistics: Loaded ${activities.length} activities from local storage');
+      // Loaded ${activities.length} activities from local storage
       
       // Apply date filter
       if (since != null) {
-        debugPrint('Statistics: Applying date filter since $since');
+        // Applying date filter since $since
         activities = activities.where((activity) => activity.occurredAt.isAfter(since!)).toList();
-        debugPrint('Statistics: After date filter: ${activities.length} activities');
+        // After date filter: ${activities.length} activities
       }
       
       // Apply life area filter if selected
@@ -114,9 +114,9 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
   }
 
   void _calculateStatistics() {
-    debugPrint('Statistics: _calculateStatistics called with ${_activities.length} activities');
+    // Calculating statistics with ${_activities.length} activities
     if (_activities.isEmpty) {
-      debugPrint('Statistics: No activities, clearing stats');
+      // No activities, clearing stats
       setState(() {
         _stats = {};
       });
@@ -128,19 +128,37 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
         ? now.subtract(Duration(days: _selectedDateFilter.days!))
         : _activities.last.occurredAt;
 
-    // Basic stats
-    final totalActivities = _activities.length;
-    final totalXP = _activities.fold<int>(0, (sum, activity) => sum + activity.earnedXp);
-    final totalMinutes = _activities.fold<int>(0, (sum, activity) => sum + (activity.durationMin ?? 0));
+    // Filter activities to only include those from existing life areas
+    final existingAreaNames = _lifeAreas.map((area) => area.name).toSet();
+    final existingCanonicalNames = _lifeAreas.map((area) => LifeAreasService.canonicalAreaName(area.name)).toSet();
+    
+    final filteredActivities = _activities.where((activity) {
+      final parsed = ParsedActivityData.fromNotes(activity.notes);
+      final activityAreaName = parsed.effectiveAreaName;
+      if (activityAreaName.isEmpty) return true; // Keep activities without life area
+      
+      // First try exact name match
+      if (existingAreaNames.contains(activityAreaName)) return true;
+      
+      // Then try canonical name match
+      final canonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
+      return existingCanonicalNames.contains(canonicalName) || canonicalName == 'other' || canonicalName == 'unknown';
+    }).toList();
+
+    // Basic stats (only from existing life areas)
+    final totalActivities = filteredActivities.length;
+    final totalXP = filteredActivities.fold<int>(0, (sum, activity) => sum + activity.earnedXp);
+    final totalMinutes = filteredActivities.fold<int>(0, (sum, activity) => sum + (activity.durationMin ?? 0));
     final avgXpPerDay = _selectedDateFilter.days != null 
         ? totalXP / _selectedDateFilter.days! 
         : totalXP / (now.difference(startDate).inDays + 1);
 
-    debugPrint('Statistics: Calculated totalActivities=$totalActivities, totalXP=$totalXP');
+    // Calculated totalActivities=$totalActivities, totalXP=$totalXP
 
     // Life areas distribution
     final lifeAreasData = <String, Map<String, dynamic>>{};
-    for (final activity in _activities) {
+    
+    for (final activity in filteredActivities) {
       final parsed = ParsedActivityData.fromNotes(activity.notes);
       final areaName = parsed.effectiveAreaName.isNotEmpty 
           ? parsed.effectiveAreaName 
@@ -159,7 +177,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     // Daily data per life area for stacked bar chart
     final dailyLifeAreasData = <DateTime, Map<String, int>>{};
     
-    for (final activity in _activities) {
+    for (final activity in filteredActivities) {
       final day = DateTime(activity.occurredAt.year, activity.occurredAt.month, activity.occurredAt.day);
       final parsed = ParsedActivityData.fromNotes(activity.notes);
       final areaName = parsed.effectiveAreaName.isNotEmpty 
@@ -167,7 +185,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
           : 'Other';
       final minutes = activity.durationMin ?? 0;
       
-      // Overall daily data
+      // Overall daily data (only from existing life areas)
       dailyData[day] = {
         'count': (dailyData[day]?['count'] ?? 0) + 1,
         'xp': (dailyData[day]?['xp'] ?? 0) + activity.earnedXp,
@@ -184,7 +202,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
     // Weekly pattern (0 = Monday, 6 = Sunday)
     final weeklyPattern = List.generate(7, (index) => 0);
-    for (final activity in _activities) {
+    for (final activity in filteredActivities) {
       final weekday = activity.occurredAt.weekday - 1; // Convert to 0-6
       weeklyPattern[weekday]++;
     }
@@ -221,7 +239,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       'weeklyPattern': weeklyPattern,
     };
 
-    debugPrint('Statistics: Setting new stats with totalActivities=${newStats['totalActivities']}');
+    // Setting new stats with totalActivities=${newStats['totalActivities']}
     
     setState(() {
       _stats = newStats;
@@ -229,7 +247,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
     // Verify the state was updated
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('Statistics: After setState, _stats[totalActivities]=${_stats['totalActivities']}');
+      // After setState, _stats[totalActivities]=${_stats['totalActivities']}
     });
   }
 
@@ -506,7 +524,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     final avgXpPerDay = _stats['avgXpPerDay'] ?? 0.0;
     final currentStreak = _stats['currentStreak'] ?? 0;
 
-    debugPrint('Statistics: _buildOverviewCards - totalActivities=$totalActivities, totalXP=$totalXP, _stats=${_stats.keys}');
+    // Building overview cards
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -968,15 +986,20 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 40,
-                      interval: math.max(1.0, maxHours / 6),
+                      interval: 1.0, // Show at every hour
                       getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}h',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                            fontSize: 12,
-                          ),
-                        );
+                        final intValue = value.toInt();
+                        // Only show labels at whole hours and avoid showing the top label if it's too close
+                        if (value == intValue.toDouble() && intValue >= 0 && intValue < maxHours - 0.5) {
+                          return Text(
+                            '${intValue}h',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                              fontSize: 12,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
                       },
                     ),
                   ),

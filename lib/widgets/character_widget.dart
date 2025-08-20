@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/character_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/avatar_sync_service.dart';
+import '../utils/accessibility_utils.dart';
 
 class CharacterWidget extends StatefulWidget {
   const CharacterWidget({super.key});
@@ -86,7 +87,9 @@ class _CharacterWidgetState extends State<CharacterWidget> {
   Widget _buildStatBar(String label, int value, int maxValue, Color color) {
     final percentage = value / maxValue;
     
-    return Column(
+    return Semantics(
+      label: '$label: $value out of $maxValue points, ${(percentage * 100).round()}% complete',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -120,6 +123,7 @@ class _CharacterWidgetState extends State<CharacterWidget> {
           ),
         ),
       ],
+    ),
     );
   }
 

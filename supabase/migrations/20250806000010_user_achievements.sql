@@ -26,3 +26,5 @@ create policy if not exists "ua_update_own"
 
 create index if not exists user_achievements_user_id_idx on public.user_achievements(user_id);
 
+
+

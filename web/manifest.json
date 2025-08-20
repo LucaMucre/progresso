@@ -5,7 +5,7 @@
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Personal development tracker with gamification features. Track your daily activities, build habits, and unlock achievements on your journey to self-improvement.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'local_database.dart';
 import '../models/action_models.dart';
 import '../utils/logging_service.dart';
+import '../utils/production_logger.dart';
 
 class DataExportService {
   static final LocalDatabase _db = LocalDatabase();
@@ -10,7 +11,7 @@ class DataExportService {
   /// Export all user data to JSON format
   static Future<Map<String, dynamic>> exportAllData() async {
     try {
-      if (kDebugMode) debugPrint('=== EXPORTING ALL DATA ===');
+      ProductionLogger.data('Starting full data export');
 
       final templates = await _db.getTemplates();
       final logs = await _db.getLogs();
@@ -48,9 +49,7 @@ class DataExportService {
         'database_info': dbInfo,
       };
 
-      if (kDebugMode) {
-        debugPrint('Exported ${templates.length} templates, ${logs.length} logs, ${achievements.length} achievements');
-      }
+      ProductionLogger.data('Export completed', recordCount: templates.length + logs.length + achievements.length);
 
       return exportData;
     } catch (e, stackTrace) {
@@ -68,7 +67,7 @@ class DataExportService {
   /// Import data from JSON format
   static Future<ImportResult> importFromJson(Map<String, dynamic> importData) async {
     try {
-      if (kDebugMode) debugPrint('=== IMPORTING DATA ===');
+      ProductionLogger.data('Starting data import');
 
       final result = ImportResult();
 
@@ -144,12 +143,9 @@ class DataExportService {
 
       result.success = result.errors.isEmpty;
 
-      if (kDebugMode) {
-        debugPrint('Import completed: ${result.templatesImported} templates, '
-            '${result.logsImported} logs, ${result.achievementsImported} achievements');
-        if (result.errors.isNotEmpty) {
-          debugPrint('Import errors: ${result.errors.length}');
-        }
+      ProductionLogger.data('Import completed', recordCount: result.templatesImported + result.logsImported + result.achievementsImported);
+      if (result.errors.isNotEmpty) {
+        ProductionLogger.warning('Import had ${result.errors.length} errors');
       }
 
       return result;
@@ -228,9 +224,9 @@ class DataExportService {
   /// Clear all local data (use with caution!)
   static Future<void> clearAllData() async {
     try {
-      if (kDebugMode) debugPrint('=== CLEARING ALL LOCAL DATA ===');
+      ProductionLogger.warning('Clearing all local data');
       await _db.clearAllData();
-      if (kDebugMode) debugPrint('All local data cleared successfully');
+      ProductionLogger.info('All local data cleared successfully');
     } catch (e, stackTrace) {
       LoggingService.error('Failed to clear all data', e, stackTrace, 'DataExportService');
       rethrow;
@@ -244,7 +240,7 @@ class DataExportService {
     List<Map<String, dynamic>>? achievements,
   }) async {
     try {
-      if (kDebugMode) debugPrint('=== MIGRATING FROM SUPABASE ===');
+      ProductionLogger.data('Starting Supabase migration');
 
       final result = MigrationResult();
 
@@ -289,12 +285,9 @@ class DataExportService {
       result.success = result.errors.isEmpty || 
           (result.templatesImported > 0 || result.logsImported > 0);
 
-      if (kDebugMode) {
-        debugPrint('Migration completed: ${result.templatesImported} templates, '
-            '${result.logsImported} logs, ${result.achievementsImported} achievements');
-        if (result.errors.isNotEmpty) {
-          debugPrint('Migration errors: ${result.errors.length}');
-        }
+      ProductionLogger.data('Migration completed', recordCount: result.templatesImported + result.logsImported + result.achievementsImported);
+      if (result.errors.isNotEmpty) {
+        ProductionLogger.warning('Migration had ${result.errors.length} errors');
       }
 
       return result;

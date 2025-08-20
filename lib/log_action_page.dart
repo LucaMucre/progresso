@@ -18,6 +18,8 @@ import 'utils/app_theme.dart';
 import 'services/db_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'services/level_up_service.dart';
+import 'utils/haptic_utils.dart';
+import 'utils/security_utils.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_state.dart';
 import 'services/offline_cache.dart';
@@ -202,6 +204,12 @@ class _LogActionPageState extends State<LogActionPage> {
       } else if (_selectedImage != null) {
         fileName = '${DateTime.now().millisecondsSinceEpoch}_${_selectedImage!.path.split('/').last}';
         bytes = await _selectedImage!.readAsBytes();
+        
+        // Security validation
+        if (!SecurityUtils.isValidImageFile(fileName, bytes)) {
+          throw Exception('Invalid or unsafe image file');
+        }
+        
         if (bytes.length > 800000) {
           try {
             final result = await FlutterImageCompress.compressWithList(
@@ -239,12 +247,12 @@ class _LogActionPageState extends State<LogActionPage> {
 
   Future<void> _submitLog() async {
     // Validate inputs
-    if (_activityNameCtrl.text.trim().isEmpty) {
+    if (SecurityUtils.sanitizeText(_activityNameCtrl.text.trim()).isEmpty) {
       setState(() { _error = 'Please enter a name for the activity.'; });
       return;
     }
 
-    final raw = _durationCtrl.text.trim();
+    final raw = SecurityUtils.sanitizeText(_durationCtrl.text.trim());
     int? duration;
     if (raw.isNotEmpty) {
       duration = int.tryParse(raw);
@@ -299,7 +307,7 @@ class _LogActionPageState extends State<LogActionPage> {
         );
       } else {
         // Create a quick log without template
-        final activityName = _activityNameCtrl.text.trim();
+        final activityName = SecurityUtils.sanitizeText(_activityNameCtrl.text.trim());
         final areaName = widget.selectedArea ?? '';
         final category = widget.selectedCategory ?? 'General';
         // Immer den Wrapper speichern, auch wenn der Delta-Inhalt leer ist,
@@ -600,48 +608,54 @@ class _LogActionPageState extends State<LogActionPage> {
 
     // Use different layout for modal vs fullscreen
     if (widget.isModal) {
-      return Column(
-        children: [
-          // Modal header with handle and close button
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
+      return GestureDetector(
+        // Tap anywhere to dismiss keyboard in modal too
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Column(
+          children: [
+            // Modal header with handle and close button
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  const Spacer(),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: AutofillGroup(
-              child: SingleChildScrollView(
-                controller: widget.scrollController,
-                padding: const EdgeInsets.all(16),
-                child: _buildFormContent(selectedArea, selectedCategory, areaIcon, accent, areaColor),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            const Divider(height: 1),
+            Expanded(
+              child: AutofillGroup(
+                child: SingleChildScrollView(
+                  controller: widget.scrollController,
+                  // Add keyboard dismiss behavior for modal too
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.all(16),
+                  child: _buildFormContent(selectedArea, selectedCategory, areaIcon, accent, areaColor),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -649,11 +663,21 @@ class _LogActionPageState extends State<LogActionPage> {
       appBar: AppBar(
         title: Text(title),
       ),
-      body: AutofillGroup(
-        // Explicitly disable autofill for the entire form to prevent password manager
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: _buildFormContent(selectedArea, selectedCategory, areaIcon, accent, areaColor),
+      // Key addition: allow the body to resize when keyboard appears
+      resizeToAvoidBottomInset: true,
+      body: GestureDetector(
+        // Tap anywhere to dismiss keyboard
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: AutofillGroup(
+          // Explicitly disable autofill for the entire form to prevent password manager
+          child: SafeArea(
+            child: SingleChildScrollView(
+              // Key addition: reverse scroll physics to ensure content moves up with keyboard
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.all(16),
+              child: _buildFormContent(selectedArea, selectedCategory, areaIcon, accent, areaColor),
+            ),
+          ),
         ),
       ),
     );
@@ -730,8 +754,11 @@ class _LogActionPageState extends State<LogActionPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                      controller: _activityNameCtrl,
+                    Semantics(
+                      label: 'Activity name field, required',
+                      hint: 'Enter the name of your activity',
+                      child: TextField(
+                        controller: _activityNameCtrl,
                       autocorrect: false,
                       autofillHints: const [],
                       enableSuggestions: false,
@@ -746,6 +773,7 @@ class _LogActionPageState extends State<LogActionPage> {
                         icon: Icons.task_alt,
                         accentColor: accent,
                       ),
+                    ),
                     ),
                   ],
                 ),
@@ -923,7 +951,10 @@ class _LogActionPageState extends State<LogActionPage> {
                 child: Text(_error!, style: const TextStyle(color: Colors.red)),
               ),
             ElevatedButton(
-              onPressed: _loading ? null : _submitLog,
+              onPressed: _loading ? null : () {
+                HapticUtils.submit();
+                _submitLog();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: accent,
                 foregroundColor: Colors.white,
@@ -937,6 +968,8 @@ class _LogActionPageState extends State<LogActionPage> {
                   )
                 : const Text('Save Log'),
             ),
+            // Extra padding to ensure buttons are accessible above keyboard
+            SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 100 : 32),
             ],
           );
   }

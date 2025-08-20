@@ -4,9 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'legal/privacy_page.dart';
 import 'legal/terms_page.dart';
+import 'pages/backup_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'services/test_data_service.dart';
+import 'services/crash_reporting_service.dart';
 import 'services/db_service.dart' as db_service;
 
 class SettingsPage extends StatefulWidget {
@@ -34,7 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     // KI-Assistenz für alle Nutzer deaktivieren (Datenschutz: keine externen Aufrufe)
     await prefs.setBool('assist_opt_in', false);
-    _crashOptIn = prefs.getBool('crash_opt_in') ?? true;
+    _crashOptIn = CrashReportingService.isUserOptedIn;
     try {
       _appVersion = await getPackageVersion();
     } catch (_) {}
@@ -211,10 +213,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 SwitchListTile(
                   secondary: const Icon(Icons.privacy_tip),
                   title: const Text('Share anonymous crash reports'),
+                  subtitle: const Text('Helps improve app stability and performance'),
                   value: _crashOptIn,
                   onChanged: (v) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('crash_opt_in', v);
+                    await CrashReportingService.setUserOptIn(v);
                     setState(() => _crashOptIn = v);
                   },
                 ),
@@ -230,14 +232,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.file_download_outlined),
-                  title: const Text('Request data export'),
-                  onTap: () async {
-                    final uri = Uri(scheme: 'mailto', path: 'support@progresso.app', query: 'subject=GDPR Data Export Request');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
-                    }
-                  },
+                  leading: const Icon(Icons.backup),
+                  title: const Text('Backup & Export'),
+                  subtitle: const Text('Create backups or export your data'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const BackupPage()),
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),

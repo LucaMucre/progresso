@@ -11,7 +11,8 @@ import '../utils/web_file_picker_stub.dart'
     if (dart.library.html) '../utils/web_file_picker_web.dart' as web_file_picker;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/db_service.dart';
+import '../services/db_service.dart' as db_service;
+import '../models/action_models.dart' as models;
 import '../services/anonymous_user_service.dart';
 import '../services/life_areas_service.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
@@ -77,7 +78,7 @@ class _FullscreenImageViewer extends StatelessWidget {
 }
 
 class ActivityDetailsDialog extends StatefulWidget {
-  final ActionLog log;
+  final models.ActionLog log;
   final VoidCallback? onUpdate;
 
   const ActivityDetailsDialog({
@@ -452,7 +453,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       return imageUrl;
     } catch (e) {
       if (kDebugMode) debugPrint('Upload error: $e');
-      throw Exception('Fehler beim Hochladen des Bildes: $e');
+      throw Exception('Error uploading image: $e');
     }
   }
 
@@ -552,10 +553,18 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
       });
 
       try {
-        await Supabase.instance.client
-            .from('action_logs')
-            .delete()
-            .eq('id', widget.log.id);
+        final user = Supabase.instance.client.auth.currentUser;
+        
+        if (user != null) {
+          // Authenticated user - delete from database
+          await Supabase.instance.client
+              .from('action_logs')
+              .delete()
+              .eq('id', widget.log.id);
+        } else {
+          // Anonymous user - delete from local storage
+          await db_service.deleteLog(widget.log.id);
+        }
 
         widget.onUpdate?.call();
         Navigator.of(context).pop();

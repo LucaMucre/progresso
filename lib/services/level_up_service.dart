@@ -107,12 +107,12 @@ class LevelUpService {
   static Future<void> showPendingAchievements({
     required BuildContext context,
   }) async {
-    if (kDebugMode) debugPrint('DEBUG showPendingAchievements: _isShowing=$_isShowing, _levelUpPending=$_levelUpPending, achievements=${_pendingAchievements.length}');
+    // Check if showing achievements is needed (reduced logging for performance)
     if (_isShowing) return;
     
     // If level-up is pending, trigger it now so level-up + achievements show in order
     if (_levelUpPending && _levelUpNotifier.value != null) {
-      if (kDebugMode) debugPrint('DEBUG showPendingAchievements: Level-up pending, calling showLevelThenPending');
+      // Level-up pending, showing level first
       await showLevelThenPending(context: context, level: _levelUpNotifier.value!);
       return;
     }
@@ -120,13 +120,13 @@ class LevelUpService {
     // Otherwise, just show achievements
     if (_pendingAchievements.isEmpty) return;
 
-    if (kDebugMode) debugPrint('DEBUG showPendingAchievements: Showing ${_pendingAchievements.length} achievements only');
+    // Showing pending achievements
     _isShowing = true;
     final toShow = List<Achievement>.from(_pendingAchievements);
     _pendingAchievements.clear();
     _pendingDirty = false;
     for (final a in toShow) {
-      if (kDebugMode) debugPrint('DEBUG showPendingAchievements: Showing achievement ${a.title}');
+      // Displaying achievement dialog
       await showDialog(
         context: context,
         barrierDismissible: true,

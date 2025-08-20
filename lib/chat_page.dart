@@ -47,7 +47,7 @@ class _ChatPageState extends State<ChatPage> {
       final data = (res.data is Map)
           ? res.data as Map
           : jsonDecode(res.data as String) as Map<String, dynamic>;
-      final answer = (data['answer'] as String?) ?? 'Keine Antwort erhalten.';
+      final answer = (data['answer'] as String?) ?? 'No response received.';
       final List sources = (data['sources'] as List?) ?? [];
       setState(() {
         _messages.add(
@@ -69,7 +69,7 @@ class _ChatPageState extends State<ChatPage> {
         _messages.add(
           _ChatMessage(
             role: 'assistant',
-            content: 'Fehler: $e',
+            content: 'Error: $e',
           ),
         );
       });
@@ -99,12 +99,12 @@ class _ChatPageState extends State<ChatPage> {
           : jsonDecode(res.data as String) as Map<String, dynamic>;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Index aktualisiert: ${data['logs']} Logs, ${data['chunks']} Chunks')),
+        SnackBar(content: Text('Index updated: ${data['logs']} logs, ${data['chunks']} chunks')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler beim Reindex: $e')),
+        SnackBar(content: Text('Reindex error: $e')),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -163,7 +163,7 @@ class _ChatPageState extends State<ChatPage> {
                                     message: s.occurredAt,
                                     child: Chip(
                                       label: Text(
-                                        s.title.isEmpty ? 'Quelle' : s.title,
+                                        s.title.isEmpty ? 'Source' : s.title,
                                         style: const TextStyle(fontSize: 12),
                                       ),
                                     ),

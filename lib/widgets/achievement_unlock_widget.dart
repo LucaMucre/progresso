@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../services/achievement_service.dart';
 import '../utils/app_theme.dart';
 import '../utils/animation_utils.dart';
+import '../utils/haptic_utils.dart';
 
 class AchievementUnlockWidget extends StatefulWidget {
   final Achievement achievement;
@@ -83,8 +84,9 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
       end: 1.0,
     ).animate(_particleController);
     
-    // Start animations with delays
+    // Start animations with delays and trigger achievement haptic feedback
     _slideController.forward();
+    HapticUtils.achievement();
     Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) _scaleController.forward();
     });
@@ -269,7 +271,10 @@ class _AchievementUnlockWidgetState extends State<AchievementUnlockWidget>
                               
                               // Close button
                   ElevatedButton(
-                                onPressed: _dismiss,
+                                onPressed: () {
+                                  HapticUtils.success();
+                                  _dismiss();
+                                },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: widget.achievement.color,
                                   foregroundColor: Colors.white,

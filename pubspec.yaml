@@ -1,5 +1,5 @@
 name: progresso
-description: "A new Flutter project."
+description: "Personal development tracking app with gamification features."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -25,9 +25,9 @@ dependencies:
   flutter_markdown: ^0.6.18
   flutter_quill: ^11.4.2
   google_fonts: ^6.3.0
-  flutter_image_compress: ^2.4.0
+  flutter_image_compress: ^2.3.0
   cached_network_image: ^3.4.1
-  sentry_flutter: ^9.6.0
+  sentry_flutter: ^8.11.0
   url_launcher: ^6.3.2
   package_info_plus: ^8.0.2
   web: ^1.1.0
@@ -35,6 +35,8 @@ dependencies:
   sqflite: ^2.3.0
   path: ^1.8.3
   uuid: ^4.5.1
+  file_picker: ^8.0.7
+  share_plus: ^10.0.2
 
 dev_dependencies:
   flutter_test:

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../utils/app_theme.dart';
+import '../utils/haptic_utils.dart';
 
 /// Abstrahiert gemeinsame Loading/Error/Empty States
 /// Reduziert Code-Duplikation in der gesamten App
 class StateWidget extends StatelessWidget {
+  // Add RepaintBoundary for performance
   final StateType type;
   final String? message;
   final IconData? icon;
@@ -82,10 +84,12 @@ class StateWidget extends StatelessWidget {
         break;
     }
 
-    return Container(
-      height: height,
-      padding: padding,
-      child: Center(child: content),
+    return RepaintBoundary(
+      child: Container(
+        height: height,
+        padding: padding,
+        child: Center(child: content),
+      ),
     );
   }
 
@@ -134,7 +138,10 @@ class StateWidget extends StatelessWidget {
         ],
         if (onRetry != null)
           FilledButton.icon(
-            onPressed: onRetry,
+            onPressed: () {
+              HapticUtils.submit();
+              onRetry!();
+            },
             icon: const Icon(Icons.refresh),
             label: const Text('Try again'),
           ),
@@ -172,41 +179,6 @@ class StateWidget extends StatelessWidget {
 
 enum StateType { loading, error, empty, custom }
 
-/// Async State Builder Widget - Vereinfacht AsyncValue handling
-class AsyncStateBuilder<T> extends StatelessWidget {
-  final AsyncValue<T> asyncValue;
-  final Widget Function(BuildContext context, T data) dataBuilder;
-  final Widget Function(BuildContext context)? loadingBuilder;
-  final Widget Function(BuildContext context, Object error, StackTrace? stackTrace)? errorBuilder;
-  final String? loadingMessage;
-  final String? errorMessage;
-
-  const AsyncStateBuilder({
-    super.key,
-    required this.asyncValue,
-    required this.dataBuilder,
-    this.loadingBuilder,
-    this.errorBuilder,
-    this.loadingMessage,
-    this.errorMessage,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return asyncValue.when(
-      loading: () => loadingBuilder?.call(context) ?? StateWidget.loading(
-        message: loadingMessage,
-      ),
-      error: (error, stackTrace) => errorBuilder?.call(context, error, stackTrace) ?? StateWidget.error(
-        message: errorMessage ?? 'Error: $error',
-        onRetry: () {
-          // Retry callback would be handled externally
-        },
-      ),
-      data: (data) => dataBuilder(context, data),
-    );
-  }
-}
 
 /// Spezialisierte Widgets für häufige Use Cases
 class CalendarStateWidget extends StateWidget {

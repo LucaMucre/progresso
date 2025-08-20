@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/haptic_utils.dart';
 
 class LevelUpDialog extends StatefulWidget {
   final int level;
@@ -31,8 +32,11 @@ class _LevelUpDialogState extends State<LevelUpDialog>
     _glowAnimation = Tween<double>(begin: 0, end: 1)
         .animate(CurvedAnimation(parent: _glowController, curve: Curves.easeInOut));
 
-    // Start animations only while mounted to avoid forward() after dispose
-    if (mounted) _slideController.forward();
+    // Start animations and level up haptic feedback
+    if (mounted) {
+      _slideController.forward();
+      HapticUtils.levelUp();
+    }
     Future.delayed(const Duration(milliseconds: 200), () { if (mounted) _scaleController.forward(); });
     Future.delayed(const Duration(milliseconds: 400), () { if (mounted) _glowController.forward(); });
     Future.delayed(const Duration(seconds: 3), () {
@@ -96,7 +100,10 @@ class _LevelUpDialogState extends State<LevelUpDialog>
                 Text('You reached Level ${widget.level}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () {
+                    HapticUtils.success();
+                    Navigator.of(context).pop();
+                  },
                   style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   child: const Text('Awesome!'),
                 )

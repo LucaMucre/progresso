@@ -5,6 +5,7 @@ import '../models/action_models.dart' as models;
 import 'storage_service.dart';
 import 'template_service.dart';
 import 'log_service.dart';
+import 'data_cache_service.dart';
 import 'xp_service.dart';
 import 'streak_service.dart';
 
@@ -81,8 +82,11 @@ Future<ActionLog> createQuickLog({
   imageUrl: imageUrl,
 );
 
-/// Load all logs
-Future<List<ActionLog>> fetchLogs() => LogService.fetchLogs();
+/// Load all logs (cached for performance)
+Future<List<ActionLog>> fetchLogs() => DataCacheService().getLogs();
+
+/// Delete a log entry
+Future<void> deleteLog(String logId) => LogService.deleteLog(logId);
 
 /// Calculate total XP
 Future<int> fetchTotalXp() => LogService.fetchTotalXp();

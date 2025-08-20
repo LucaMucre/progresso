@@ -501,7 +501,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
   }
 
   String _formatDuration(double minutes) {
-    if (minutes <= 0) return '0 m';
+    if (minutes <= 0) return '0m';
     
     final totalMinutes = minutes.round();
     
@@ -513,15 +513,15 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       
       if (weeks == 1) {
         if (days > 0) {
-          return days == 1 ? '1 week, 1 day' : '1 week, $days days';
+          return days == 1 ? '1w, 1d' : '1w, ${days}d';
         } else {
-          return '1 week';
+          return '1w';
         }
       } else {
         if (days > 0) {
-          return days == 1 ? '$weeks weeks, 1 day' : '$weeks weeks, $days days';
+          return days == 1 ? '${weeks}w, 1d' : '${weeks}w, ${days}d';
         } else {
-          return '$weeks weeks';
+          return '${weeks}w';
         }
       }
     }
@@ -532,9 +532,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       final remainingMinutes = totalMinutes - (days * 1440);
       final hours = (remainingMinutes / 60).floor();
       
-      final d = days == 1 ? '1 day' : '$days days';
+      final d = days == 1 ? '1d' : '${days}d';
       if (hours > 0) {
-        return '$d, ${hours} h';
+        return '$d, ${hours}h';
       }
       return d;
     }
@@ -544,15 +544,15 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       final hours = (totalMinutes / 60).floor();
       final remainingMinutes = totalMinutes - (hours * 60);
       
-      final h = '$hours h';
+      final h = '${hours}h';
       if (remainingMinutes > 0) {
-        return '$h, ${remainingMinutes} m';
+        return '$h, ${remainingMinutes}m';
       }
       return h;
     }
     
     // Minutes
-    return '$totalMinutes m';
+    return '${totalMinutes}m';
   }
 
   String _getActivityName(ActionLog log) {
@@ -1503,7 +1503,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                               ),
                               if (log.durationMin != null)
                                 Text(
-                                  '${log.durationMin} min',
+                                  '${log.durationMin}m',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey.withValues(alpha: 0.7),
@@ -1704,7 +1704,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
                 setState(() => _hoveredLogId = null);
               },
               child: Tooltip(
-                message: '${_getActivityName(log)} • ${minutes.toInt()} min',
+                message: '${_getActivityName(log)} • ${minutes.toInt()}m',
                 waitDuration: const Duration(milliseconds: 400),
                 child: Transform.scale(
                   scale: hoverScale,
@@ -1926,6 +1926,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
     required Color color,
   }) {
     return Container(
+      height: 100, // Fixed height for symmetrical appearance
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
@@ -1936,14 +1937,19 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
         ),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
+          const SizedBox(height: 4),
+          Flexible(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
@@ -1952,6 +1958,8 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
               color: color.withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -2180,7 +2188,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Duration of last 7 days (hours)',
+          'Time of last 7 days (hours)',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),

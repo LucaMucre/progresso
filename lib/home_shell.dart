@@ -8,6 +8,8 @@ import 'statistics_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart';
 import 'navigation.dart';
+import 'utils/responsive_utils.dart';
+import 'utils/haptic_utils.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -50,7 +52,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 700;
+    final isWide = ResponsiveUtils.isWideScreen(context);
     final t = AppLocalizations.of(context);
 
     return Scaffold
@@ -95,9 +97,12 @@ class _HomeShellState extends State<HomeShell> {
           ),
           child: NavigationBar(
             selectedIndex: _currentIndex,
-            onDestinationSelected: (i) => setState(() {
-              _currentIndex = i;
-            }),
+            onDestinationSelected: (i) {
+              HapticUtils.navigation();
+              setState(() {
+                _currentIndex = i;
+              });
+            },
             backgroundColor: Colors.transparent,
             elevation: 0,
             destinations: [

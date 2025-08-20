@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +12,7 @@ import '../navigation.dart';
 import 'dart:convert'; // Added for jsonDecode
 import '../utils/animation_utils.dart';
 import '../utils/app_theme.dart';
+import '../utils/parsed_activity_data.dart';
 
 // Separate Character Widget to prevent rebuilding on hover
 class CharacterWidget extends StatefulWidget {
@@ -275,6 +277,7 @@ class BubblesGrid extends StatefulWidget {
 
 class _BubblesGridState extends State<BubblesGrid> {
   int? _hoveredIndex;
+  int? _longPressIndex; // Track which bubble is being long-pressed
   Offset? _lastMousePosition; // Add this to store mouse position
   bool _contextMenuOpen = false;
   Map<String, double> _minutesByKey = {};
@@ -300,47 +303,56 @@ class _BubblesGridState extends State<BubblesGrid> {
   Future<void> _loadAreaDurations() async {
     setState(() => _loadingDurations = true);
     try {
+      // Get existing life areas to create name mapping
+      final existingAreas = await LifeAreasService.getLifeAreas();
+      final Map<String, String> canonicalToActualName = {};
+      for (final area in existingAreas) {
+        final canonical = LifeAreasService.canonicalAreaName(area.name);
+        canonicalToActualName[canonical] = area.name;
+      }
+      
       // Use local storage via db_service
       final logs = await db_service.fetchLogs();
-      final List<Map<String, dynamic>> rows = logs.map((log) => {
-        'duration_min': log.durationMin ?? 0,
-        'notes': log.notes,
-      }).toList();
-
+      
       final Map<String, double> agg = {};
-      String resolveKey(Map<String, dynamic> obj) {
-        String? area = (obj['area'] as String?)?.trim().toLowerCase();
-        final lifeArea = (obj['life_area'] as String?)?.trim().toLowerCase();
-        area ??= lifeArea;
-        final category = (obj['category'] as String?)?.trim().toLowerCase();
-        bool isKnownParent(String? v) => const {
-          'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
-        }.contains(v);
-        if (isKnownParent(area)) return area!;
-        switch (category) {
-          case 'inner': return 'spirituality';
-          case 'social': return 'relationships';
-          case 'work': return 'career';
-          case 'development': return 'learning';
-          case 'finance': return 'finance';
-          case 'health': return 'health';
-          default: return area ?? 'unknown';
+      for (final log in logs) {
+        final int mins = log.durationMin ?? 0;
+        if (mins <= 0) continue;
+        
+        // Use ParsedActivityData like other pages do
+        final parsed = ParsedActivityData.fromNotes(log.notes);
+        final activityAreaName = parsed.effectiveAreaName;
+        
+        if (activityAreaName.isNotEmpty) {
+          // Find the actual life area that matches this activity
+          String? matchingAreaName;
+          
+          // First, try exact name match
+          for (final area in existingAreas) {
+            if (area.name.toLowerCase() == activityAreaName.toLowerCase()) {
+              matchingAreaName = area.name;
+              break;
+            }
+          }
+          
+          // If no exact match, try canonical name match
+          if (matchingAreaName == null) {
+            final activityCanonical = LifeAreasService.canonicalAreaName(activityAreaName);
+            matchingAreaName = canonicalToActualName[activityCanonical];
+          }
+          
+          // Use the actual area name, not canonical
+          final keyToUse = matchingAreaName ?? activityAreaName;
+          agg[keyToUse] = (agg[keyToUse] ?? 0) + mins.toDouble();
+        } else {
+          // Activities without life area
+          agg['unknown'] = (agg['unknown'] ?? 0) + mins.toDouble();
         }
       }
-      for (final r in rows) {
-        final int mins = (r['duration_min'] as int?) ?? 0;
-        String key = 'unknown';
-        try {
-          if (r['notes'] != null) {
-            final obj = jsonDecode(r['notes'] as String);
-            if (obj is Map<String, dynamic>) key = resolveKey(obj);
-          }
-        } catch (_) {}
-        agg[key] = (agg[key] ?? 0) + (mins > 0 ? mins.toDouble() : 0.0);
-      }
-      setState(() { _minutesByKey = agg; _loadingDurations = false; });
+      
+      if (mounted) setState(() { _minutesByKey = agg; _loadingDurations = false; });
     } catch (_) {
-      setState(() { _minutesByKey = {}; _loadingDurations = false; });
+      if (mounted) setState(() { _minutesByKey = {}; _loadingDurations = false; });
     }
   }
 
@@ -382,8 +394,8 @@ class _BubblesGridState extends State<BubblesGrid> {
     if (widget.areas.isEmpty) return widgets;
     final Map<LifeArea, double> minutes = {};
     for (final area in widget.areas) {
-      final key = LifeAreasService.canonicalAreaName(area.name);
-      minutes[area] = _minutesByKey[key] ?? 0.0;
+      // Use actual area name, not canonical
+      minutes[area] = _minutesByKey[area.name] ?? 0.0;
     }
     final double maxMin = (minutes.values.isEmpty ? 0.0 : minutes.values.reduce(max)).clamp(0.0, double.infinity);
     final double minSide = min(canvasWidth, canvasHeight);
@@ -418,26 +430,69 @@ class _BubblesGridState extends State<BubblesGrid> {
 
     if (_layoutSignature != signature) {
       _layoutByAreaId.clear();
-      final List<Rect> placed = [];
-      const double padding = 4.0;
-
-      for (final area in ordered) {
-        final double size = sizeById[area.id]!;
-        final rnd = Random(area.id.hashCode);
-        for (int attempt = 0; attempt < 240; attempt++) {
-          // Uniform over rectangle with safe margins
-          final x = padding + size / 2 + rnd.nextDouble() * (canvasWidth - size - padding * 2);
-          final y = padding + size / 2 + rnd.nextDouble() * (canvasHeight - size - padding * 2);
-          final rect = Rect.fromLTWH(x - size / 2, y - size / 2, size, size);
-          bool overlaps = false;
-          for (final placedRect in placed) {
-            if (rect.overlaps(placedRect.inflate(6))) { overlaps = true; break; }
-          }
-          if (!overlaps) { placed.add(rect); _layoutByAreaId[area.id] = rect; break; }
-        }
-        _layoutByAreaId.putIfAbsent(area.id, () => Rect.fromLTWH((canvasWidth - size) / 2, (canvasHeight - size) / 2, size, size));
+      const double padding = 16.0; // More padding
+      
+      // Calculate optimal grid layout to prevent overlaps
+      final areas = ordered.toList();
+      final int numAreas = areas.length;
+      
+      if (numAreas == 0) {
+        _layoutSignature = signature;
+      } else {
+      
+      // Calculate grid dimensions
+      final double availableWidth = canvasWidth - (padding * 2);
+      final double availableHeight = canvasHeight - (padding * 2);
+      
+      // Determine grid layout based on number of items
+      int cols, rows;
+      if (numAreas <= 4) {
+        cols = min(numAreas, 2);
+        rows = (numAreas / cols).ceil();
+      } else if (numAreas <= 9) {
+        cols = 3;
+        rows = (numAreas / cols).ceil();
+      } else {
+        cols = 4;
+        rows = (numAreas / cols).ceil();
       }
+      
+      // Calculate cell size
+      final double cellWidth = availableWidth / cols;
+      final double cellHeight = availableHeight / rows;
+      final double cellSize = min(cellWidth, cellHeight) * 0.8; // 80% of cell for spacing
+      
+      // Adjust bubble sizes to fit in grid
+      final double maxBubbleSize = min(cellSize, maxSize);
+      final Map<String, double> adjustedSizes = {};
+      for (final area in areas) {
+        final originalSize = sizeById[area.id]!;
+        adjustedSizes[area.id] = min(originalSize, maxBubbleSize);
+      }
+      
+      // Place bubbles in grid
+      for (int i = 0; i < numAreas; i++) {
+        final area = areas[i];
+        final size = adjustedSizes[area.id]!;
+        
+        final col = i % cols;
+        final row = i ~/ cols;
+        
+        final centerX = padding + (col + 0.5) * cellWidth;
+        final centerY = padding + (row + 0.5) * cellHeight;
+        
+        final rect = Rect.fromLTWH(
+          centerX - size / 2, 
+          centerY - size / 2, 
+          size, 
+          size
+        );
+        
+        _layoutByAreaId[area.id] = rect;
+      }
+      
       _layoutSignature = signature;
+      } // close else block
     }
 
     for (int idx = 0; idx < ordered.length; idx++) {
@@ -446,7 +501,9 @@ class _BubblesGridState extends State<BubblesGrid> {
       final size = rect.width;
       final mins = minutes[area] ?? 0.0;
       final isHovered = _hoveredIndex == idx;
+      final isLongPressed = _longPressIndex == idx;
       final hoverScale = isHovered ? 1.10 : 1.0;
+      final longPressScale = isLongPressed ? 0.95 : 1.0; // Slightly shrink on long press
 
       widgets.add(Positioned(
         left: rect.left,
@@ -463,6 +520,25 @@ class _BubblesGridState extends State<BubblesGrid> {
           },
           child: GestureDetector(
             onTap: () => widget.onBubbleTap(area),
+            onLongPressStart: (_) {
+              setState(() => _longPressIndex = idx);
+            },
+            onLongPressEnd: (_) {
+              setState(() => _longPressIndex = null);
+            },
+            onLongPress: () {
+              if (kDebugMode) {
+                print('DEBUG: Long press detected on ${area.name}');
+              }
+              HapticFeedback.mediumImpact();
+              // Show context menu on long press for mobile
+              setState(() {
+                _contextMenuOpen = true;
+                _hoveredIndex = null;
+                _longPressIndex = null; // Reset long press state
+              });
+              _showMobileContextMenu(context, area);
+            },
             behavior: HitTestBehavior.opaque,
             onSecondaryTapDown: (details) {
               _lastMousePosition = details.globalPosition;
@@ -473,11 +549,8 @@ class _BubblesGridState extends State<BubblesGrid> {
               });
               _showContextMenu(context, area);
             },
-            child: Tooltip(
-              message: '${area.name} • ${mins.toInt()} min',
-              waitDuration: const Duration(milliseconds: 400),
-              child: Transform.scale(
-                scale: hoverScale,
+            child: Transform.scale(
+                scale: hoverScale * longPressScale,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeInOut,
@@ -485,14 +558,18 @@ class _BubblesGridState extends State<BubblesGrid> {
                   height: size,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isHovered 
+                    color: isLongPressed
+                        ? _parseColor(area.color).withValues(alpha: 0.7) // Dimmer when long pressed
+                        : isHovered 
                         ? _parseColor(area.color).withValues(alpha: 0.9)
                         : _parseColor(area.color),
                     border: Border.all(
-                      color: isHovered 
+                      color: isLongPressed
+                          ? Colors.red.withValues(alpha: 0.8) // Red border when long pressing
+                          : isHovered 
                           ? Colors.white.withValues(alpha: 0.6)
                           : Colors.white.withValues(alpha: 0.3),
-                      width: isHovered ? 3 : 2,
+                      width: isLongPressed ? 4 : isHovered ? 3 : 2,
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -515,7 +592,6 @@ class _BubblesGridState extends State<BubblesGrid> {
                   ),
                 ),
               ),
-            ),
           ),
         ),
       ));
@@ -540,6 +616,16 @@ class _BubblesGridState extends State<BubblesGrid> {
       ),
       items: [
         const PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, size: 20, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Edit', style: TextStyle(color: Colors.blue)),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
@@ -553,6 +639,8 @@ class _BubblesGridState extends State<BubblesGrid> {
     ).then((value) {
       if (value == 'toggle' && widget.onToggleVisibility != null) {
         widget.onToggleVisibility!(area);
+      } else if (value == 'edit') {
+        _showEditLifeAreaDialog(context, area);
       } else if (value == 'delete') {
         _showDeleteConfirmation(context, area);
       }
@@ -566,13 +654,97 @@ class _BubblesGridState extends State<BubblesGrid> {
     });
   }
 
+  void _showDeleteDialog(BuildContext context, LifeArea area) {
+    if (kDebugMode) {
+      print('DEBUG: _showDeleteDialog called for area: ${area.name}');
+    }
+    _showDeleteConfirmation(context, area);
+  }
+
+  void _showMobileContextMenu(BuildContext context, LifeArea area) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.blue),
+                title: const Text('Edit Life Area', style: TextStyle(color: Colors.blue)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showEditLifeAreaDialog(context, area);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Life Area', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showDeleteConfirmation(context, area);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      if (mounted) {
+        setState(() {
+          _contextMenuOpen = false;
+        });
+      } else {
+        _contextMenuOpen = false;
+      }
+    });
+  }
+
   void _showDeleteConfirmation(BuildContext context, LifeArea area) {
+    // Use actual area name, not canonical
+    final activityCount = (_minutesByKey[area.name] ?? 0.0).toInt();
+    final hasActivities = activityCount > 0;
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
       title: const Text('Delete life area'),
-          content: Text('Do you really want to delete "${area.name}"?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Do you really want to delete "${area.name}"?'),
+              if (hasActivities) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$activityCount minutes of logged activities will lose their life area connection.',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -581,12 +753,49 @@ class _BubblesGridState extends State<BubblesGrid> {
             ElevatedButton(
               onPressed: () async {
                 try {
+                  // Store the area data for potential undo
+                  final deletedArea = area;
+                  
                   await LifeAreasService.deleteLifeArea(area.id);
                   Navigator.of(context).pop();
+                  
                   // Call the parent's onDelete callback to trigger rebuild
                   if (widget.onDelete != null) {
                     widget.onDelete!(area);
                   }
+                  
+                  // Show undo snackbar
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Deleted "${deletedArea.name}"'),
+                      backgroundColor: Colors.green,
+                      action: SnackBarAction(
+                        label: 'UNDO',
+                        textColor: Colors.white,
+                        onPressed: () async {
+                          try {
+                            // Recreate the life area
+                            await LifeAreasService.createLifeArea(
+                              name: deletedArea.name,
+                              category: deletedArea.category,
+                              color: deletedArea.color,
+                              icon: deletedArea.icon,
+                            );
+                            // Trigger UI refresh
+                            notifyLifeAreasChanged();
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error restoring life area: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      duration: const Duration(seconds: 8), // Longer duration for undo
+                    ),
+                  );
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -605,6 +814,143 @@ class _BubblesGridState extends State<BubblesGrid> {
           ],
         );
       },
+    );
+  }
+
+  void _showEditLifeAreaDialog(BuildContext context, LifeArea area) {
+    final nameController = TextEditingController(text: area.name);
+    final categories = ['Work', 'Health', 'Social', 'Creativity', 'Finance', 'Learning', 'Inner', 'Development'];
+    
+    // Fallback to 'Work' if current category is not in list
+    String selectedCategory = categories.contains(area.category) ? area.category : 'Work';
+    String selectedColor = area.color;
+    String selectedIcon = area.icon;
+    final colors = [
+      '#2196F3', '#FF5722', '#4CAF50', '#FF9800', 
+      '#9C27B0', '#F44336', '#795548', '#607D8B'
+    ];
+    final icons = [
+      'circle', 'work', 'fitness_center', 'favorite', 
+      'school', 'attach_money', 'self_improvement', 'palette'
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Life Area'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'Enter life area name',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: categories.map((category) => DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  )).toList(),
+                  onChanged: (value) => setState(() => selectedCategory = value!),
+                ),
+                const SizedBox(height: 16),
+                const Text('Color:'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: colors.map((color) => GestureDetector(
+                    onTap: () => setState(() => selectedColor = color),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Color(int.parse(color.replaceAll('#', '0xFF'))),
+                        shape: BoxShape.circle,
+                        border: selectedColor == color
+                            ? Border.all(color: Colors.black, width: 3)
+                            : null,
+                      ),
+                    ),
+                  )).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Text('Icon:'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: icons.map((iconName) => GestureDetector(
+                    onTap: () => setState(() => selectedIcon = iconName),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: selectedIcon == iconName
+                            ? Colors.blue.withValues(alpha: 0.2)
+                            : Colors.grey.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                        border: selectedIcon == iconName
+                            ? Border.all(color: Colors.blue, width: 2)
+                            : Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                      ),
+                      child: Icon(
+                        _getIconData(iconName),
+                        color: Colors.black87,
+                      ),
+                    ),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.trim().isEmpty) return;
+                
+                try {
+                  await LifeAreasService.updateLifeArea(area.id, {
+                    'name': nameController.text.trim(),
+                    'category': selectedCategory,
+                    'color': selectedColor,
+                    'icon': selectedIcon,
+                  });
+                  
+                  Navigator.of(context).pop();
+                  
+                  // Trigger UI refresh
+                  notifyLifeAreasChanged();
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Updated "${nameController.text.trim()}"'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error updating life area: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

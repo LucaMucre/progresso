@@ -1,5 +1,5 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Set minimum iOS version to avoid deployment target issues
+platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,5 +39,76 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
+    # Fix deployment target warnings - force all pods to iOS 13.0
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.14'
+      
+      # Fix deprecation warnings
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+      config.build_settings['CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS'] = 'NO'
+      config.build_settings['CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF'] = 'NO'
+      
+      # Suppress unused variable warnings
+      config.build_settings['GCC_WARN_UNUSED_VARIABLE'] = 'NO'
+      config.build_settings['CLANG_WARN_UNUSED_VARIABLE'] = 'NO'
+      
+      # Suppress pointer type warnings
+      config.build_settings['CLANG_WARN_INCOMPATIBLE_POINTER_TYPES'] = 'NO'
+      
+      # Fix Sentry @_implementationOnly warnings
+      config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
+      config.build_settings['GCC_WARN_64_TO_32_BIT_CONVERSION'] = 'NO'
+      
+      # Enable library evolution for Swift modules
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+      config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
+      
+      # Fix module issues
+      config.build_settings['DEFINES_MODULE'] = 'YES'
+      config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+      config.build_settings['SWIFT_VERSION'] = '5.0'
+    end
+  end
+  
+  # Fix specific problematic pods
+  installer.pods_project.targets.each do |target|
+    case target.name
+    when 'Sentry', /Sentry.*/
+      target.build_configurations.each do |config|
+        config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
+        config.build_settings['CLANG_WARN_DOCUMENTATION_COMMENTS'] = 'NO'
+      end
+    when 'SDWebImageWebPCoder'
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+        config.build_settings['DEFINES_MODULE'] = 'YES'
+        config.build_settings['SWIFT_VERSION'] = '5.0'
+        # Remove custom module map reference - let CocoaPods handle it
+      end
+    when 'Mantle'
+      target.build_configurations.each do |config|
+        # Suppress Mantle quoted include warnings
+        config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+      end
+    when /flutter_image_compress.*/, /CompressFileHandler/, /SYMetadata/
+      target.build_configurations.each do |config|
+        # Suppress ALAssetsLibrary deprecation warnings
+        config.build_settings['CLANG_WARN_DEPRECATED_DECLARATIONS'] = 'NO'
+        config.build_settings['GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS'] = 'NO'
+        # Suppress unused variable warnings
+        config.build_settings['GCC_WARN_UNUSED_VARIABLE'] = 'NO'
+        config.build_settings['CLANG_WARN_UNUSED_VARIABLE'] = 'NO'
+      end
+    when /file_picker/, /FilePickerPlugin/
+      target.build_configurations.each do |config|
+        # Suppress UIActivityIndicatorViewStyle deprecation
+        config.build_settings['CLANG_WARN_DEPRECATED_DECLARATIONS'] = 'NO'
+        # Suppress pointer type warnings
+        config.build_settings['CLANG_WARN_INCOMPATIBLE_POINTER_TYPES'] = 'NO'
+      end
+    end
   end
 end

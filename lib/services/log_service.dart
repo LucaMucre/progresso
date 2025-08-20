@@ -8,6 +8,7 @@ import 'storage_service.dart';
 import 'xp_service.dart';
 import 'streak_service.dart';
 import 'statistics_cache_service.dart';
+import 'data_cache_service.dart';
 
 /// Service for handling action logs
 class LogService {
@@ -35,6 +36,7 @@ class LogService {
     
     // Invalidate cache after creating new log
     StatisticsCacheService.invalidateCache();
+    DataCacheService().invalidateLogs();
     
     try { 
       notifyLogsChanged(); 
@@ -71,6 +73,7 @@ class LogService {
     
     // Invalidate cache after creating new log
     StatisticsCacheService.invalidateCache();
+    DataCacheService().invalidateLogs();
     
     try { 
       notifyLogsChanged(); 
@@ -187,6 +190,29 @@ class LogService {
     } catch (e) {
       // still continue silently
       // ignore
+    }
+  }
+
+  /// Delete a log entry
+  static Future<void> deleteLog(String logId) async {
+    try {
+      // For now, we'll use the LocalLogsRepository to delete locally
+      // This method handles both authenticated and anonymous users
+      await StorageService.logsRepo.deleteLog(logId);
+      
+      // Invalidate cache after deleting log
+      StatisticsCacheService.invalidateCache();
+      DataCacheService().invalidateLogs();
+      
+      // Notify UI about the change
+      notifyLogsChanged();
+      
+      if (kDebugMode) {
+        print('Successfully deleted log: $logId');
+      }
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to delete log', e, stackTrace, 'LogService');
+      rethrow;
     }
   }
 }

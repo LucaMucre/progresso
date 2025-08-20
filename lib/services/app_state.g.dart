@@ -39,7 +39,7 @@ final currentUserProvider = AutoDisposeProvider<User?>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef CurrentUserRef = AutoDisposeProviderRef<User?>;
-String _$templatesNotifierHash() => r'4972959032f0cce40b7a5a71bda41577b6c8aecc';
+String _$templatesNotifierHash() => r'c025dd3e952bc9fea8df8fbf3a5603dba363464d';
 
 /// See also [TemplatesNotifier].
 @ProviderFor(TemplatesNotifier)
@@ -55,7 +55,7 @@ final templatesNotifierProvider = AutoDisposeAsyncNotifierProvider<
 );
 
 typedef _$TemplatesNotifier = AutoDisposeAsyncNotifier<List<ActionTemplate>>;
-String _$logsNotifierHash() => r'8f3dd2d9b5631f08d34c092a3e1806e36138fb74';
+String _$logsNotifierHash() => r'63d01bac90adf9bd52c843b83a5d8acc981ef655';
 
 /// See also [LogsNotifier].
 @ProviderFor(LogsNotifier)
@@ -70,7 +70,7 @@ final logsNotifierProvider =
 );
 
 typedef _$LogsNotifier = AutoDisposeAsyncNotifier<List<ActionLog>>;
-String _$xpNotifierHash() => r'49ec37aef121eaadc213d53b8706143cf1ab734b';
+String _$xpNotifierHash() => r'38e406ee8dc64147642cd8957f8c28a9b3995558';
 
 /// See also [XpNotifier].
 @ProviderFor(XpNotifier)
@@ -85,7 +85,7 @@ final xpNotifierProvider =
 );
 
 typedef _$XpNotifier = AutoDisposeAsyncNotifier<int>;
-String _$streakNotifierHash() => r'a37673866bb3ec8dc90da34e07fdc3207deec671';
+String _$streakNotifierHash() => r'ec67deed6ccbe73f8ac23a2dea0f4a2abe7e5b3e';
 
 /// See also [StreakNotifier].
 @ProviderFor(StreakNotifier)
@@ -102,7 +102,7 @@ final streakNotifierProvider =
 
 typedef _$StreakNotifier = AutoDisposeAsyncNotifier<int>;
 String _$userProfileNotifierHash() =>
-    r'bdd396512b9dc6803e6d842d51a3a4b553c02371';
+    r'17ba096494c5d453e9453b9f7eb02395f9ec3a1c';
 
 /// See also [UserProfileNotifier].
 @ProviderFor(UserProfileNotifier)

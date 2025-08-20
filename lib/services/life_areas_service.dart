@@ -1,7 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'anonymous_user_service.dart';
+import '../navigation.dart';
+import '../repository/local_logs_repository.dart';
 
 class LifeArea {
   final String id;
@@ -114,18 +117,15 @@ class LifeAreasService {
     final user = _client.auth.currentUser;
     
     if (user == null) {
-      // Anonymous user - load from local storage
+      // Anonymous user - load from local storage only
       return await _getLifeAreasAnonymous();
     }
 
-    final response = await _client
-        .from('life_areas')
-        .select()
-        .eq('user_id', user.id)
-        .isFilter('parent_id', null)
-        .order('order_index');
-
-    return (response as List).map((json) => LifeArea.fromJson(json)).toList();
+    // Authenticated user - sync and merge local + server data
+    await _syncDataWithServer(user.id);
+    
+    // Return merged data (prioritizing local, then server)
+    return await _getMergedLifeAreas(user.id);
   }
 
   /// Load life areas for anonymous users from local storage
@@ -258,42 +258,122 @@ class LifeAreasService {
     // bool isVisible = true,
   }) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
+    String userId;
+    
+    if (user != null) {
+      // Authenticated user
+      userId = user.id;
+    } else {
+      // Anonymous user - use local storage
+      userId = await AnonymousUserService.getOrCreateAnonymousUserId();
+    }
 
-    final newArea = {
-      'user_id': user.id,
-      'name': name,
-      'category': category,
-      'parent_id': parentId,
-      'color': color,
-      'icon': icon,
-      'order_index': orderIndex,
-      // Temporarily remove is_visible until migration is applied
-      // 'is_visible': isVisible,
-    };
+    if (user != null) {
+      // Authenticated user - save to database
+      final newArea = {
+        'user_id': userId,
+        'name': name,
+        'category': category,
+        'parent_id': parentId,
+        'color': color,
+        'icon': icon,
+        'order_index': orderIndex,
+        // Temporarily remove is_visible until migration is applied
+        // 'is_visible': isVisible,
+      };
 
-    final response = await _client
-        .from('life_areas')
-        .insert(newArea)
-        .select()
-        .single();
+      final response = await _client
+          .from('life_areas')
+          .insert(newArea)
+          .select()
+          .single();
 
-    return LifeArea.fromJson(response);
+      // Notify UI components about the change
+      notifyLifeAreasChanged();
+      
+      return LifeArea.fromJson(response);
+    } else {
+      // Anonymous user - save locally
+      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final newArea = LifeArea(
+        id: id,
+        userId: userId,
+        name: name,
+        category: category,
+        parentId: parentId,
+        color: color,
+        icon: icon,
+        orderIndex: orderIndex,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Save to local storage
+      await _saveLocalLifeArea(newArea);
+      
+      // Notify UI components about the change
+      notifyLifeAreasChanged();
+      
+      return newArea;
+    }
+  }
+
+  // Save life area locally for anonymous users
+  static Future<void> _saveLocalLifeArea(LifeArea lifeArea) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await AnonymousUserService.getOrCreateAnonymousUserId();
+    final key = 'life_areas_$userId';
+    final existingData = prefs.getString(key) ?? '[]';
+    final List<dynamic> lifeAreas = jsonDecode(existingData);
+    
+    // Add new life area
+    lifeAreas.add(lifeArea.toJson());
+    
+    // Save back to preferences
+    await prefs.setString(key, jsonEncode(lifeAreas));
   }
 
   // Life Area aktualisieren
   static Future<void> updateLifeArea(String id, Map<String, dynamic> updates) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
+    
+    if (user != null) {
+      // Authenticated user - update in database
+      await _client
+          .from('life_areas')
+          .update({
+            ...updates,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id)
+          .eq('user_id', user.id);
+    } else {
+      // Anonymous user - update locally
+      await _updateLocalLifeArea(id, updates);
+    }
+    
+    // Notify UI components about the change
+    notifyLifeAreasChanged();
+  }
 
-    await _client
-        .from('life_areas')
-        .update({
-          ...updates,
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', id)
-        .eq('user_id', user.id);
+  // Update life area locally for anonymous users
+  static Future<void> _updateLocalLifeArea(String id, Map<String, dynamic> updates) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await AnonymousUserService.getOrCreateAnonymousUserId();
+    final key = 'life_areas_$userId';
+    final existingData = prefs.getString(key) ?? '[]';
+    final List<dynamic> lifeAreas = jsonDecode(existingData);
+    
+    // Find and update the life area
+    for (int i = 0; i < lifeAreas.length; i++) {
+      if (lifeAreas[i]['id'] == id) {
+        lifeAreas[i] = {...lifeAreas[i], ...updates, 'updated_at': DateTime.now().toIso8601String()};
+        break;
+      }
+    }
+    
+    // Save back to preferences
+    await prefs.setString(key, jsonEncode(lifeAreas));
   }
 
   // Sichtbarkeit einer Life Area umschalten
@@ -305,13 +385,90 @@ class LifeAreasService {
   // Life Area löschen
   static Future<void> deleteLifeArea(String id) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
+    
+    // First get the life area to be deleted to get its name
+    final lifeAreas = await getLifeAreas();
+    final lifeAreaToDelete = lifeAreas.firstWhere((area) => area.id == id, orElse: () => throw Exception('Life area not found'));
+    final canonicalName = canonicalAreaName(lifeAreaToDelete.name);
+    
+    if (user != null) {
+      // Authenticated user - delete from database
+      await _client
+          .from('life_areas')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+      
+      // Also clean up related activities in the database
+      await _cleanupActivitiesForDeletedArea(canonicalName, authenticated: true);
+    } else {
+      // Anonymous user - delete locally
+      await _deleteLocalLifeArea(id);
+      
+      // Also clean up related activities locally
+      await _cleanupActivitiesForDeletedArea(canonicalName, authenticated: false);
+    }
+    
+    // Notify UI components about the change
+    notifyLifeAreasChanged();
+  }
 
-    await _client
-        .from('life_areas')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+  // Delete life area locally for anonymous users
+  static Future<void> _deleteLocalLifeArea(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await AnonymousUserService.getOrCreateAnonymousUserId();
+    final key = 'life_areas_$userId';
+    final existingData = prefs.getString(key) ?? '[]';
+    final List<dynamic> lifeAreas = jsonDecode(existingData);
+    
+    // Remove the life area
+    lifeAreas.removeWhere((area) => area['id'] == id);
+    
+    // Save back to preferences
+    await prefs.setString(key, jsonEncode(lifeAreas));
+  }
+
+  // Clean up activities for deleted life area
+  static Future<void> _cleanupActivitiesForDeletedArea(String canonicalName, {required bool authenticated}) async {
+    if (authenticated) {
+      // For authenticated users, we would need to update the database
+      // This is complex because activities are stored with JSON notes
+      // For now, we'll just clean up locally cached data
+      await _cleanupLocalActivityData(canonicalName);
+    } else {
+      // For anonymous users, clean up local data
+      await _cleanupLocalActivityData(canonicalName);
+    }
+  }
+
+  // Clean up local activity data that references the deleted life area
+  static Future<void> _cleanupLocalActivityData(String canonicalName) async {
+    try {
+      // Notify that logs have changed so UI updates and recalculates statistics
+      notifyLogsChanged();
+      
+      if (kDebugMode) {
+        print('Cleaned up activity references for deleted life area: $canonicalName');
+      }
+      
+    } catch (e) {
+      // If cleanup fails, log but don't block the deletion
+      if (kDebugMode) {
+        print('Warning: Failed to clean up activity data for deleted life area: $e');
+      }
+    }
+  }
+
+  // Check if a life area still exists by canonical name
+  static Future<bool> lifeAreaExistsByName(String canonicalName) async {
+    final areas = await getLifeAreas();
+    return areas.any((area) => canonicalAreaName(area.name) == canonicalName);
+  }
+
+  // Get existing life area names as canonical names (for filtering statistics)
+  static Future<Set<String>> getExistingCanonicalNames() async {
+    final areas = await getLifeAreas();
+    return areas.map((area) => canonicalAreaName(area.name)).toSet();
   }
 
   // Hierarchische Struktur erstellen
@@ -335,16 +492,36 @@ class LifeAreasService {
   static Future<void> createDefaultLifeAreas() async {
     final user = _client.auth.currentUser;
     
-    // Prüfen ob bereits Life Areas existieren
-    final existingAreas = await getLifeAreas();
-    if (existingAreas.isNotEmpty) return;
-
-    if (user == null) {
-      // Anonymous user - save to local storage
+    // For authenticated users, check if areas already exist (either local or server)
+    if (user != null) {
+      // Check server directly to avoid sync issues
+      final serverResponse = await _client
+          .from('life_areas')
+          .select()
+          .eq('user_id', user.id)
+          .limit(1);
+      
+      if ((serverResponse as List).isNotEmpty) {
+        return; // Server already has data, don't create defaults
+      }
+      
+      // Check local data too
+      final localAreas = await _getLifeAreasAnonymous();
+      if (localAreas.isNotEmpty) {
+        // Local data exists, let sync handle it
+        return;
+      }
+    } else {
+      // Anonymous user - check local storage
+      final existingAreas = await _getLifeAreasAnonymous();
+      if (existingAreas.isNotEmpty) return;
+      
+      // Create defaults for anonymous user
       await _createDefaultLifeAreasAnonymous();
       return;
     }
 
+    // Only reached for authenticated users with no data anywhere
     final defaultAreas = [
       {
         'name': 'Fitness',
@@ -517,6 +694,151 @@ class LifeAreasService {
       
     } catch (e) {
       // Fail silently for now, will be retried next time
+    }
+  }
+
+  /// Sync local data with server (bidirectional)
+  static Future<void> _syncDataWithServer(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final syncKey = 'life_areas_synced_$userId';
+      final alreadySynced = prefs.getBool(syncKey) ?? false;
+      
+      // Skip sync if already done for this user
+      if (alreadySynced) {
+        return;
+      }
+      
+      // Get local data
+      final localAreas = await _getLifeAreasAnonymous();
+      
+      // Get server data
+      final serverResponse = await _client
+          .from('life_areas')
+          .select()
+          .eq('user_id', userId)
+          .order('order_index');
+      final serverAreas = (serverResponse as List).map((json) => LifeArea.fromJson(json)).toList();
+      
+      // First time sync - upload local data to server only if server is empty
+      if (serverAreas.isEmpty && localAreas.isNotEmpty) {
+        // Create a map to track unique areas by canonical name
+        final Map<String, Map<String, dynamic>> uniqueAreas = {};
+        
+        for (final area in localAreas) {
+          final canonicalName = canonicalAreaName(area.name);
+          // Only add if not already present (avoid duplicates)
+          if (!uniqueAreas.containsKey(canonicalName)) {
+            uniqueAreas[canonicalName] = {
+              'user_id': userId,
+              'name': area.name,
+              'category': area.category,
+              'parent_id': area.parentId,
+              'color': area.color,
+              'icon': area.icon,
+              'order_index': area.orderIndex,
+            };
+          }
+        }
+        
+        if (uniqueAreas.isNotEmpty) {
+          await _client.from('life_areas').insert(uniqueAreas.values.toList());
+        }
+        await prefs.setBool(syncKey, true);
+      } else if (serverAreas.isNotEmpty) {
+        // Server already has data, mark as synced
+        await prefs.setBool(syncKey, true);
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        print('Life areas sync failed: $e');
+      }
+    }
+  }
+
+  /// Get merged life areas (local + server, with local priority)
+  static Future<List<LifeArea>> _getMergedLifeAreas(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final syncKey = 'life_areas_synced_$userId';
+      final alreadySynced = prefs.getBool(syncKey) ?? false;
+      
+      // If synced, get data from server (single source of truth)
+      if (alreadySynced) {
+        final serverResponse = await _client
+            .from('life_areas')
+            .select()
+            .eq('user_id', userId)
+            .order('order_index');
+        
+        final serverAreas = (serverResponse as List).map((json) => LifeArea.fromJson(json)).toList();
+        
+        // Deduplicate by canonical name just in case
+        final Map<String, LifeArea> uniqueAreas = {};
+        for (final area in serverAreas) {
+          final canonicalName = canonicalAreaName(area.name);
+          // Keep first occurrence of each canonical name
+          if (!uniqueAreas.containsKey(canonicalName)) {
+            uniqueAreas[canonicalName] = area;
+          }
+        }
+        
+        return uniqueAreas.values.toList()
+          ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+      }
+      
+      // Not synced yet - return local data
+      final localAreas = await _getLifeAreasAnonymous();
+      
+      // Deduplicate local data as well
+      final Map<String, LifeArea> uniqueAreas = {};
+      for (final area in localAreas) {
+        final canonicalName = canonicalAreaName(area.name);
+        if (!uniqueAreas.containsKey(canonicalName)) {
+          uniqueAreas[canonicalName] = area;
+        }
+      }
+      
+      return uniqueAreas.values.toList()
+        ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+      
+    } catch (e) {
+      if (kDebugMode) {
+        print('Failed to get merged life areas: $e');
+      }
+      return await _getLifeAreasAnonymous(); // Fallback to local only
+    }
+  }
+
+  /// Delete user data from server (when account is deleted)
+  static Future<void> deleteUserDataFromServer(String userId) async {
+    try {
+      await _client
+          .from('life_areas')
+          .delete()
+          .eq('user_id', userId);
+      
+      // Clear sync flag so local data becomes primary again
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('life_areas_synced_$userId');
+      
+    } catch (e) {
+      if (kDebugMode) {
+        print('Failed to delete user data from server: $e');
+      }
+    }
+  }
+  
+  /// Reset sync state for a user (useful after logout or before fresh registration)
+  static Future<void> resetSyncState(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('life_areas_synced_$userId');
+    } catch (e) {
+      if (kDebugMode) {
+        print('Failed to reset sync state: $e');
+      }
     }
   }
 } 

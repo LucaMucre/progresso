@@ -7,7 +7,7 @@ import '../repository/local_logs_repository.dart';
 import '../repository/local_templates_repository.dart';
 import '../utils/logging_service.dart';
 
-/// Service für die Migration anonymer Daten zu echten Accounts
+/// Service for migrating anonymous data to real accounts
 class AnonymousMigrationService {
   static final SupabaseClient _client = Supabase.instance.client;
   static final LocalLogsRepository _localLogsRepo = LocalLogsRepository();

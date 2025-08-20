@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/action_models.dart';
@@ -7,6 +8,7 @@ import 'widgets/activity_details_dialog.dart';
 import 'utils/app_theme.dart';
 import 'utils/logging_service.dart';
 import 'utils/parsed_activity_data.dart';
+import 'navigation.dart';
 
 class InsightsPage extends StatefulWidget {
   const InsightsPage({super.key});
@@ -32,11 +34,19 @@ class _InsightsPageState extends State<InsightsPage> {
     super.initState();
     _loadInitialData();
     _searchController.addListener(_performSearch);
+    // React to global life areas changes
+    lifeAreasChangedTick.addListener(_onLifeAreasChanged);
+  }
+
+  void _onLifeAreasChanged() {
+    // Reload data when life areas change globally
+    _loadInitialData();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    lifeAreasChangedTick.removeListener(_onLifeAreasChanged);
     super.dispose();
   }
 
@@ -73,10 +83,25 @@ class _InsightsPageState extends State<InsightsPage> {
         };
       }).toList();
 
+      // Filter activities to only show those from existing life areas
+      final existingCanonicalNames = lifeAreas.map((area) => LifeAreasService.canonicalAreaName(area.name)).toSet();
+      
+      final filteredActivities = activities.where((activity) {
+        final parsed = ParsedActivityData.fromNotes(activity['notes'] as String?);
+        final activityAreaName = parsed.effectiveAreaName;
+        
+        // Always show activities without life area assignment
+        if (activityAreaName.isEmpty) return true;
+        
+        // Check if any existing life area matches this activity's area
+        final activityCanonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
+        return existingCanonicalNames.contains(activityCanonicalName);
+      }).toList();
+
       setState(() {
         _lifeAreas = lifeAreas;
-        _activities = activities;
-        _filteredActivities = _activities;
+        _activities = filteredActivities; // Store only filtered activities
+        _filteredActivities = filteredActivities;
         _isLoading = false;
       });
     } catch (e) {
@@ -115,7 +140,7 @@ class _InsightsPageState extends State<InsightsPage> {
         if (_selectedLifeArea != null && _selectedLifeArea!.isNotEmpty) {
           matchesLifeArea = _activityMatchesLifeArea(activity, _selectedLifeArea!);
         }
-        
+
         // Date filter
         bool matchesDate = true;
         if (_selectedDateRange != null) {
@@ -176,27 +201,24 @@ class _InsightsPageState extends State<InsightsPage> {
 
   // Helper method to check if an activity matches a selected life area
   bool _activityMatchesLifeArea(Map<String, dynamic> activity, String selectedAreaName) {
-    final notesData = _parseNotesData(activity['notes']);
-    final notesCategory = notesData['category'].toString();
-    final templateCategory = activity['action_templates']?['category'] ?? '';
-    final categoryToCheck = notesCategory.isNotEmpty ? notesCategory : templateCategory;
+    // Use the same logic as the rest of the app via ParsedActivityData
+    final parsed = ParsedActivityData.fromNotes(activity['notes']);
+    final activityAreaName = parsed.effectiveAreaName;
     
-    // Direct match with category name
-    if (categoryToCheck == selectedAreaName) {
+    if (activityAreaName.isEmpty) return false;
+    
+    // Direct name match
+    if (activityAreaName.toLowerCase() == selectedAreaName.toLowerCase()) {
       return true;
     }
     
-    // Find the selected life area and check if its category matches
-    for (final area in _lifeAreas) {
-      if (area.name == selectedAreaName) {
-        // Check if the activity's category matches this area's category or name
-        return area.category.toLowerCase() == categoryToCheck.toLowerCase() ||
-               area.name.toLowerCase() == categoryToCheck.toLowerCase();
-      }
-    }
+    // Use canonical name matching (like in statistics)
+    final activityCanonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
+    final selectedCanonicalName = LifeAreasService.canonicalAreaName(selectedAreaName);
     
-    return false;
+    return activityCanonicalName == selectedCanonicalName;
   }
+
 
   // Helper method to parse color strings safely
   Color _parseColor(String colorString) {
@@ -556,55 +578,42 @@ class _InsightsPageState extends State<InsightsPage> {
     // Use parsed plain text for notes display
     final notes = notesData['plainText'].toString();
     
-    // Use parsed category if available, otherwise template category
-    final notesCategory = notesData['category'].toString();
-    final templateCategory = activity['action_templates']?['category'] ?? '';
-    final categoryName = notesCategory.isNotEmpty ? notesCategory : templateCategory;
+    // Use the same logic as the rest of the app via ParsedActivityData
+    final parsed = ParsedActivityData.fromNotes(activity['notes']);
+    final activityAreaName = parsed.effectiveAreaName;
     
-    // Find the color and display name for this category from life areas
+    // Find the matching life area
     Color categoryColor = AppTheme.primaryColor;
-    String displayName = categoryName.isNotEmpty ? categoryName : 'General';
+    String displayName = 'General';
     
-    if (categoryName.isNotEmpty) {
-      // Map common category names to life area names
-      final categoryMapping = {
-        'creativity': 'Creativity',
-        'development': 'Development', 
-        'learning': 'Learning',
-        'art': 'Art',
-        'fitness': 'Fitness',
-        'health': 'Health',
-        'work': 'Work',
-        'social': 'Social',
-        'family': 'Family',
-        'general': 'General',
-      };
+    if (activityAreaName.isNotEmpty) {
+      // First try direct name matching
+      LifeArea? matchingArea;
       
-      // Normalize category name
-      final normalizedCategory = categoryMapping[categoryName.toLowerCase()] ?? categoryName;
-      
-      // Try exact match first
       for (final area in _lifeAreas) {
-        if (area.name == normalizedCategory || area.category == normalizedCategory ||
-            area.name == categoryName || area.category == categoryName) {
-          categoryColor = _parseColor(area.color);
-          displayName = area.name; // Use the life area name for display
+        if (area.name.toLowerCase() == activityAreaName.toLowerCase()) {
+          matchingArea = area;
           break;
         }
       }
       
-      // If no exact match found, try case-insensitive match
-      if (categoryColor == AppTheme.primaryColor) {
+      // If no direct match, try canonical name matching
+      if (matchingArea == null) {
+        final activityCanonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
         for (final area in _lifeAreas) {
-          if (area.name.toLowerCase() == normalizedCategory.toLowerCase() || 
-              area.category.toLowerCase() == normalizedCategory.toLowerCase() ||
-              area.name.toLowerCase() == categoryName.toLowerCase() || 
-              area.category.toLowerCase() == categoryName.toLowerCase()) {
-            categoryColor = _parseColor(area.color);
-            displayName = area.name; // Use the life area name for display
+          final areaCanonicalName = LifeAreasService.canonicalAreaName(area.name);
+          if (areaCanonicalName == activityCanonicalName) {
+            matchingArea = area;
             break;
           }
         }
+      }
+      
+      if (matchingArea != null) {
+        categoryColor = _parseColor(matchingArea.color);
+        displayName = matchingArea.name;
+      } else {
+        displayName = activityAreaName; // Use the activity's area name if no match found
       }
     }
     

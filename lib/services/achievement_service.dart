@@ -319,13 +319,13 @@ class AchievementService {
   }
 
   static Future<void> loadUnlockedAchievements() async {
-    if (kDebugMode) debugPrint('DEBUG: Loading achievements...');
+    // Loading achievements
     try {
       final prefs = await SharedPreferences.getInstance();
       final currentUid = _supabase.auth.currentUser?.id;
       final effectiveUserId = currentUid ?? await AnonymousUserService.getOrCreateAnonymousUserId();
-      if (kDebugMode) debugPrint('DEBUG: Current user ID: $currentUid');
-      if (kDebugMode) debugPrint('DEBUG: Effective user ID (incl. anonymous): $effectiveUserId');
+      // Current user ID: $currentUid
+      // Effective user ID (incl. anonymous): $effectiveUserId
       
       // FORCE clear memory state if user changed
       if (_loadedUserId != effectiveUserId) {
@@ -336,9 +336,9 @@ class AchievementService {
       
       // Migrate from legacy global key if present and user-specific key missing
       final userKey = await _prefsKeyForUser();
-      if (kDebugMode) debugPrint('DEBUG: Using key: $userKey');
+      // Using storage key: $userKey
       String? unlockedJson = prefs.getString(userKey);
-      if (kDebugMode) debugPrint('DEBUG: Local JSON: $unlockedJson');
+      // Local storage data found: ${unlockedJson != null}
       if (unlockedJson == null) {
         final legacy = prefs.getString('unlocked_achievements');
         if (legacy != null) {
@@ -351,7 +351,7 @@ class AchievementService {
       if (unlockedJson != null) {
         final List<dynamic> unlocked = jsonDecode(unlockedJson);
         _unlockedAchievements = unlocked.cast<String>().toSet();
-        if (kDebugMode) debugPrint('DEBUG: Loaded from local: $_unlockedAchievements');
+        // Loaded achievements from local storage
       } else {
         // FALLBACK: Try browser localStorage for web
         try {
@@ -359,7 +359,7 @@ class AchievementService {
           if (localStorageData != null) {
             final List<dynamic> unlocked = jsonDecode(localStorageData);
             _unlockedAchievements = unlocked.cast<String>().toSet();
-            if (kDebugMode) debugPrint('DEBUG: Loaded from localStorage fallback: $_unlockedAchievements');
+            // Loaded from localStorage fallback
             // Restore to SharedPreferences
             await prefs.setString(userKey, localStorageData);
           } else {
@@ -396,7 +396,7 @@ class AchievementService {
       }
       _loadedFromStorage = true;
       _loadedUserId = effectiveUserId; // remember which user's data is in memory (including anonymous)
-      if (kDebugMode) debugPrint('DEBUG: Final unlocked achievements: $_unlockedAchievements');
+      // Final unlocked achievements loaded
       
       // VERIFY: Read back what was actually saved
       final verifyKey = await _prefsKeyForUser();
@@ -411,25 +411,25 @@ class AchievementService {
     // If user changed (login/logout), force reload for the new user
     final currentUid = _supabase.auth.currentUser?.id;
     final effectiveUserId = currentUid ?? await AnonymousUserService.getOrCreateAnonymousUserId();
-    if (kDebugMode) debugPrint('DEBUG: _ensureLoaded - currentUid: $currentUid, effectiveUserId: $effectiveUserId, _loadedUserId: $_loadedUserId, _loadedFromStorage: $_loadedFromStorage');
+    // Ensuring achievements are loaded for current user
     if (_loadedUserId != effectiveUserId) {
       _loadedFromStorage = false;
-      if (kDebugMode) debugPrint('DEBUG: User changed or first load, reloading achievements');
+      // User changed or first load, reloading achievements
     }
     if (!_loadedFromStorage) {
-      if (kDebugMode) debugPrint('DEBUG: Not loaded from storage yet, loading achievements');
+      // Loading achievements from storage
       await loadUnlockedAchievements();
     }
   }
   
   static Future<void> _saveUnlockedAchievements() async {
-    if (kDebugMode) debugPrint('DEBUG: Saving achievements: $_unlockedAchievements');
+    // Saving achievements to storage
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = await _prefsKeyForUser();
       final json = jsonEncode(_unlockedAchievements.toList());
       final success = await prefs.setString(key, json);
-      if (kDebugMode) debugPrint('DEBUG: Saved to key $key: $json (success: $success)');
+      // Saved to key $key (success: $success)
       
       // BACKUP: Also save to browser localStorage for web persistence
       try {
@@ -517,7 +517,7 @@ class AchievementService {
     }
     
     if (newlyUnlocked.isNotEmpty) {
-      if (kDebugMode) debugPrint('DEBUG: Newly unlocked achievements: ${newlyUnlocked.map((a) => a.id).toList()}');
+      // Newly unlocked achievements: ${newlyUnlocked.length}
       await _saveUnlockedAchievements();
       // Also push to remote table if available
       try {
@@ -531,7 +531,7 @@ class AchievementService {
                   })
               .toList();
           await _supabase.from('user_achievements').upsert(rows);
-          if (kDebugMode) debugPrint('DEBUG: Achievements pushed to server: ${rows.length}');
+          // Achievements synced to server: ${rows.length}
         }
       } catch (e) {
         // ignore if table missing; local storage still works

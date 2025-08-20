@@ -21,6 +21,19 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
   void initState() {
     super.initState();
     _loadLifeAreas();
+    // react to global life areas changes
+    lifeAreasChangedTick.addListener(_onLifeAreasChanged);
+  }
+
+  void _onLifeAreasChanged() {
+    // reload life areas when they change globally
+    _loadLifeAreas();
+  }
+
+  @override
+  void dispose() {
+    lifeAreasChangedTick.removeListener(_onLifeAreasChanged);
+    super.dispose();
   }
 
   Future<void> _loadLifeAreas() async {
@@ -342,43 +355,52 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                                     ],
                                   ),
                                   child: Padding(
-                                    padding: const EdgeInsets.all(16),
+                                    padding: const EdgeInsets.all(12),
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: color.withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(
-                                            icon,
-                                            size: 32,
-                                            color: color,
+                                        Flexible(
+                                          child: Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: color.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              icon,
+                                              size: 28,
+                                              color: color,
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          name,
-                                          style: theme.textTheme.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: theme.colorScheme.onSurface,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (category.isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            category,
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: theme.colorScheme.onSurfaceVariant,
+                                        const SizedBox(height: 8),
+                                        Flexible(
+                                          child: Text(
+                                            name,
+                                            style: theme.textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: theme.colorScheme.onSurface,
+                                              fontSize: 14,
                                             ),
                                             textAlign: TextAlign.center,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (category.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Flexible(
+                                            child: Text(
+                                              category,
+                                              style: theme.textTheme.bodySmall?.copyWith(
+                                                color: theme.colorScheme.onSurfaceVariant,
+                                                fontSize: 11,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                         ],
                                       ],

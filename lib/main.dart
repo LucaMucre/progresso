@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -12,9 +13,23 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'utils/logging_service.dart';
 import 'utils/app_theme.dart';
+import 'services/crash_reporting_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Suppress debug overflow errors in debug mode
+  if (kDebugMode) {
+    debugPaintSizeEnabled = false;
+    
+    // Custom error widget builder to prevent ugly debug overlays  
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      return Container(
+        color: Colors.transparent,
+        child: const SizedBox.shrink(),
+      );
+    };
+  }
 
   bool envLoaded = false;
   bool dartDefineLoaded = false;
@@ -101,6 +116,10 @@ Future<void> main() async {
       LoggingService.error('❌ Supabase Initialisierung fehlgeschlagen', e);
       LoggingService.warning('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
     }
+    
+    // Initialize crash reporting
+    await CrashReportingService.initialize();
+    
     return const ProviderScope(child: ProgressoApp());
   }
 

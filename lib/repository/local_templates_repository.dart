@@ -10,11 +10,11 @@ class LocalTemplatesRepository {
 
   Future<List<ActionTemplate>> fetchTemplates() async {
     try {
-      if (kDebugMode) debugPrint('=== LOCAL REPO FETCH TEMPLATES ===');
+      // Fetching templates from local storage
       
       final templates = await _db.getTemplates();
       
-      if (kDebugMode) debugPrint('Fetched ${templates.length} templates from local database');
+      // Templates retrieved successfully
       return templates;
     } catch (e, stackTrace) {
       LoggingService.error('Failed to fetch templates from local database', e, stackTrace, 'LocalTemplatesRepository');

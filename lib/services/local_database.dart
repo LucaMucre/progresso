@@ -683,4 +683,44 @@ class LocalDatabase {
     }
   }
 
+  // Delete log entry
+  Future<void> deleteLog(String logId) async {
+    if (kIsWeb) {
+      await _deleteLogWeb(logId);
+    } else {
+      await _deleteLogNative(logId);
+    }
+  }
+
+  Future<void> _deleteLogNative(String logId) async {
+    final db = await database;
+    await db.delete(
+      'logs',
+      where: 'id = ?',
+      whereArgs: [logId],
+    );
+    if (kDebugMode) debugPrint('Deleted log from native SQLite: $logId');
+  }
+
+  Future<void> _deleteLogWeb(String logId) async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final storageKey = userId != null ? 'logs_$userId' : 'logs_anonymous';
+      
+      final existingData = await web_storage.readLocalStorage(storageKey) ?? '[]';
+      final List<dynamic> logs = jsonDecode(existingData);
+      
+      // Remove the log with matching ID
+      logs.removeWhere((log) => log['id'] == logId);
+      
+      // Save back to storage
+      await web_storage.writeLocalStorage(storageKey, jsonEncode(logs));
+      
+      if (kDebugMode) debugPrint('Deleted log from web storage: $logId');
+    } catch (e) {
+      if (kDebugMode) debugPrint('Web: Error deleting log: $e');
+      rethrow;
+    }
+  }
+
 }

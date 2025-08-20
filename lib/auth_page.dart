@@ -40,9 +40,9 @@ class _AuthPageState extends State<AuthPage> {
     await ErrorService.handleAsync(
       context,
       () async {
-        // Magic-Link zum Passwort-Reset in der App. Der Link führt zurück in die App,
-        // onAuthStateChange liefert dann USER_UPDATED, worauf wir einen Dialog zeigen.
-        final origin = Uri.base.origin; // funktioniert für Web & Desktop (http://localhost:...)
+        // Magic-Link for password reset in the app. The link leads back to the app,
+        // onAuthStateChange then delivers USER_UPDATED, whereupon we show a dialog.
+        final origin = Uri.base.origin; // works for Web & Desktop (http://localhost:...)
         await Supabase.instance.client.auth.resetPasswordForEmail(email, redirectTo: origin);
         
         if (!mounted) return;

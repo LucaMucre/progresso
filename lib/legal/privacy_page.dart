@@ -16,7 +16,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 12),
-            Text('Controller: Luca Reckemeyer, Email: kontakt@example.com'),
+            Text('Controller: Luca Reckemeyer, Email: luca.reckemeyer@t-online.de'),
             SizedBox(height: 12),
             Text('Purposes: Provide the app, account/auth management, store your activities and notes, optional AI assistance.'),
             SizedBox(height: 8),

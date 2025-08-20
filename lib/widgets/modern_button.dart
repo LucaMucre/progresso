@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/app_theme.dart';
-import '../utils/animation_utils.dart';
+// Removed unused import
 
 enum ButtonVariant { primary, secondary, outline, ghost, gradient }
 enum ButtonSize { small, medium, large }

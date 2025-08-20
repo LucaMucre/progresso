@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../utils/accessibility_utils.dart';
+import '../../utils/haptic_utils.dart';
 
 class CalendarDayEntry {
   final String title;
@@ -51,14 +53,19 @@ class _CalendarGridState extends State<CalendarGrid> {
     } else {
       childAspectRatio = 1.10;
     }
-    final maxEntriesPerCell = isCompact ? 2 : 3; // baseline, further refined per-cell below
+    // Removed unused maxEntriesPerCell variable
 
     final first = DateTime(widget.month.year, widget.month.month);
-    final firstWeekday = first.weekday == 7 ? 0 : first.weekday; // Mon=1..Sun=7 => 0..6 with Sun at 0
+    // Monday is 1, Sunday is 7 in Dart. We want Monday to be first day of week
+    final firstWeekday = first.weekday; 
     final daysInMonth = DateTime(widget.month.year, widget.month.month + 1, 0).day;
     final cells = <Widget>[];
 
-    for (int i = 0; i < firstWeekday - 1; i++) {
+    // Add empty cells for days before the first day of month
+    // If month starts on Tuesday (2), add 1 empty cell for Monday
+    // If month starts on Sunday (7), add 6 empty cells
+    final emptyCells = firstWeekday == 7 ? 6 : firstWeekday - 1;
+    for (int i = 0; i < emptyCells; i++) {
       cells.add(const SizedBox.shrink());
     }
     final now = DateTime.now();
@@ -94,103 +101,59 @@ class _CalendarGridState extends State<CalendarGrid> {
         }
       }
 
-      cells.add(GestureDetector(
-        onTap: () => widget.onOpenDay(date),
+      cells.add(Semantics(
+        label: AccessibilityUtils.calendarDayLabel(d, activitiesCount: entries.length),
+        hint: AccessibilityUtils.navigationHint,
+        button: true,
+        child: GestureDetector(
+          onTap: () {
+            HapticUtils.calendarTap();
+            widget.onOpenDay(date);
+          },
         child: RepaintBoundary(
           child: Container(
             margin: const EdgeInsets.all(4),
             clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
               color: key == todayKey
-                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.14)
-                  : dominantColor?.withValues(alpha: 0.10),
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.20)
+                  : dominantColor?.withValues(alpha: 0.25),
               border: Border.all(
                 color: key == todayKey
                     ? Theme.of(context).colorScheme.primary
                     : (dominantColor ?? Theme.of(context).dividerColor)
-                        .withValues(alpha: 0.25),
-                width: key == todayKey ? 1.4 : 1.0,
+                        .withValues(alpha: 0.6),
+                width: key == todayKey ? 2.0 : 1.5,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: LayoutBuilder(
-            builder: (ctx, cons) {
-              final h = cons.maxHeight;
-              final pad = h <= 56 ? 3.0 : 8.0;
-              int maxEntries = maxEntriesPerCell;
-              if (h <= 56) {
-                maxEntries = 1;
-              } else if (h <= 88) {
-                maxEntries = 2;
-              }
-              return Padding(
-                padding: EdgeInsets.all(pad),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$d',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            fontWeight: key == todayKey ? FontWeight.w700 : null,
-                            color: key == todayKey
-                                ? Theme.of(context).colorScheme.onPrimaryContainer
-                                : null,
-                          ),
+            child: Center(
+              child: Text(
+                '$d',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: key == todayKey ? FontWeight.w700 : FontWeight.w500,
+                      color: key == todayKey
+                          ? Theme.of(context).colorScheme.onPrimaryContainer
+                          : dominantColor != null
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurface,
                     ),
-                    if (entries.isNotEmpty && maxEntries > 0)
-                      Expanded(
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          physics: const ClampingScrollPhysics(),
-                          itemCount: entries.length,
-                          itemBuilder: (context, idx) {
-                            final e = entries[idx];
-                            final Color dot = e.color ??
-                                dominantColor ??
-                                Theme.of(context).colorScheme.outline;
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 1),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: dot,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      e.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context).textTheme.labelSmall,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
+              ),
             ),
           ),
+        ),
         ),
       ));
     }
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 7,
-      childAspectRatio: childAspectRatio,
-      children: cells,
+    return RepaintBoundary(
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 7,
+        childAspectRatio: childAspectRatio,
+        children: cells,
+      ),
     );
   }
 }

@@ -24,6 +24,7 @@ import 'services/level_up_service.dart';
 import 'life_area_detail_page.dart';
 import 'navigation.dart';
 import 'utils/app_theme.dart';
+import 'utils/parsed_activity_data.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -49,6 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int _cacheBust = 0;
   RealtimeChannel? _usersChannel;
   Map<String, int> _areaActivityCounts = {};
+  Map<String, int> _dailyActivityCounts = {};
   bool _isAnonymous = false;
 
   final _supabase = Supabase.instance.client;
@@ -61,6 +63,8 @@ class _ProfilePageState extends State<ProfilePage> {
     _primeFromCacheThenReload();
     // react to global log changes
     logsChangedTick.addListener(_onExternalLogsChanged);
+    // react to global life areas changes
+    lifeAreasChangedTick.addListener(_onLifeAreasChanged);
     _subscribeToUserChanges();
     _subscribeToActivityChanges();
     _initializeAchievements();
@@ -90,6 +94,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _onExternalLogsChanged() {
     // lightweight refresh of statistics
+    _loadStatistics();
+  }
+
+  void _onLifeAreasChanged() {
+    // reload life areas when they change globally
     _loadStatistics();
   }
 
@@ -150,7 +159,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadProfile() async {
     try {
-      final userId = _supabase.auth.currentUser!.id;
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) {
+        setState(() {
+          _error = 'User not authenticated';
+        });
+        return;
+      }
+      final userId = currentUser.id;
       final res = await _supabase
           .from('users')
           .select('name,bio,avatar_url,email')
@@ -221,66 +237,58 @@ class _ProfilePageState extends State<ProfilePage> {
         _totalXP = totalXP;
         _xpSinceBaseline = _totalXP;
 
-        // Count activities by life area
-        String _resolveAreaKeyForActionLog(models.ActionLog log) {
-          final raw = log.notes;
-          String? areaFromNotes;
-          String? categoryFromNotes;
-          if (raw != null) {
-            try {
-              final obj = jsonDecode(raw);
-              if (obj is Map<String, dynamic>) {
-                areaFromNotes = (obj['area'] as String?)?.trim().toLowerCase();
-                final lifeAreaFromNotes = (obj['life_area'] as String?)?.trim().toLowerCase();
-                areaFromNotes ??= lifeAreaFromNotes;
-                categoryFromNotes = (obj['category'] as String?)?.trim().toLowerCase();
+        // Count activities by life area using ParsedActivityData
+        final areaToCount = <String, int>{};
+        
+        // Filter logs to only include those from existing life areas
+        final existingAreaNames = areas.map((area) => area.name).toSet();
+        final existingCanonicalNames = areas.map((area) => LifeAreasService.canonicalAreaName(area.name)).toSet();
+        
+        final filteredLogs = logs.where((log) {
+          final parsed = ParsedActivityData.fromNotes(log.notes);
+          final activityAreaName = parsed.effectiveAreaName;
+          if (activityAreaName.isEmpty) return true; // Keep activities without life area
+          
+          // First try exact name match
+          if (existingAreaNames.contains(activityAreaName)) return true;
+          
+          // Then try canonical name match
+          final canonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
+          return existingCanonicalNames.contains(canonicalName) || canonicalName == 'other' || canonicalName == 'unknown';
+        }).toList();
+        
+        // Count activities for each existing life area
+        for (final area in areas) {
+          int count = 0;
+          for (final log in filteredLogs) {
+            final parsed = ParsedActivityData.fromNotes(log.notes);
+            final activityAreaName = parsed.effectiveAreaName;
+            
+            if (activityAreaName.isEmpty) {
+              // Activity without life area - don't count for any specific area
+              continue;
+            }
+            
+            // Check if this activity belongs to this life area
+            bool matches = false;
+            
+            // First try exact name match
+            if (area.name == activityAreaName) {
+              matches = true;
+            } else {
+              // Try canonical name match
+              final areaCanonical = LifeAreasService.canonicalAreaName(area.name);
+              final activityCanonical = LifeAreasService.canonicalAreaName(activityAreaName);
+              if (areaCanonical == activityCanonical) {
+                matches = true;
               }
-            } catch (e, stackTrace) {
-              LoggingService.error('Error in profile operation', e, stackTrace, 'Profile');
+            }
+            
+            if (matches) {
+              count++;
             }
           }
-          bool isKnownParent(String? v) => const {
-            'spirituality','finance','career','learning','relationships','health','creativity','fitness','nutrition','art'
-          }.contains(v);
-          // Prefer explicit area if already a known parent
-          if (isKnownParent(areaFromNotes)) return areaFromNotes!;
-          // Map subcategories to parents
-          switch (categoryFromNotes) {
-            case 'inner':
-              return 'spirituality';
-            case 'social':
-              return 'relationships';
-            case 'work':
-              return 'career';
-            case 'development':
-              return 'learning';
-            case 'finance':
-              return 'finance';
-            case 'health':
-              return 'health';
-            case 'fitness':
-              return 'fitness';
-            case 'nutrition':
-              return 'nutrition';
-            case 'art':
-              return 'art';
-          }
-          // Fallback to area name if provided
-          if (areaFromNotes != null && areaFromNotes!.isNotEmpty) {
-            return areaFromNotes!;
-          }
-          return 'unknown';
-        }
-
-        final countsByKey = <String, int>{};
-        for (final log in logs) {
-          final key = _resolveAreaKeyForActionLog(log);
-          countsByKey[key] = (countsByKey[key] ?? 0) + 1;
-        }
-        final areaToCount = <String, int>{};
-        for (final area in areas) {
-          final nameKey = LifeAreasService.canonicalAreaName(area.name);
-          areaToCount[area.id] = countsByKey[nameKey] ?? 0;
+          areaToCount[area.id] = count;
         }
         areas.sort((a, b) {
           final cb = areaToCount[b.id] ?? 0;
@@ -289,6 +297,15 @@ class _ProfilePageState extends State<ProfilePage> {
           return a.orderIndex.compareTo(b.orderIndex);
         });
         _areaActivityCounts = areaToCount;
+
+        // Calculate daily activity counts from filtered logs only
+        final dailyCounts = <String, int>{};
+        for (final log in filteredLogs) {
+          final date = log.occurredAt;
+          final key = _dateKey(DateTime(date.year, date.month, date.day));
+          dailyCounts[key] = (dailyCounts[key] ?? 0) + 1;
+        }
+        _dailyActivityCounts = dailyCounts;
       
       // Check achievements after loading statistics
       await _checkAchievements();
@@ -457,7 +474,14 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     
     try {
-      final currentUser = _supabase.auth.currentUser!;
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) {
+        setState(() {
+          _loading = false;
+          _error = 'User not authenticated';
+        });
+        return;
+      }
       const ext = 'jpg'; // Standard for web
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final path = '${currentUser.id}/avatar_${timestamp}.$ext';
@@ -512,7 +536,14 @@ class _ProfilePageState extends State<ProfilePage> {
       _loading = true;
       _error = null;
     });
-    final currentUser = _supabase.auth.currentUser!;
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null) {
+      setState(() {
+        _loading = false;
+        _error = 'User not authenticated';
+      });
+      return;
+    }
     String? avatarUrl;
 
     try {
@@ -552,6 +583,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
       // Zentrale Synchronisierung und Broadcast (nur wenn es eine neue URL gibt)
       await AvatarSyncService.syncAvatar(avatarUrl);
+
+      // Update local state with new avatar URL
+      if (avatarUrl != null && avatarUrl.trim().isNotEmpty) {
+        setState(() {
+          _avatarUrl = avatarUrl;
+          _cacheBust = DateTime.now().millisecondsSinceEpoch;
+        });
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -818,7 +857,7 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: _pickAvatar,
+                    onTap: _isAnonymous ? null : _pickAvatar,
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -862,14 +901,16 @@ class _ProfilePageState extends State<ProfilePage> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _supabase.auth.currentUser?.email ?? 'user@example.com',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 14,
+                        if (!_isAnonymous && _supabase.auth.currentUser?.email != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _supabase.auth.currentUser!.email!,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
+                        ],
                         if (_character != null) ...[
                           const SizedBox(height: 8),
                           Row(
@@ -965,16 +1006,21 @@ class _ProfilePageState extends State<ProfilePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Activity Contributions',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Text(
+                    'Activity Contributions',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                Text(
-                  '$_totalActions activities this year',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                Flexible(
+                  child: Text(
+                    '$_totalActions activities this year',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.end,
                   ),
                 ),
               ],
@@ -1215,10 +1261,13 @@ class _ProfilePageState extends State<ProfilePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Learn how we count contributions',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              Flexible(
+                child: Text(
+                  'Learn how we count contributions',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Row(
@@ -1255,21 +1304,12 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildContributionsGrid() {
     final now = DateTime.now();
-    final startOfYear = DateTime(now.year, 1, 1);
-    final weeks = <List<DateTime>>[];
+    final year = now.year;
     
-    // Generate weeks for the entire year
-    DateTime current = startOfYear;
-    while (current.year == now.year) {
-      final week = <DateTime>[];
-      for (int i = 0; i < 7; i++) {
-        if (current.year == now.year) {
-          week.add(current);
-          current = current.add(const Duration(days: 1));
-        }
-      }
-      if (week.isNotEmpty) weeks.add(week);
-    }
+    // Generate the complete calendar grid for the year
+    final calendarData = _generateYearCalendar(year);
+    final weeks = calendarData['weeks'] as List<List<DateTime>>;
+    final monthPositions = calendarData['monthPositions'] as Map<int, int>;
 
     // Calculate activity counts per day
     final activityCounts = _calculateDailyActivityCounts();
@@ -1283,21 +1323,7 @@ class _ProfilePageState extends State<ProfilePage> {
           Row(
             children: [
               const SizedBox(width: 20), // Space for day labels
-              ...List.generate(12, (month) {
-                final monthDate = DateTime(now.year, month + 1, 1);
-                final weeksInMonth = weeks.where((week) => 
-                  week.any((day) => day.month == month + 1)).length;
-                return SizedBox(
-                  width: weeksInMonth * 12.0,
-                  child: Text(
-                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month],
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                );
-              }),
+              ..._buildMonthLabelsFromPositions(monthPositions),
             ],
           ),
           const SizedBox(height: 8),
@@ -1323,13 +1349,16 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: weeks.map((week) {
                   return Column(
                     children: week.map((day) {
-                      final count = activityCounts[_dateKey(day)] ?? 0;
+                      final isCurrentYear = day.year == year;
+                      final count = isCurrentYear ? (activityCounts[_dateKey(day)] ?? 0) : 0;
                       return Container(
                         width: 10,
                         height: 10,
                         margin: const EdgeInsets.all(1),
                         decoration: BoxDecoration(
-                          color: _getContributionColor(count),
+                          color: isCurrentYear 
+                            ? _getContributionColor(count)
+                            : Colors.transparent,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       );
@@ -1382,26 +1411,98 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Map<String, int> _calculateDailyActivityCounts() {
-    final counts = <String, int>{};
-    
-    // Since this is called during build, we'll need to use a different approach
-    // We'll calculate from the existing activities if available
-    if (_totalActions > 0) {
-      // For now, add activity counts to recent days as a placeholder
-      // This should be replaced with a proper async state management solution
-      final now = DateTime.now();
-      for (int i = 0; i < _totalActions && i < 30; i++) {
-        final date = now.subtract(Duration(days: i * 2));
-        final key = _dateKey(date);
-        counts[key] = (counts[key] ?? 0) + 1;
-      }
-    }
-    
-    return counts;
+    // Return the pre-calculated daily activity counts
+    return _dailyActivityCounts;
   }
 
   String _dateKey(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, dynamic> _generateYearCalendar(int year) {
+    final weeks = <List<DateTime>>[];
+    final monthPositions = <int, int>{}; // month -> week index
+    
+    // Start from January 1st of the year
+    final startOfYear = DateTime(year, 1, 1);
+    final endOfYear = DateTime(year, 12, 31);
+    
+    // Find the Sunday before or on January 1st (GitHub style - starts on Sunday)
+    DateTime current = startOfYear;
+    while (current.weekday != DateTime.sunday) {
+      current = current.subtract(const Duration(days: 1));
+    }
+    
+    int weekIndex = 0;
+    
+    // Generate all weeks until we pass December 31st
+    while (current.isBefore(endOfYear.add(const Duration(days: 7)))) {
+      final week = <DateTime>[];
+      
+      // Generate 7 days for this week
+      for (int i = 0; i < 7; i++) {
+        week.add(current);
+        
+        // Track where each month starts (1st of each month)
+        if (current.year == year && current.day == 1) {
+          monthPositions[current.month] = weekIndex;
+        }
+        
+        current = current.add(const Duration(days: 1));
+      }
+      
+      weeks.add(week);
+      weekIndex++;
+      
+      // Stop if we've completed the year and the week
+      if (current.year > year) break;
+    }
+    
+    return {
+      'weeks': weeks,
+      'monthPositions': monthPositions,
+    };
+  }
+
+  List<Widget> _buildMonthLabelsFromPositions(Map<int, int> monthPositions) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    final labels = <Widget>[];
+    int currentWeekPos = 0;
+    
+    for (int month = 1; month <= 12; month++) {
+      final weekPos = monthPositions[month];
+      if (weekPos != null) {
+        // Add spacing to reach the correct position
+        final spacing = (weekPos - currentWeekPos) * 12.0;
+        if (spacing > 0) {
+          labels.add(SizedBox(width: spacing));
+        }
+        
+        // Calculate how many weeks this month spans
+        final nextMonthPos = monthPositions[month + 1];
+        final monthWidth = nextMonthPos != null 
+          ? (nextMonthPos - weekPos) * 12.0
+          : 4 * 12.0; // Default width for last month
+        
+        labels.add(
+          SizedBox(
+            width: monthWidth,
+            child: Text(
+              monthNames[month - 1],
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        );
+        
+        currentWeekPos = nextMonthPos ?? (weekPos + 4);
+      }
+    }
+    
+    return labels;
   }
 
   Widget _buildAnonymousUserBanner() {
@@ -1502,9 +1603,9 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               child: const Column(
                 children: [
-                  Text('✓ Alle bisherigen Daten bleiben erhalten'),
-                  Text('✓ Synchronisation zwischen Geräten'),
-                  Text('✓ Backup in der Cloud'),
+                  Text('✓ All existing data will be preserved'),
+                  Text('✓ Synchronization between devices'),
+                  Text('✓ Cloud backup'),
                 ],
               ),
             ),
@@ -1605,8 +1706,8 @@ class _ProfilePageState extends State<ProfilePage> {
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('❌ Migration fehlgeschlagen'),
-            content: Text('Fehler bei der Datenübertragung: $e'),
+            title: const Text('❌ Migration failed'),
+            content: Text('Error during data transfer: $e'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -1646,10 +1747,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   child: const Column(
                     children: [
-                      Text('ℹ️ Nach der Übertragung:'),
-                      Text('• Deine Daten sind in der Cloud gesichert'),
-                      Text('• Synchronisation zwischen Geräten möglich'),
-                      Text('• Lokale Daten werden gelöscht'),
+                      Text('ℹ️ After transfer:'),
+                      Text('• Your data is backed up in the cloud'),
+                      Text('• Synchronization between devices enabled'),
+                      Text('• Local data will be deleted'),
                     ],
                   ),
                 ),
@@ -1681,6 +1782,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _usersChannel?.unsubscribe();
     AvatarSyncService.avatarVersion.removeListener(_loadProfile);
     logsChangedTick.removeListener(_onExternalLogsChanged);
+    lifeAreasChangedTick.removeListener(_onLifeAreasChanged);
     // Cleanup optionaler Callback
     // Da wir eine anonyme Closure registriert haben, ist hier kein Remove möglich
     super.dispose();

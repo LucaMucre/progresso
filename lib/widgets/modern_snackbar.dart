@@ -151,7 +151,7 @@ class ModernSnackBar {
     show(
       context: context,
       message: message,
-      title: title ?? 'Erfolg',
+      title: title ?? 'Success',
       type: SnackBarType.success,
       duration: duration,
     );
@@ -166,7 +166,7 @@ class ModernSnackBar {
     show(
       context: context,
       message: message,
-      title: title ?? 'Fehler',
+      title: title ?? 'Error',
       type: SnackBarType.error,
       duration: duration,
     );
@@ -181,7 +181,7 @@ class ModernSnackBar {
     show(
       context: context,
       message: message,
-      title: title ?? 'Warnung',
+      title: title ?? 'Warning',
       type: SnackBarType.warning,
       duration: duration,
     );

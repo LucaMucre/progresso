@@ -44,67 +44,18 @@
       e.preventDefault();
     });
     
-    // Global flag to completely disable password manager
-    window.__disablePasswordManager = true;
-    
-    // Prevent password manager popups
+    // Simple password manager prevention using CSS and minimal JavaScript
     document.addEventListener('DOMContentLoaded', function() {
-      // Create decoy invisible form at the beginning of body to absorb password manager attention
-      const decoyForm = document.createElement('form');
-      decoyForm.style.position = 'absolute';
-      decoyForm.style.left = '-9999px';
-      decoyForm.style.top = '-9999px';
-      decoyForm.style.width = '1px';
-      decoyForm.style.height = '1px';
-      decoyForm.style.overflow = 'hidden';
-      decoyForm.setAttribute('autocomplete', 'off');
-      
-      // Add decoy fields that password managers will target instead
-      const decoyUser = document.createElement('input');
-      decoyUser.type = 'text';
-      decoyUser.name = 'decoy_username';
-      decoyUser.setAttribute('autocomplete', 'username');
-      decoyUser.setAttribute('tabindex', '-1');
-      decoyUser.setAttribute('aria-hidden', 'true');
-      decoyUser.style.position = 'absolute';
-      decoyUser.style.left = '-9999px';
-      
-      const decoyPass = document.createElement('input');
-      decoyPass.type = 'password';
-      decoyPass.name = 'decoy_password';
-      decoyPass.setAttribute('autocomplete', 'new-password');
-      decoyPass.setAttribute('tabindex', '-1');
-      decoyPass.setAttribute('aria-hidden', 'true');
-      decoyPass.style.position = 'absolute';
-      decoyPass.style.left = '-9999px';
-      
-      decoyForm.appendChild(decoyUser);
-      decoyForm.appendChild(decoyPass);
-      document.body.insertBefore(decoyForm, document.body.firstChild);
-      
-      // Prevent any form submission
-      decoyForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      });
-      // Disable autocomplete on all input elements
+      // Add CSS to disable autocomplete
       const style = document.createElement('style');
       style.textContent = `
-        input[type="text"], input[type="password"], input[type="email"], input[type="file"] {
+        input[type="text"], input[type="password"], input[type="email"], input[type="number"] {
           autocomplete: off !important;
         }
         input:-webkit-autofill {
           -webkit-box-shadow: 0 0 0 1000px white inset !important;
         }
-        /* Disable password manager on contenteditable (QuillEditor) */
-        [contenteditable="true"] {
-          autocomplete: off !important;
-          autocorrect: off !important;
-          autocapitalize: off !important;
-          spellcheck: false !important;
-        }
-        .ql-editor {
+        [contenteditable="true"], .ql-editor {
           autocomplete: off !important;
           autocorrect: off !important;
           autocapitalize: off !important;
@@ -113,67 +64,34 @@
       `;
       document.head.appendChild(style);
       
-      // Monitor for dynamically created inputs and contenteditable elements
+      // Set autocomplete=off on dynamically created elements
       const observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
           mutation.addedNodes.forEach(function(node) {
             if (node.nodeType === 1) { // Element node
               // Handle input elements
-              const inputs = node.querySelectorAll ? node.querySelectorAll('input') : [];
+              const inputs = node.querySelectorAll ? node.querySelectorAll('input, textarea') : [];
               inputs.forEach(function(input) {
-                input.setAttribute('autocomplete', 'off');
-                input.setAttribute('data-form-type', 'other');
-                input.setAttribute('data-lpignore', 'true');
-                input.setAttribute('data-1p-ignore', 'true');
-                input.setAttribute('data-bwignore', 'true');
-                
-                // Change input type temporarily on focus to confuse password managers
-                if (input.type === 'text' || input.type === 'number') {
-                  input.addEventListener('focus', function() {
-                    this.setAttribute('readonly', 'readonly');
-                    setTimeout(() => {
-                      this.removeAttribute('readonly');
-                    }, 10);
-                  });
+                if (input.type !== 'hidden') {
+                  input.setAttribute('autocomplete', 'off');
                 }
               });
               
-              // Handle contenteditable elements (QuillEditor)
+              // Handle contenteditable elements
               const editables = node.querySelectorAll ? node.querySelectorAll('[contenteditable="true"], .ql-editor') : [];
               editables.forEach(function(editable) {
                 editable.setAttribute('autocomplete', 'off');
-                editable.setAttribute('autocorrect', 'off');
-                editable.setAttribute('autocapitalize', 'off');
                 editable.setAttribute('spellcheck', 'false');
-                editable.setAttribute('data-form-type', 'other');
-                editable.setAttribute('data-lpignore', 'true');
-                editable.setAttribute('data-1p-ignore', 'true');
-                editable.setAttribute('data-bwignore', 'true');
-                editable.setAttribute('data-dashlane-ignore', 'true');
-                editable.setAttribute('role', 'textbox');
-                editable.setAttribute('inputmode', 'text');
               });
               
               // Check if the node itself is an input or contenteditable
-              if (node.tagName === 'INPUT') {
+              if (node.tagName === 'INPUT' && node.type !== 'hidden') {
                 node.setAttribute('autocomplete', 'off');
-                node.setAttribute('data-form-type', 'other');
-                node.setAttribute('data-lpignore', 'true');
-                node.setAttribute('data-1p-ignore', 'true');
               }
               
-              if (node.contentEditable === 'true' || node.classList && node.classList.contains('ql-editor')) {
+              if (node.contentEditable === 'true' || (node.classList && node.classList.contains('ql-editor'))) {
                 node.setAttribute('autocomplete', 'off');
-                node.setAttribute('autocorrect', 'off');
-                node.setAttribute('autocapitalize', 'off');
                 node.setAttribute('spellcheck', 'false');
-                node.setAttribute('data-form-type', 'other');
-                node.setAttribute('data-lpignore', 'true');
-                node.setAttribute('data-1p-ignore', 'true');
-                node.setAttribute('data-bwignore', 'true');
-                node.setAttribute('data-dashlane-ignore', 'true');
-                node.setAttribute('role', 'textbox');
-                node.setAttribute('inputmode', 'text');
               }
             }
           });
@@ -184,114 +102,27 @@
         childList: true,
         subtree: true
       });
-      
-      // Periodically check and fix contenteditable elements
-      setInterval(function() {
-        // Find all QuillEditor elements and mark them
-        document.querySelectorAll('[contenteditable="true"], .ql-editor, .ql-container').forEach(function(el) {
-          el.setAttribute('autocomplete', 'off');
-          el.setAttribute('data-form-type', 'other');
-          el.setAttribute('data-lpignore', 'true');
-          el.setAttribute('data-1p-ignore', 'true');
-          el.setAttribute('data-bwignore', 'true');
-          el.setAttribute('data-dashlane-ignore', 'true');
-          el.setAttribute('role', 'textbox');
-          el.setAttribute('aria-label', 'Notes editor');
-          el.setAttribute('data-purpose', 'notes');
-        });
-        
-        // Find all input elements and mark them
-        document.querySelectorAll('input').forEach(function(input) {
-          if (input.type !== 'hidden') {
-            input.setAttribute('autocomplete', 'off');
-            input.setAttribute('data-form-type', 'other');
-            input.setAttribute('data-lpignore', 'true');
-            input.setAttribute('data-1p-ignore', 'true');
-          }
-        });
-      }, 500); // Check every 500ms
-      
-      // Remove decoy fields approach to avoid triggering password managers
-      
-      // Intercept form submissions to prevent any accidental password saves
-      document.addEventListener('submit', function(e) {
-        const form = e.target;
-        if (form && form.tagName === 'FORM') {
-          // Check if this is our decoy form
-          if (!form.hasAttribute('data-allow-submit')) {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-        }
-      }, true);
-      
-      // Override the browser's credential store to prevent password prompts
-      if (navigator.credentials) {
-        const originalStore = navigator.credentials.store;
-        navigator.credentials.store = function() {
-          if (window.__disablePasswordManager) {
-            return Promise.resolve(null);
-          }
-          return originalStore.apply(this, arguments);
-        };
-      }
-      
-      // Intercept beforeunload to prevent password save prompts on navigation
-      window.addEventListener('beforeunload', function(e) {
-        // Clear any form data to prevent save prompts
-        document.querySelectorAll('input').forEach(function(input) {
-          if (input.type !== 'hidden' && !input.hasAttribute('data-preserve')) {
-            input.value = '';
-          }
-        });
-      });
     });
     
-    // Function to aggressively prevent password manager on log action page
+    // Simplified function for log action page
     window.preventPasswordManagerOnLogPage = function() {
-      // Find and mark all form-like elements
       setTimeout(function() {
-        // Mark all contenteditable elements
-        document.querySelectorAll('[contenteditable], .ql-editor, .ql-container, .ql-toolbar').forEach(function(el) {
-          el.setAttribute('autocomplete', 'off');
-          el.setAttribute('data-form-type', 'other');
-          el.setAttribute('data-lpignore', 'true');
-          el.setAttribute('data-1p-ignore', 'true');
-          el.setAttribute('data-bwignore', 'true');
-          el.setAttribute('role', 'textbox');
-          el.setAttribute('aria-label', 'Text editor');
-        });
-        
-        // Mark all input fields
-        document.querySelectorAll('input, textarea').forEach(function(input) {
-          if (input.type !== 'hidden') {
-            input.setAttribute('autocomplete', 'off');
-            input.setAttribute('data-form-type', 'other');
-            input.setAttribute('data-lpignore', 'true');
-            input.setAttribute('data-1p-ignore', 'true');
+        document.querySelectorAll('input, textarea, [contenteditable], .ql-editor').forEach(function(el) {
+          if (el.type !== 'hidden') {
+            el.setAttribute('autocomplete', 'off');
+            el.setAttribute('spellcheck', 'false');
           }
-        });
-        
-        // Find any form elements and mark them
-        document.querySelectorAll('form').forEach(function(form) {
-          form.setAttribute('autocomplete', 'off');
-          form.setAttribute('data-form-type', 'other');
         });
       }, 100);
     };
     
-    // Custom file picker to avoid password manager
+    // Custom file picker for image uploads
     window.customFilePicker = function() {
-      // Temporarily disable password manager during file picker
-      window.__disablePasswordManager = true;
-      
       return new Promise((resolve) => {
         let isResolved = false;
         
-        // Prefer File System Access API (no input elements → avoids password manager heuristics)
-        const useFsPicker = !!window.showOpenFilePicker;
-        if (useFsPicker) {
+        // Prefer File System Access API when available
+        if (window.showOpenFilePicker) {
           (async () => {
             try {
               const handles = await window.showOpenFilePicker({
@@ -302,10 +133,12 @@
                   accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] }
                 }]
               });
+              
               if (!handles || !handles.length) {
                 if (!isResolved) { isResolved = true; resolve(null); }
                 return;
               }
+              
               const file = await handles[0].getFile();
               const reader = new FileReader();
               reader.onload = function(event) {
@@ -324,11 +157,11 @@
               };
               reader.readAsDataURL(file);
             } catch (e) {
-              // Fall back to input method below
+              // Fall back to input method
               startInputFallback();
             }
           })();
-          return; // We'll resolve inside the async block
+          return;
         }
 
         // Fallback: hidden input method
@@ -338,11 +171,6 @@
           input.accept = 'image/*';
           input.style.display = 'none';
           input.setAttribute('autocomplete', 'off');
-          input.setAttribute('data-form-type', 'file-upload');
-          input.setAttribute('data-lpignore', 'true');
-          input.setAttribute('data-1p-ignore', 'true');
-          input.setAttribute('data-bwignore', 'true');
-          input.setAttribute('data-dashlane-ignore', 'true');
 
           let isCleanedUp = false;
           const cleanup = () => {
@@ -379,7 +207,6 @@
             }
           }, { once: true });
 
-          // Append directly to body to avoid form semantics
           document.body.appendChild(input);
           input.click();
 
@@ -393,17 +220,17 @@
           }, 30000);
         }
 
-        // If FS API wasn't used, start fallback immediately
-        if (!useFsPicker) {
+        if (!window.showOpenFilePicker) {
           startInputFallback();
         }
       });
     };
 
-    // Explicitly ask Chrome to show the password save prompt immediately after a successful login
-    window.triggerImmediatePasswordSavePrompt = function(email, password) {
+    // For login pages - enable password manager when needed
+    window.enablePasswordManagerForLogin = function(email, password) {
+      if (!email || !password) return;
+      
       try {
-        // Create a temporary hidden form with username/password to nudge the browser
         const form = document.createElement('form');
         form.style.position = 'absolute';
         form.style.left = '-9999px';
@@ -414,13 +241,13 @@
         user.type = 'text';
         user.name = 'username';
         user.autocomplete = 'username';
-        user.value = email || '';
+        user.value = email;
 
         const pass = document.createElement('input');
         pass.type = 'password';
         pass.name = 'password';
         pass.autocomplete = 'current-password';
-        pass.value = password || '';
+        pass.value = password;
 
         const submit = document.createElement('input');
         submit.type = 'submit';
@@ -430,31 +257,12 @@
         form.appendChild(submit);
         document.body.appendChild(form);
 
-        // Programmatically submit; some browsers only prompt on real user gesture,
-        // but this often nudges Chrome to prompt immediately.
         form.requestSubmit(submit);
 
-        // Cleanup soon after
         setTimeout(() => {
           if (form.parentNode) form.parentNode.removeChild(form);
         }, 250);
       } catch (_) {}
-    };
-
-    // Proactively store credentials using the Credential Management API so the prompt won't reappear later
-    window.storePasswordCredential = async function(email, password) {
-      try {
-        if (navigator.credentials && navigator.credentials.create) {
-          const cred = await navigator.credentials.create({
-            password: { id: email, name: email, password }
-          });
-          if (cred) {
-            await navigator.credentials.store(cred);
-          }
-        }
-      } catch (_) {
-        // Ignore if unsupported
-      }
     };
   </script>
   <script src="flutter_bootstrap.js" async></script>

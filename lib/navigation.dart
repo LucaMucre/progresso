@@ -24,3 +24,10 @@ void notifyLogsChanged() {
   logsChangedTick.value++;
 }
 
+/// Global signal when life_areas changed (insert/update/delete)
+final ValueNotifier<int> lifeAreasChangedTick = ValueNotifier<int>(0);
+
+void notifyLifeAreasChanged() {
+  lifeAreasChangedTick.value++;
+}
+

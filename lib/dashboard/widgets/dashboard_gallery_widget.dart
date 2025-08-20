@@ -407,7 +407,7 @@ class _DashboardGalleryWidgetState extends ConsumerState<DashboardGalleryWidget>
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 400, // Fixed height for gallery
+          height: 320, // Reduced height for gallery (proportional to main container reduction)
           child: Consumer(
             builder: (context, ref, _) {
               final logsAsync = ref.watch(logsNotifierProvider);

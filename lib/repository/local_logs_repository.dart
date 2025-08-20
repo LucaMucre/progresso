@@ -100,11 +100,11 @@ class LocalLogsRepository {
 
   Future<List<ActionLog>> fetchLogs({DateTime? since, int? limit}) async {
     try {
-      if (kDebugMode) debugPrint('=== LOCAL REPO FETCH LOGS ===');
+      // Removed debug print for better performance
       
       final logs = await _db.getLogs(since: since, limit: limit);
       
-      if (kDebugMode) debugPrint('Fetched ${logs.length} logs from local database');
+      // Logs fetched successfully
       return logs;
     } catch (e, stackTrace) {
       LoggingService.error('Failed to fetch logs from local database', e, stackTrace, 'LocalLogsRepository');
@@ -114,11 +114,11 @@ class LocalLogsRepository {
 
   Future<int> fetchTotalXp() async {
     try {
-      if (kDebugMode) debugPrint('=== LOCAL REPO FETCH TOTAL XP ===');
+      // Fetching total XP
       
       final totalXp = await _db.getTotalXp();
       
-      if (kDebugMode) debugPrint('Total XP from local database: $totalXp');
+      // Total XP retrieved
       return totalXp;
     } catch (e, stackTrace) {
       LoggingService.error('Failed to fetch total XP from local database', e, stackTrace, 'LocalLogsRepository');
@@ -144,7 +144,7 @@ class LocalLogsRepository {
     required DateTime month,
   }) async {
     try {
-      if (kDebugMode) debugPrint('=== LOCAL REPO FETCH DAILY AREA TOTALS ===');
+      // Fetching daily area totals
       
       final totals = await _db.getDailyAreaTotals(month);
       
@@ -158,7 +158,7 @@ class LocalLogsRepository {
 
   Future<List<DateTime>> fetchLoggedDates(int days) async {
     try {
-      if (kDebugMode) debugPrint('=== LOCAL REPO FETCH LOGGED DATES ===');
+      // Fetching logged dates
       
       final since = DateTime.now().subtract(Duration(days: days));
       final logs = await _db.getLogs(since: since);
@@ -275,6 +275,16 @@ class LocalLogsRepository {
         'currentStreak': 0,
         'longestStreak': 0,
       };
+    }
+  }
+
+  Future<void> deleteLog(String logId) async {
+    try {
+      await _db.deleteLog(logId);
+      if (kDebugMode) debugPrint('Deleted local log: $logId');
+    } catch (e, stackTrace) {
+      LoggingService.error('Failed to delete log from local database', e, stackTrace, 'LocalLogsRepository');
+      rethrow;
     }
   }
 }

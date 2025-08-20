@@ -27,14 +27,21 @@ class CalendarHeader extends StatelessWidget {
         Text(title, style: Theme.of(context).textTheme.titleMedium),
         IconButton(icon: const Icon(Icons.chevron_right), onPressed: onNext),
         const Spacer(),
-        DropdownButton<String?>(
-          value: selectedAreaName,
-          hint: const Text('All areas'),
-          onChanged: onAreaSelected,
-          items: <DropdownMenuItem<String?>>[
-            const DropdownMenuItem<String?>(child: Text('All areas')),
-            ...areaNames.map((n) => DropdownMenuItem<String?>(value: n, child: Text(n)))
-          ],
+        Flexible(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: DropdownButton<String?>(
+              value: selectedAreaName,
+              hint: const Text('All areas', overflow: TextOverflow.ellipsis, maxLines: 1),
+              onChanged: onAreaSelected,
+              isExpanded: true,
+              isDense: true,
+              items: <DropdownMenuItem<String?>>[
+                const DropdownMenuItem<String?>(value: null, child: Text('All areas', overflow: TextOverflow.ellipsis, maxLines: 1)),
+                ...areaNames.map((n) => DropdownMenuItem<String?>(value: n, child: Text(n, overflow: TextOverflow.ellipsis, maxLines: 1)))
+              ],
+            ),
+          ),
         ),
       ],
     );

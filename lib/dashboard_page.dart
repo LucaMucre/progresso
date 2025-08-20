@@ -66,10 +66,19 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   @override
   void dispose() {
+    lifeAreasChangedTick.removeListener(_onLifeAreasChanged);
     _realtimeDebounce?.cancel();
     _realtimeSubscription?.unsubscribe();
     routeObserver.unsubscribe(this);
     super.dispose();
+  }
+  
+  void _onLifeAreasChanged() {
+    if (mounted) {
+      setState(() {
+        _lifeAreasFuture = _loadLifeAreas();
+      });
+    }
   }
 
   @override
@@ -106,6 +115,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     _globalStatsFuture = _calculateGlobalStatistics();
     _globalActivity7dFuture = _getGlobalLast7DaysActivity();
     _globalDurationStacksFuture = _getGlobalLast7DaysDurationStacks();
+    
+    // Listen for life areas changes
+    lifeAreasChangedTick.addListener(_onLifeAreasChanged);
     // Automatische Aktualisierung beim Start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Initial leichter Rebuild ist okay, aber keine wiederholten Trigger
@@ -1096,16 +1108,26 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       final searchCategory = category?.trim() ?? '';
                       
                       if (searchName.isNotEmpty || searchCategory.isNotEmpty) {
-                        // Find matching life area
+                        // Find matching life area - prioritize exact name match over category
                         LifeArea? matchedLifeArea;
-                        for (final la in lifeAreas) {
-                          if (searchName.isNotEmpty && la.name.toLowerCase() == searchName.toLowerCase()) {
-                            matchedLifeArea = la;
-                            break;
+                        
+                        // First priority: exact name match
+                        if (searchName.isNotEmpty) {
+                          for (final la in lifeAreas) {
+                            if (la.name.toLowerCase() == searchName.toLowerCase()) {
+                              matchedLifeArea = la;
+                              break;
+                            }
                           }
-                          if (searchCategory.isNotEmpty && la.category.toLowerCase() == searchCategory.toLowerCase()) {
-                            matchedLifeArea = la;
-                            break;
+                        }
+                        
+                        // Second priority: category match only if no name match found
+                        if (matchedLifeArea == null && searchCategory.isNotEmpty) {
+                          for (final la in lifeAreas) {
+                            if (la.category.toLowerCase() == searchCategory.toLowerCase()) {
+                              matchedLifeArea = la;
+                              break;
+                            }
                           }
                         }
                         
@@ -1811,24 +1833,26 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Life Areas',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: Theme.of(context).colorScheme.onSurface,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Life Areas',
+                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Organize your activities by life domains',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            SizedBox(height: 4),
+                            Text(
+                              'Organize your activities by life domains',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       Container(
                         height: 44,
@@ -1844,12 +1868,21 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             ),
                           ],
                         ),
-                        child: IconButton(
-                          icon: const Icon(Icons.add_rounded, size: 24),
-                          color: Colors.white,
-                          onPressed: () => _showAddLifeAreaDialog(context),
-                          padding: EdgeInsets.zero,
-                          tooltip: 'Add new area',
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _showAddLifeAreaDialog(context),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.add_rounded,
+                                  size: 24,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -2925,15 +2958,23 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 );
               }
               
-              return BubblesGrid(
-                areas: areas,
-                onBubbleTap: (area) => _onBubbleTap(context, area),
-                onDelete: (area) {
-                  setState(() {
-                    _refreshCounter++;
-                    _lifeAreasFuture = LifeAreasService.getLifeAreas();
-                  });
-                },
+              return Container(
+                constraints: const BoxConstraints(
+                  minHeight: 200,
+                  maxHeight: 500,
+                ),
+                child: ClipRect(
+                  child: BubblesGrid(
+                    areas: areas,
+                    onBubbleTap: (area) => _onBubbleTap(context, area),
+                    onDelete: (area) {
+                      setState(() {
+                        _refreshCounter++;
+                        _lifeAreasFuture = LifeAreasService.getLifeAreas();
+                      });
+                    },
+                  ),
+                ),
               );
             },
           );
@@ -3037,16 +3078,25 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       final searchCategory = categoryFromNotes?.trim() ?? '';
                       
                       if (searchName.isNotEmpty || searchCategory.isNotEmpty) {
-                        for (final la in lifeAreas) {
-                          if (searchName.isNotEmpty && la.name.toLowerCase() == searchName.toLowerCase()) {
-                            matchedLifeArea = la;
-                            area = la.name;
-                            break;
+                        // First priority: exact name match
+                        if (searchName.isNotEmpty) {
+                          for (final la in lifeAreas) {
+                            if (la.name.toLowerCase() == searchName.toLowerCase()) {
+                              matchedLifeArea = la;
+                              area = la.name;
+                              break;
+                            }
                           }
-                          if (searchCategory.isNotEmpty && la.category.toLowerCase() == searchCategory.toLowerCase()) {
-                            matchedLifeArea = la;
-                            area = la.name;
-                            break;
+                        }
+                        
+                        // Second priority: category match only if no name match found
+                        if (matchedLifeArea == null && searchCategory.isNotEmpty) {
+                          for (final la in lifeAreas) {
+                            if (la.category.toLowerCase() == searchCategory.toLowerCase()) {
+                              matchedLifeArea = la;
+                              area = la.name;
+                              break;
+                            }
                           }
                         }
                         
@@ -3237,11 +3287,14 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                   Row(
                                     children: [
                                       // Life area name
-                                      Text(
-                                        area,
-                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                          color: color,
-                                          fontWeight: FontWeight.w600,
+                                      Flexible(
+                                        child: Text(
+                                          area,
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: color,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       
@@ -3492,21 +3545,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   Widget _buildContributionsGrid(List<models.ActionLog> logs) {
     final now = DateTime.now();
-    final startOfYear = DateTime(now.year, 1, 1);
-    final weeks = <List<DateTime>>[];
+    final year = now.year;
     
-    // Generate weeks for the entire year
-    DateTime current = startOfYear;
-    while (current.year == now.year) {
-      final week = <DateTime>[];
-      for (int i = 0; i < 7; i++) {
-        if (current.year == now.year) {
-          week.add(current);
-          current = current.add(const Duration(days: 1));
-        }
-      }
-      if (week.isNotEmpty) weeks.add(week);
-    }
+    // Generate the complete calendar grid for the year
+    final calendarData = _generateYearCalendar(year);
+    final weeks = calendarData['weeks'] as List<List<DateTime>>;
+    final monthPositions = calendarData['monthPositions'] as Map<int, int>;
 
     // Calculate activity counts per day from actual logs
     final activityCounts = _calculateDailyActivityCountsFromLogs(logs);
@@ -3522,20 +3566,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
           Row(
             children: [
               const SizedBox(width: 20), // Space for day labels
-              ...List.generate(12, (month) {
-                final weeksInMonth = weeks.where((week) => 
-                  week.any((day) => day.month == month + 1)).length;
-                return SizedBox(
-                  width: weeksInMonth * 12.0,
-                  child: Text(
-                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month],
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                );
-              }),
+              ..._buildMonthLabelsFromPositions(monthPositions),
             ],
           ),
           const SizedBox(height: 8),
@@ -3561,13 +3592,16 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                 children: weeks.map((week) {
                   return Column(
                     children: week.map((day) {
-                      final count = activityCounts[_dateKey(day)] ?? 0;
+                      final isCurrentYear = day.year == year;
+                      final count = isCurrentYear ? (activityCounts[_dateKey(day)] ?? 0) : 0;
                       return Container(
                         width: 10,
                         height: 10,
                         margin: const EdgeInsets.all(1),
                         decoration: BoxDecoration(
-                          color: _getContributionColor(count),
+                          color: isCurrentYear 
+                            ? _getContributionColor(count)
+                            : Colors.transparent,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       );
@@ -3633,6 +3667,92 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   String _dateKey(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, dynamic> _generateYearCalendar(int year) {
+    final weeks = <List<DateTime>>[];
+    final monthPositions = <int, int>{}; // month -> week index
+    
+    // Start from January 1st of the year
+    final startOfYear = DateTime(year, 1, 1);
+    final endOfYear = DateTime(year, 12, 31);
+    
+    // Find the Sunday before or on January 1st (GitHub style - starts on Sunday)
+    DateTime current = startOfYear;
+    while (current.weekday != DateTime.sunday) {
+      current = current.subtract(const Duration(days: 1));
+    }
+    
+    int weekIndex = 0;
+    
+    // Generate all weeks until we pass December 31st
+    while (current.isBefore(endOfYear.add(const Duration(days: 7)))) {
+      final week = <DateTime>[];
+      
+      // Generate 7 days for this week
+      for (int i = 0; i < 7; i++) {
+        week.add(current);
+        
+        // Track where each month starts (1st of each month)
+        if (current.year == year && current.day == 1) {
+          monthPositions[current.month] = weekIndex;
+        }
+        
+        current = current.add(const Duration(days: 1));
+      }
+      
+      weeks.add(week);
+      weekIndex++;
+      
+      // Stop if we've completed the year and the week
+      if (current.year > year) break;
+    }
+    
+    return {
+      'weeks': weeks,
+      'monthPositions': monthPositions,
+    };
+  }
+
+  List<Widget> _buildMonthLabelsFromPositions(Map<int, int> monthPositions) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    final labels = <Widget>[];
+    int currentWeekPos = 0;
+    
+    for (int month = 1; month <= 12; month++) {
+      final weekPos = monthPositions[month];
+      if (weekPos != null) {
+        // Add spacing to reach the correct position
+        final spacing = (weekPos - currentWeekPos) * 12.0;
+        if (spacing > 0) {
+          labels.add(SizedBox(width: spacing));
+        }
+        
+        // Calculate how many weeks this month spans
+        final nextMonthPos = monthPositions[month + 1];
+        final monthWidth = nextMonthPos != null 
+          ? (nextMonthPos - weekPos) * 12.0
+          : 4 * 12.0; // Default width for last month
+        
+        labels.add(
+          SizedBox(
+            width: monthWidth,
+            child: Text(
+              monthNames[month - 1],
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        );
+        
+        currentWeekPos = nextMonthPos ?? (weekPos + 4);
+      }
+    }
+    
+    return labels;
   }
 }
 
