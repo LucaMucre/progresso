@@ -443,12 +443,29 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Widget _buildFilters() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Theme.of(context).colorScheme.surfaceContainer.withValues(alpha: 0.8),
+                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+                width: 1,
+              ),
+            ),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -513,6 +530,9 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
             ),
           ],
         ],
+      ),
+          ),
+        ),
       ),
     );
   }
@@ -586,13 +606,35 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: 0.15),
+            color.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         mainAxisSize: MainAxisSize.min,
@@ -622,6 +664,9 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
             textAlign: TextAlign.start,
           ),
         ],
+      ),
+          ),
+        ),
       ),
     );
   }
@@ -654,8 +699,9 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
               horizontalInterval: 1,
               getDrawingHorizontalLine: (value) {
                 return FlLine(
-                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                  strokeWidth: 1,
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+                  strokeWidth: 0.5,
+                  dashArray: [5, 5],
                 );
               },
             ),
@@ -704,19 +750,33 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
               LineChartBarData(
                 spots: spots,
                 isCurved: true,
-                color: AppTheme.primaryColor,
-                barWidth: 3,
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primaryColor,
+                    AppTheme.primaryColor.withValues(alpha: 0.7),
+                  ],
+                ),
+                barWidth: 4,
                 isStrokeCapRound: true,
                 belowBarData: BarAreaData(
                   show: true,
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppTheme.primaryColor.withValues(alpha: 0.3),
+                      AppTheme.primaryColor.withValues(alpha: 0.0),
+                    ],
+                  ),
                 ),
                 dotData: FlDotData(
                   show: spots.length <= 31, // Only show dots for smaller datasets
                   getDotPainter: (spot, percent, barData, index) {
                     return FlDotCirclePainter(
-                      radius: 3,
-                      color: AppTheme.primaryColor,
+                      radius: 4,
+                      color: Colors.white,
+                      strokeWidth: 2,
+                      strokeColor: AppTheme.primaryColor,
                     );
                   },
                 ),
@@ -779,23 +839,30 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
               final area = entry.key;
               final data = entry.value;
               final minutes = data['minutes'] as int;
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: data['color'] as Color,
-                      shape: BoxShape.circle,
+              return Container(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: data['color'] as Color,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$area (${(minutes / 60).toStringAsFixed(1)}h)',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        '$area (${(minutes / 60).toStringAsFixed(1)}h)',
+                        style: const TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
               );
             }).toList(),
           ),
@@ -848,8 +915,9 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
               horizontalInterval: 1,
               getDrawingHorizontalLine: (value) {
                 return FlLine(
-                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                  strokeWidth: 1,
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+                  strokeWidth: 0.5,
+                  dashArray: [5, 5],
                 );
               },
             ),
@@ -944,7 +1012,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
           barRods: [
             BarChartRodData(
               toY: stackY,
-              width: 25,
+              width: 20,
               rodStackItems: barRods,
               borderRadius: BorderRadius.circular(2),
             ),
@@ -959,7 +1027,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
         .reduce(math.max) * 1.2;
 
     return _buildChartContainer(
-      'Daily Activity Hours by Life Area',
+      'Daily Activity Hours',
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -976,8 +1044,9 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
                   horizontalInterval: math.max(1.0, maxHours / 6),
                   getDrawingHorizontalLine: (value) {
                     return FlLine(
-                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                      strokeWidth: 1,
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+                      strokeWidth: 0.5,
+                      dashArray: [5, 5],
                     );
                   },
                 ),
@@ -1036,27 +1105,27 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
           const SizedBox(height: 16),
           // Legend
           Wrap(
-            spacing: 16,
-            runSpacing: 8,
+            spacing: 8,
+            runSpacing: 6,
             children: sortedLifeAreas.map((lifeArea) {
               final color = _getColorForArea(lifeArea);
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 16,
-                    height: 16,
+                    width: 12,
+                    height: 12,
                     decoration: BoxDecoration(
                       color: color,
-                      borderRadius: BorderRadius.circular(3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Text(
                     lifeArea,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                      fontSize: 12,
+                      fontSize: 11,
                     ),
                   ),
                 ],
@@ -1156,30 +1225,77 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
   Widget _buildChartContainer(String title, Widget chart) {
     return Container(
-      padding: const EdgeInsets.all(24),
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: AppTheme.glassContainer(
-        color: Theme.of(context).colorScheme.primary,
-        opacity: 0.02,
-        borderRadius: 20.0,
-        borderOpacity: 0.05,
-      ).copyWith(
-        boxShadow: AppTheme.modernShadow(elevation: 1.0),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.onSurface,
-              letterSpacing: -0.5,
+      margin: const EdgeInsets.only(bottom: 16),
+      width: double.infinity,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Theme.of(context).colorScheme.primary,
+                            Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          letterSpacing: -0.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                chart,
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          chart,
-        ],
+        ),
       ),
     );
   }
