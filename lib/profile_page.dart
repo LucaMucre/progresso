@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -52,6 +53,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, int> _areaActivityCounts = {};
   Map<String, int> _dailyActivityCounts = {};
   bool _isAnonymous = false;
+  StreamSubscription? _authSub;
 
   final _supabase = Supabase.instance.client;
   final _localLogsRepo = LocalLogsRepository();
@@ -67,6 +69,7 @@ class _ProfilePageState extends State<ProfilePage> {
     lifeAreasChangedTick.addListener(_onLifeAreasChanged);
     _subscribeToUserChanges();
     _subscribeToActivityChanges();
+    _subscribeToAuthChanges();
     _initializeAchievements();
     // Nach Schließen von Popups keine erzwungenen Reloads auslösen
     LevelUpService.addOnDialogsClosed(() {
@@ -144,6 +147,34 @@ class _ProfilePageState extends State<ProfilePage> {
     channel.subscribe();
   }
   
+  void _subscribeToAuthChanges() {
+    _authSub = _supabase.auth.onAuthStateChange.listen((data) async {
+      final event = data.event;
+      
+      // React to login/logout changes
+      if (event == AuthChangeEvent.signedIn || 
+          event == AuthChangeEvent.signedOut || 
+          event == AuthChangeEvent.userUpdated) {
+        
+        // Update anonymous status
+        await _initializeAnonymousStatus();
+        
+        // Reload profile data
+        await _loadProfile();
+        
+        // Reload statistics - but DON'T check achievements on auth change
+        // to prevent duplicate popups
+        await _loadStatisticsWithoutAchievementCheck();
+        
+        // Update subscriptions
+        _subscribeToUserChanges();
+        _subscribeToActivityChanges();
+        
+        if (mounted) setState(() {});
+      }
+    });
+  }
+  
   Future<void> _initializeAchievements() async {
     await AchievementService.loadUnlockedAchievements();
     if (mounted) setState(() {}); // refresh counts/flags after loading persisted unlocks
@@ -213,7 +244,15 @@ class _ProfilePageState extends State<ProfilePage> {
     _usersChannel = channel;
   }
 
+  Future<void> _loadStatisticsWithoutAchievementCheck() async {
+    return _loadStatisticsInternal(checkAchievements: false);
+  }
+  
   Future<void> _loadStatistics() async {
+    return _loadStatisticsInternal(checkAchievements: true);
+  }
+  
+  Future<void> _loadStatisticsInternal({required bool checkAchievements}) async {
     try {
       // Load in parallel using local repository
       final futures = <Future<dynamic>>[
@@ -307,8 +346,10 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         _dailyActivityCounts = dailyCounts;
       
-      // Check achievements after loading statistics
-      await _checkAchievements();
+      // Check achievements after loading statistics (only if requested)
+      if (checkAchievements) {
+        await _checkAchievements();
+      }
       
       if (mounted) {
         setState(() {
@@ -1631,6 +1672,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _navigateToRegistration() async {
     try {
+      // Set redirect to profile page (index 4) after login
+      setPendingRedirectAfterLogin(4);
+      
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
@@ -1650,7 +1694,7 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) {
-        throw Exception('Kein authentifizierter User für Migration gefunden');
+        throw Exception('No authenticated user found for migration');
       }
 
       final shouldMigrate = await _showMigrationDialog();
@@ -1661,19 +1705,19 @@ class _ProfilePageState extends State<ProfilePage> {
         context: context,
         barrierDismissible: false,
         builder: (context) => const AlertDialog(
-          title: Text('Daten werden übertragen...'),
+          title: Text('Syncing data...'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('Bitte warten, während deine Daten übertragen werden.'),
+              Text('Please wait while your data is being synchronized.'),
             ],
           ),
         ),
       );
 
-      await AnonymousMigrationService.migrateAnonymousDataToAccount(user.id);
+      await AnonymousMigrationService.syncLocalDataToCloud(user.id);
 
       if (mounted) Navigator.pop(context);
 
@@ -1681,14 +1725,14 @@ class _ProfilePageState extends State<ProfilePage> {
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('✅ Migration erfolgreich!'),
+            title: const Text('✅ Sync successful!'),
             content: const Text(
-              'Alle deine Daten wurden erfolgreich zu deinem Account übertragen.',
+              'Your data has been successfully synchronized with your account.',
             ),
             actions: [
               ElevatedButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Fertig'),
+                child: const Text('Done'),
               ),
             ],
           ),
@@ -1698,7 +1742,7 @@ class _ProfilePageState extends State<ProfilePage> {
       await _initializeAnonymousStatus();
       
     } catch (e) {
-      LoggingService.error('Fehler bei der Datenmigration', e);
+      LoggingService.error('Error during data synchronization', e);
       
       if (mounted) Navigator.pop(context);
       
@@ -1706,8 +1750,8 @@ class _ProfilePageState extends State<ProfilePage> {
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('❌ Migration failed'),
-            content: Text('Error during data transfer: $e'),
+            title: const Text('❌ Sync failed'),
+            content: Text('Error during data synchronization: $e'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -1730,7 +1774,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final result = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Daten übertragen'),
+          title: const Text('Sync data'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1746,11 +1790,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                   ),
                   child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('ℹ️ After transfer:'),
+                      Text('ℹ️ After sync:'),
                       Text('• Your data is backed up in the cloud'),
                       Text('• Synchronization between devices enabled'),
-                      Text('• Local data will be deleted'),
+                      Text('• Local data remains available offline'),
                     ],
                   ),
                 ),
@@ -1760,11 +1805,11 @@ class _ProfilePageState extends State<ProfilePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Abbrechen'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Daten übertragen'),
+              child: const Text('Sync data'),
             ),
           ],
         ),
@@ -1779,6 +1824,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _usersChannel?.unsubscribe();
     AvatarSyncService.avatarVersion.removeListener(_loadProfile);
     logsChangedTick.removeListener(_onExternalLogsChanged);

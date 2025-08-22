@@ -12,7 +12,8 @@ part of 'action_models.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 ActionTemplate _$ActionTemplateFromJson(Map<String, dynamic> json) {
   return _ActionTemplate.fromJson(json);
@@ -45,17 +46,19 @@ mixin _$ActionTemplate {
 /// @nodoc
 abstract class $ActionTemplateCopyWith<$Res> {
   factory $ActionTemplateCopyWith(
-          ActionTemplate value, $Res Function(ActionTemplate) then) =
-      _$ActionTemplateCopyWithImpl<$Res, ActionTemplate>;
+    ActionTemplate value,
+    $Res Function(ActionTemplate) then,
+  ) = _$ActionTemplateCopyWithImpl<$Res, ActionTemplate>;
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String category,
-      @JsonKey(name: 'base_xp') int baseXp,
-      @JsonKey(name: 'attr_strength') int attrStrength,
-      @JsonKey(name: 'attr_endurance') int attrEndurance,
-      @JsonKey(name: 'attr_knowledge') int attrKnowledge});
+  $Res call({
+    String id,
+    String name,
+    String category,
+    @JsonKey(name: 'base_xp') int baseXp,
+    @JsonKey(name: 'attr_strength') int attrStrength,
+    @JsonKey(name: 'attr_endurance') int attrEndurance,
+    @JsonKey(name: 'attr_knowledge') int attrKnowledge,
+  });
 }
 
 /// @nodoc
@@ -81,55 +84,60 @@ class _$ActionTemplateCopyWithImpl<$Res, $Val extends ActionTemplate>
     Object? attrEndurance = null,
     Object? attrKnowledge = null,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      category: null == category
-          ? _value.category
-          : category // ignore: cast_nullable_to_non_nullable
-              as String,
-      baseXp: null == baseXp
-          ? _value.baseXp
-          : baseXp // ignore: cast_nullable_to_non_nullable
-              as int,
-      attrStrength: null == attrStrength
-          ? _value.attrStrength
-          : attrStrength // ignore: cast_nullable_to_non_nullable
-              as int,
-      attrEndurance: null == attrEndurance
-          ? _value.attrEndurance
-          : attrEndurance // ignore: cast_nullable_to_non_nullable
-              as int,
-      attrKnowledge: null == attrKnowledge
-          ? _value.attrKnowledge
-          : attrKnowledge // ignore: cast_nullable_to_non_nullable
-              as int,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            name: null == name
+                ? _value.name
+                : name // ignore: cast_nullable_to_non_nullable
+                      as String,
+            category: null == category
+                ? _value.category
+                : category // ignore: cast_nullable_to_non_nullable
+                      as String,
+            baseXp: null == baseXp
+                ? _value.baseXp
+                : baseXp // ignore: cast_nullable_to_non_nullable
+                      as int,
+            attrStrength: null == attrStrength
+                ? _value.attrStrength
+                : attrStrength // ignore: cast_nullable_to_non_nullable
+                      as int,
+            attrEndurance: null == attrEndurance
+                ? _value.attrEndurance
+                : attrEndurance // ignore: cast_nullable_to_non_nullable
+                      as int,
+            attrKnowledge: null == attrKnowledge
+                ? _value.attrKnowledge
+                : attrKnowledge // ignore: cast_nullable_to_non_nullable
+                      as int,
+          )
+          as $Val,
+    );
   }
 }
 
 /// @nodoc
 abstract class _$$ActionTemplateImplCopyWith<$Res>
     implements $ActionTemplateCopyWith<$Res> {
-  factory _$$ActionTemplateImplCopyWith(_$ActionTemplateImpl value,
-          $Res Function(_$ActionTemplateImpl) then) =
-      __$$ActionTemplateImplCopyWithImpl<$Res>;
+  factory _$$ActionTemplateImplCopyWith(
+    _$ActionTemplateImpl value,
+    $Res Function(_$ActionTemplateImpl) then,
+  ) = __$$ActionTemplateImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String category,
-      @JsonKey(name: 'base_xp') int baseXp,
-      @JsonKey(name: 'attr_strength') int attrStrength,
-      @JsonKey(name: 'attr_endurance') int attrEndurance,
-      @JsonKey(name: 'attr_knowledge') int attrKnowledge});
+  $Res call({
+    String id,
+    String name,
+    String category,
+    @JsonKey(name: 'base_xp') int baseXp,
+    @JsonKey(name: 'attr_strength') int attrStrength,
+    @JsonKey(name: 'attr_endurance') int attrEndurance,
+    @JsonKey(name: 'attr_knowledge') int attrKnowledge,
+  });
 }
 
 /// @nodoc
@@ -137,8 +145,9 @@ class __$$ActionTemplateImplCopyWithImpl<$Res>
     extends _$ActionTemplateCopyWithImpl<$Res, _$ActionTemplateImpl>
     implements _$$ActionTemplateImplCopyWith<$Res> {
   __$$ActionTemplateImplCopyWithImpl(
-      _$ActionTemplateImpl _value, $Res Function(_$ActionTemplateImpl) _then)
-      : super(_value, _then);
+    _$ActionTemplateImpl _value,
+    $Res Function(_$ActionTemplateImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of ActionTemplate
   /// with the given fields replaced by the non-null parameter values.
@@ -153,50 +162,53 @@ class __$$ActionTemplateImplCopyWithImpl<$Res>
     Object? attrEndurance = null,
     Object? attrKnowledge = null,
   }) {
-    return _then(_$ActionTemplateImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      category: null == category
-          ? _value.category
-          : category // ignore: cast_nullable_to_non_nullable
-              as String,
-      baseXp: null == baseXp
-          ? _value.baseXp
-          : baseXp // ignore: cast_nullable_to_non_nullable
-              as int,
-      attrStrength: null == attrStrength
-          ? _value.attrStrength
-          : attrStrength // ignore: cast_nullable_to_non_nullable
-              as int,
-      attrEndurance: null == attrEndurance
-          ? _value.attrEndurance
-          : attrEndurance // ignore: cast_nullable_to_non_nullable
-              as int,
-      attrKnowledge: null == attrKnowledge
-          ? _value.attrKnowledge
-          : attrKnowledge // ignore: cast_nullable_to_non_nullable
-              as int,
-    ));
+    return _then(
+      _$ActionTemplateImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        name: null == name
+            ? _value.name
+            : name // ignore: cast_nullable_to_non_nullable
+                  as String,
+        category: null == category
+            ? _value.category
+            : category // ignore: cast_nullable_to_non_nullable
+                  as String,
+        baseXp: null == baseXp
+            ? _value.baseXp
+            : baseXp // ignore: cast_nullable_to_non_nullable
+                  as int,
+        attrStrength: null == attrStrength
+            ? _value.attrStrength
+            : attrStrength // ignore: cast_nullable_to_non_nullable
+                  as int,
+        attrEndurance: null == attrEndurance
+            ? _value.attrEndurance
+            : attrEndurance // ignore: cast_nullable_to_non_nullable
+                  as int,
+        attrKnowledge: null == attrKnowledge
+            ? _value.attrKnowledge
+            : attrKnowledge // ignore: cast_nullable_to_non_nullable
+                  as int,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$ActionTemplateImpl implements _ActionTemplate {
-  const _$ActionTemplateImpl(
-      {required this.id,
-      required this.name,
-      required this.category,
-      @JsonKey(name: 'base_xp') required this.baseXp,
-      @JsonKey(name: 'attr_strength') required this.attrStrength,
-      @JsonKey(name: 'attr_endurance') required this.attrEndurance,
-      @JsonKey(name: 'attr_knowledge') required this.attrKnowledge});
+  const _$ActionTemplateImpl({
+    required this.id,
+    required this.name,
+    required this.category,
+    @JsonKey(name: 'base_xp') required this.baseXp,
+    @JsonKey(name: 'attr_strength') required this.attrStrength,
+    @JsonKey(name: 'attr_endurance') required this.attrEndurance,
+    @JsonKey(name: 'attr_knowledge') required this.attrKnowledge,
+  });
 
   factory _$ActionTemplateImpl.fromJson(Map<String, dynamic> json) =>
       _$$ActionTemplateImplFromJson(json);
@@ -245,8 +257,16 @@ class _$ActionTemplateImpl implements _ActionTemplate {
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, name, category, baseXp,
-      attrStrength, attrEndurance, attrKnowledge);
+  int get hashCode => Object.hash(
+    runtimeType,
+    id,
+    name,
+    category,
+    baseXp,
+    attrStrength,
+    attrEndurance,
+    attrKnowledge,
+  );
 
   /// Create a copy of ActionTemplate
   /// with the given fields replaced by the non-null parameter values.
@@ -255,26 +275,26 @@ class _$ActionTemplateImpl implements _ActionTemplate {
   @pragma('vm:prefer-inline')
   _$$ActionTemplateImplCopyWith<_$ActionTemplateImpl> get copyWith =>
       __$$ActionTemplateImplCopyWithImpl<_$ActionTemplateImpl>(
-          this, _$identity);
+        this,
+        _$identity,
+      );
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$ActionTemplateImplToJson(
-      this,
-    );
+    return _$$ActionTemplateImplToJson(this);
   }
 }
 
 abstract class _ActionTemplate implements ActionTemplate {
-  const factory _ActionTemplate(
-          {required final String id,
-          required final String name,
-          required final String category,
-          @JsonKey(name: 'base_xp') required final int baseXp,
-          @JsonKey(name: 'attr_strength') required final int attrStrength,
-          @JsonKey(name: 'attr_endurance') required final int attrEndurance,
-          @JsonKey(name: 'attr_knowledge') required final int attrKnowledge}) =
-      _$ActionTemplateImpl;
+  const factory _ActionTemplate({
+    required final String id,
+    required final String name,
+    required final String category,
+    @JsonKey(name: 'base_xp') required final int baseXp,
+    @JsonKey(name: 'attr_strength') required final int attrStrength,
+    @JsonKey(name: 'attr_endurance') required final int attrEndurance,
+    @JsonKey(name: 'attr_knowledge') required final int attrKnowledge,
+  }) = _$ActionTemplateImpl;
 
   factory _ActionTemplate.fromJson(Map<String, dynamic> json) =
       _$ActionTemplateImpl.fromJson;
@@ -342,15 +362,16 @@ abstract class $ActionLogCopyWith<$Res> {
   factory $ActionLogCopyWith(ActionLog value, $Res Function(ActionLog) then) =
       _$ActionLogCopyWithImpl<$Res, ActionLog>;
   @useResult
-  $Res call(
-      {String id,
-      @JsonKey(name: 'occurred_at') DateTime occurredAt,
-      @JsonKey(name: 'duration_min') int? durationMin,
-      String? notes,
-      @JsonKey(name: 'earned_xp') int earnedXp,
-      @JsonKey(name: 'template_id') String? templateId,
-      @JsonKey(name: 'activity_name') String? activityName,
-      @JsonKey(name: 'image_url') String? imageUrl});
+  $Res call({
+    String id,
+    @JsonKey(name: 'occurred_at') DateTime occurredAt,
+    @JsonKey(name: 'duration_min') int? durationMin,
+    String? notes,
+    @JsonKey(name: 'earned_xp') int earnedXp,
+    @JsonKey(name: 'template_id') String? templateId,
+    @JsonKey(name: 'activity_name') String? activityName,
+    @JsonKey(name: 'image_url') String? imageUrl,
+  });
 }
 
 /// @nodoc
@@ -377,40 +398,43 @@ class _$ActionLogCopyWithImpl<$Res, $Val extends ActionLog>
     Object? activityName = freezed,
     Object? imageUrl = freezed,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      occurredAt: null == occurredAt
-          ? _value.occurredAt
-          : occurredAt // ignore: cast_nullable_to_non_nullable
-              as DateTime,
-      durationMin: freezed == durationMin
-          ? _value.durationMin
-          : durationMin // ignore: cast_nullable_to_non_nullable
-              as int?,
-      notes: freezed == notes
-          ? _value.notes
-          : notes // ignore: cast_nullable_to_non_nullable
-              as String?,
-      earnedXp: null == earnedXp
-          ? _value.earnedXp
-          : earnedXp // ignore: cast_nullable_to_non_nullable
-              as int,
-      templateId: freezed == templateId
-          ? _value.templateId
-          : templateId // ignore: cast_nullable_to_non_nullable
-              as String?,
-      activityName: freezed == activityName
-          ? _value.activityName
-          : activityName // ignore: cast_nullable_to_non_nullable
-              as String?,
-      imageUrl: freezed == imageUrl
-          ? _value.imageUrl
-          : imageUrl // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            occurredAt: null == occurredAt
+                ? _value.occurredAt
+                : occurredAt // ignore: cast_nullable_to_non_nullable
+                      as DateTime,
+            durationMin: freezed == durationMin
+                ? _value.durationMin
+                : durationMin // ignore: cast_nullable_to_non_nullable
+                      as int?,
+            notes: freezed == notes
+                ? _value.notes
+                : notes // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            earnedXp: null == earnedXp
+                ? _value.earnedXp
+                : earnedXp // ignore: cast_nullable_to_non_nullable
+                      as int,
+            templateId: freezed == templateId
+                ? _value.templateId
+                : templateId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            activityName: freezed == activityName
+                ? _value.activityName
+                : activityName // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            imageUrl: freezed == imageUrl
+                ? _value.imageUrl
+                : imageUrl // ignore: cast_nullable_to_non_nullable
+                      as String?,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -418,19 +442,21 @@ class _$ActionLogCopyWithImpl<$Res, $Val extends ActionLog>
 abstract class _$$ActionLogImplCopyWith<$Res>
     implements $ActionLogCopyWith<$Res> {
   factory _$$ActionLogImplCopyWith(
-          _$ActionLogImpl value, $Res Function(_$ActionLogImpl) then) =
-      __$$ActionLogImplCopyWithImpl<$Res>;
+    _$ActionLogImpl value,
+    $Res Function(_$ActionLogImpl) then,
+  ) = __$$ActionLogImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      @JsonKey(name: 'occurred_at') DateTime occurredAt,
-      @JsonKey(name: 'duration_min') int? durationMin,
-      String? notes,
-      @JsonKey(name: 'earned_xp') int earnedXp,
-      @JsonKey(name: 'template_id') String? templateId,
-      @JsonKey(name: 'activity_name') String? activityName,
-      @JsonKey(name: 'image_url') String? imageUrl});
+  $Res call({
+    String id,
+    @JsonKey(name: 'occurred_at') DateTime occurredAt,
+    @JsonKey(name: 'duration_min') int? durationMin,
+    String? notes,
+    @JsonKey(name: 'earned_xp') int earnedXp,
+    @JsonKey(name: 'template_id') String? templateId,
+    @JsonKey(name: 'activity_name') String? activityName,
+    @JsonKey(name: 'image_url') String? imageUrl,
+  });
 }
 
 /// @nodoc
@@ -438,8 +464,9 @@ class __$$ActionLogImplCopyWithImpl<$Res>
     extends _$ActionLogCopyWithImpl<$Res, _$ActionLogImpl>
     implements _$$ActionLogImplCopyWith<$Res> {
   __$$ActionLogImplCopyWithImpl(
-      _$ActionLogImpl _value, $Res Function(_$ActionLogImpl) _then)
-      : super(_value, _then);
+    _$ActionLogImpl _value,
+    $Res Function(_$ActionLogImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of ActionLog
   /// with the given fields replaced by the non-null parameter values.
@@ -455,55 +482,58 @@ class __$$ActionLogImplCopyWithImpl<$Res>
     Object? activityName = freezed,
     Object? imageUrl = freezed,
   }) {
-    return _then(_$ActionLogImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      occurredAt: null == occurredAt
-          ? _value.occurredAt
-          : occurredAt // ignore: cast_nullable_to_non_nullable
-              as DateTime,
-      durationMin: freezed == durationMin
-          ? _value.durationMin
-          : durationMin // ignore: cast_nullable_to_non_nullable
-              as int?,
-      notes: freezed == notes
-          ? _value.notes
-          : notes // ignore: cast_nullable_to_non_nullable
-              as String?,
-      earnedXp: null == earnedXp
-          ? _value.earnedXp
-          : earnedXp // ignore: cast_nullable_to_non_nullable
-              as int,
-      templateId: freezed == templateId
-          ? _value.templateId
-          : templateId // ignore: cast_nullable_to_non_nullable
-              as String?,
-      activityName: freezed == activityName
-          ? _value.activityName
-          : activityName // ignore: cast_nullable_to_non_nullable
-              as String?,
-      imageUrl: freezed == imageUrl
-          ? _value.imageUrl
-          : imageUrl // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ));
+    return _then(
+      _$ActionLogImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        occurredAt: null == occurredAt
+            ? _value.occurredAt
+            : occurredAt // ignore: cast_nullable_to_non_nullable
+                  as DateTime,
+        durationMin: freezed == durationMin
+            ? _value.durationMin
+            : durationMin // ignore: cast_nullable_to_non_nullable
+                  as int?,
+        notes: freezed == notes
+            ? _value.notes
+            : notes // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        earnedXp: null == earnedXp
+            ? _value.earnedXp
+            : earnedXp // ignore: cast_nullable_to_non_nullable
+                  as int,
+        templateId: freezed == templateId
+            ? _value.templateId
+            : templateId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        activityName: freezed == activityName
+            ? _value.activityName
+            : activityName // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        imageUrl: freezed == imageUrl
+            ? _value.imageUrl
+            : imageUrl // ignore: cast_nullable_to_non_nullable
+                  as String?,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$ActionLogImpl implements _ActionLog {
-  const _$ActionLogImpl(
-      {required this.id,
-      @JsonKey(name: 'occurred_at') required this.occurredAt,
-      @JsonKey(name: 'duration_min') this.durationMin,
-      this.notes,
-      @JsonKey(name: 'earned_xp') required this.earnedXp,
-      @JsonKey(name: 'template_id') this.templateId,
-      @JsonKey(name: 'activity_name') this.activityName,
-      @JsonKey(name: 'image_url') this.imageUrl});
+  const _$ActionLogImpl({
+    required this.id,
+    @JsonKey(name: 'occurred_at') required this.occurredAt,
+    @JsonKey(name: 'duration_min') this.durationMin,
+    this.notes,
+    @JsonKey(name: 'earned_xp') required this.earnedXp,
+    @JsonKey(name: 'template_id') this.templateId,
+    @JsonKey(name: 'activity_name') this.activityName,
+    @JsonKey(name: 'image_url') this.imageUrl,
+  });
 
   factory _$ActionLogImpl.fromJson(Map<String, dynamic> json) =>
       _$$ActionLogImplFromJson(json);
@@ -559,8 +589,17 @@ class _$ActionLogImpl implements _ActionLog {
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, occurredAt, durationMin,
-      notes, earnedXp, templateId, activityName, imageUrl);
+  int get hashCode => Object.hash(
+    runtimeType,
+    id,
+    occurredAt,
+    durationMin,
+    notes,
+    earnedXp,
+    templateId,
+    activityName,
+    imageUrl,
+  );
 
   /// Create a copy of ActionLog
   /// with the given fields replaced by the non-null parameter values.
@@ -572,22 +611,21 @@ class _$ActionLogImpl implements _ActionLog {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$ActionLogImplToJson(
-      this,
-    );
+    return _$$ActionLogImplToJson(this);
   }
 }
 
 abstract class _ActionLog implements ActionLog {
-  const factory _ActionLog(
-      {required final String id,
-      @JsonKey(name: 'occurred_at') required final DateTime occurredAt,
-      @JsonKey(name: 'duration_min') final int? durationMin,
-      final String? notes,
-      @JsonKey(name: 'earned_xp') required final int earnedXp,
-      @JsonKey(name: 'template_id') final String? templateId,
-      @JsonKey(name: 'activity_name') final String? activityName,
-      @JsonKey(name: 'image_url') final String? imageUrl}) = _$ActionLogImpl;
+  const factory _ActionLog({
+    required final String id,
+    @JsonKey(name: 'occurred_at') required final DateTime occurredAt,
+    @JsonKey(name: 'duration_min') final int? durationMin,
+    final String? notes,
+    @JsonKey(name: 'earned_xp') required final int earnedXp,
+    @JsonKey(name: 'template_id') final String? templateId,
+    @JsonKey(name: 'activity_name') final String? activityName,
+    @JsonKey(name: 'image_url') final String? imageUrl,
+  }) = _$ActionLogImpl;
 
   factory _ActionLog.fromJson(Map<String, dynamic> json) =
       _$ActionLogImpl.fromJson;

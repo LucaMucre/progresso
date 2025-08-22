@@ -168,7 +168,6 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
               
               // Extract area information
               final area = obj['area'] as String?;
-              final category = obj['category'] as String?;
               final lifeArea = obj['life_area'] as String?;
               
               final searchName = area?.trim() ?? lifeArea?.trim() ?? '';

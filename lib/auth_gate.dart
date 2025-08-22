@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_shell.dart';
 import 'services/achievement_service.dart';
 import 'services/anonymous_user_service.dart';
+import 'services/anonymous_migration_service.dart';
+import 'navigation.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -30,11 +32,41 @@ class _AuthGateState extends State<AuthGate> {
           _resetDialogShown = true;
           await _showInAppPasswordReset();
         }
-        // Nach erfolgreichem Login Achievements des Users früh laden
+        // Nach erfolgreichem Login/Registrierung
         if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.userUpdated) {
           try {
-            await AchievementService.loadUnlockedAchievements();
-          } catch (_) {}
+            final user = Supabase.instance.client.auth.currentUser;
+            if (user != null) {
+              // 1. Prüfen ob anonyme Daten migriert werden müssen
+              final canMigrate = await AnonymousMigrationService.canMigrateData();
+              if (canMigrate) {
+                if (kDebugMode) debugPrint('Synchronisiere lokale Daten mit Cloud für User: ${user.id}');
+                try {
+                  await AnonymousMigrationService.syncLocalDataToCloud(user.id);
+                  if (kDebugMode) debugPrint('Synchronisation erfolgreich abgeschlossen');
+                } catch (migrationError) {
+                  // Sync failed - but don't lose the user session
+                  if (kDebugMode) debugPrint('WARNUNG: Synchronisation fehlgeschlagen, lokale Daten bleiben erhalten: $migrationError');
+                  // Continue with login flow even if migration fails
+                }
+              }
+              
+              // 2. Achievements des Users laden
+              await AchievementService.loadUnlockedAchievements();
+              
+              // 3. Check for pending redirect after login
+              final pendingTabIndex = getPendingRedirectAfterLogin();
+              if (pendingTabIndex != null) {
+                clearPendingRedirectAfterLogin();
+                // Small delay to ensure UI is ready
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  goToHomeTab(pendingTabIndex);
+                });
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) debugPrint('Fehler bei Login-Migration: $e');
+          }
         }
         if (mounted) setState(() {}); // beim Ein-/Ausloggen neu rendern
       });
@@ -99,11 +131,11 @@ class _AuthGateState extends State<AuthGate> {
               }
               try {
                 await Supabase.instance.client.auth.updateUser(UserAttributes(password: a));
-                if (mounted) {
+                if (ctx.mounted) {
                   Navigator.pop(ctx);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort aktualisiert. Bitte neu einloggen.')));
-                  }
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort aktualisiert. Bitte neu einloggen.')));
                 }
                 // Optional: Session invalidieren
                 await Supabase.instance.client.auth.signOut();

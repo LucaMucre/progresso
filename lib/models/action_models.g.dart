@@ -18,16 +18,16 @@ _$ActionTemplateImpl _$$ActionTemplateImplFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$$ActionTemplateImplToJson(
-        _$ActionTemplateImpl instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'category': instance.category,
-      'base_xp': instance.baseXp,
-      'attr_strength': instance.attrStrength,
-      'attr_endurance': instance.attrEndurance,
-      'attr_knowledge': instance.attrKnowledge,
-    };
+  _$ActionTemplateImpl instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'name': instance.name,
+  'category': instance.category,
+  'base_xp': instance.baseXp,
+  'attr_strength': instance.attrStrength,
+  'attr_endurance': instance.attrEndurance,
+  'attr_knowledge': instance.attrKnowledge,
+};
 
 _$ActionLogImpl _$$ActionLogImplFromJson(Map<String, dynamic> json) =>
     _$ActionLogImpl(

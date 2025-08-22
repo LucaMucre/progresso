@@ -108,29 +108,60 @@ class AnonymousUserService {
     }
   }
   
-  /// Migriert anonyme Daten zu einem echten Account
-  static Future<void> migrateToRealAccount(String realUserId) async {
+  /// Markiert lokale Daten als mit Cloud synchronisiert (behält lokale Daten!)
+  static Future<void> markAsSynced(String realUserId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final oldAnonymousId = _cachedAnonymousId ?? await getOrCreateAnonymousUserId();
       
-      LoggingService.info('Starte Migration von anonymer ID $oldAnonymousId zu echter ID $realUserId');
+      LoggingService.info('Markiere lokale Daten als synchronisiert mit User: $realUserId');
       
-      // Hier würde die eigentliche Datenmigration stattfinden
-      // Das wird in einem separaten Service implementiert
+      // WICHTIG: Lokale Daten NICHT löschen!
+      // Nur markieren, dass sie jetzt mit einem echten Account verknüpft sind
+      await prefs.setString('synced_with_user_id', realUserId);
+      await prefs.setString('last_sync_time', DateTime.now().toIso8601String());
       
-      // Anonyme Flags löschen
-      await prefs.remove(_anonymousUserIdKey);
-      await prefs.remove(_isAnonymousKey);
-      await prefs.remove(_anonymousUserDataKey);
-      
-      // Cache aktualisieren
-      _cachedAnonymousId = realUserId;
+      // Cache aktualisieren, aber anonyme ID behalten für lokale Datenverwaltung
       _cachedIsAnonymous = false;
       
-      LoggingService.info('Migration abgeschlossen');
+      LoggingService.info('Synchronisation markiert - lokale Daten bleiben erhalten');
     } catch (e) {
-      LoggingService.error('Fehler bei der Migration zu echtem Account', e);
+      LoggingService.error('Fehler beim Markieren der Synchronisation', e);
+      rethrow;
+    }
+  }
+  
+  /// DEPRECATED: Verwende markAsSynced stattdessen
+  static Future<void> migrateToRealAccount(String realUserId) async {
+    // Diese Methode sollte nicht mehr verwendet werden
+    // Sie löscht lokale Daten, was wir nicht wollen
+    LoggingService.info('WARNUNG: migrateToRealAccount ist deprecated - verwende markAsSynced');
+    return markAsSynced(realUserId);
+  }
+  
+  /// Setzt den User zurück auf anonymen Status (nach Account-Löschung)
+  static Future<void> resetToAnonymous() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      LoggingService.info('Setze User zurück auf anonymen Status');
+      
+      // Entferne Sync-Markierungen
+      await prefs.remove('synced_with_user_id');
+      await prefs.remove('last_sync_time');
+      
+      // Setze anonymen Status zurück
+      await prefs.setBool(_isAnonymousKey, true);
+      
+      // Cache aktualisieren
+      _cachedIsAnonymous = true;
+      
+      // Stelle sicher, dass eine anonyme ID existiert
+      await getOrCreateAnonymousUserId();
+      
+      LoggingService.info('User ist jetzt wieder anonym - lokale Daten bleiben erhalten');
+    } catch (e) {
+      LoggingService.error('Fehler beim Zurücksetzen auf anonymen Status', e);
       rethrow;
     }
   }

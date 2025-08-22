@@ -31,3 +31,18 @@ void notifyLifeAreasChanged() {
   lifeAreasChangedTick.value++;
 }
 
+/// Global redirect after login - stores the tab index to navigate to after successful login
+int? _pendingRedirectTabIndex;
+
+void setPendingRedirectAfterLogin(int tabIndex) {
+  _pendingRedirectTabIndex = tabIndex;
+}
+
+void clearPendingRedirectAfterLogin() {
+  _pendingRedirectTabIndex = null;
+}
+
+int? getPendingRedirectAfterLogin() {
+  return _pendingRedirectTabIndex;
+}
+

@@ -10,6 +10,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'services/test_data_service.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/db_service.dart' as db_service;
+import 'services/anonymous_user_service.dart';
+import 'navigation.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -25,6 +27,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _newPw2Ctrl = TextEditingController();
   bool _crashOptIn = true;
   String _appVersion = '';
+  bool _isAnonymous = true;
 
   @override
   void initState() {
@@ -39,6 +42,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _crashOptIn = CrashReportingService.isUserOptedIn;
     try {
       _appVersion = await getPackageVersion();
+      _isAnonymous = await AnonymousUserService.isAnonymousUser();
     } catch (_) {}
     setState(() {
       _assistOptIn = false;
@@ -143,18 +147,24 @@ class _SettingsPageState extends State<SettingsPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete account permanently?'),
+        title: const Text('Delete cloud account?'),
         content: const Text(
-            'This will permanently delete your account and all associated data. This action cannot be undone.'),
+            'This will delete your cloud account and stop synchronization. Your local data will remain intact and you can continue using the app offline.'),
         actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete permanently')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true), 
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Delete cloud account'),
+          ),
         ],
       ),
     );
     if (ok != true) return;
 
-    // 1) Serverseitig löschen
+    // 1) Delete cloud account only
     try {
       final res = await Supabase.instance.client.functions.invoke(
         'delete-account',
@@ -162,20 +172,34 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account deleted: ${res.data ?? 'ok'}')),
+        const SnackBar(content: Text('Cloud account deleted. Continuing in offline mode.')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting account: $e')),
+        SnackBar(content: Text('Error deleting cloud account: $e')),
       );
-      // trotzdem lokal abmelden versuchen
     }
-    // 2) Lokale Session beenden; 403 nach Server-Delete ignorieren
+    
+    // 2) Sign out from cloud (but keep local data!)
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (_) {}
-    if (mounted) Navigator.of(context).pop();
+    
+    // 3) Mark user as anonymous again
+    await AnonymousUserService.resetToAnonymous();
+    
+    // 4) Navigate back to profile - try multiple approaches for robustness
+    if (mounted) {
+      // First try to set the tab
+      goToHomeTab(4);
+      
+      // Then navigate back to the root and ensure profile tab is selected
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      
+      // Force refresh of profile page
+      refreshProfileTab();
+    }
   }
 
   @override
@@ -190,21 +214,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 // Debug section (only in debug mode)
                 if (kDebugMode) ..._buildDebugSection(),
                 const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Logout'),
-                  onTap: () async {
-                    try {
-                      await Supabase.instance.client.auth.signOut();
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out')));
-                      Navigator.of(context).pop();
-                    } catch (e) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                    }
-                  },
-                ),
                 ListTile(
                   leading: const Icon(Icons.lock_reset),
                   title: const Text('Change password'),
@@ -259,13 +268,15 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: () => showLicensePage(context: context, applicationName: 'Progresso', applicationVersion: _appVersion),
                 ),
                 const SizedBox(height: 24),
-                ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: const Text('Delete account'),
-                  textColor: Colors.red,
-                  iconColor: Colors.red,
-                  onTap: _deleteAccount,
-                ),
+                // Only show delete account for authenticated users (not anonymous)
+                if (!_isAnonymous) 
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever, color: Colors.red),
+                    title: const Text('Delete account'),
+                    textColor: Colors.red,
+                    iconColor: Colors.red,
+                    onTap: _deleteAccount,
+                  ),
               ],
             ),
     );

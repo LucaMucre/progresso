@@ -8,7 +8,9 @@ import 'utils/js_interop_stub.dart'
     if (dart.library.html) 'utils/js_interop_web.dart' as js_interop;
 
 class AuthPage extends StatefulWidget {
-  const AuthPage({super.key});
+  final String? redirectTo;
+  
+  const AuthPage({super.key, this.redirectTo});
 
   @override
   State<AuthPage> createState() => _AuthPageState();
@@ -85,7 +87,8 @@ class _AuthPageState extends State<AuthPage> {
         if (res.session != null) {
           // Trigger save-password prompt now so it won't appear later
           _promptSavePasswordNow(email, pass);
-          // Successfully logged in → AuthGate will navigate to dashboard
+          // Successfully logged in → Navigate back with success
+          if (mounted) Navigator.pop(context, true);
           return;
         } else {
           setState(() {
@@ -188,11 +191,11 @@ class _AuthPageState extends State<AuthPage> {
                 children: [
                   TextSpan(
                     text: 'Track.\n',
-                    style: TextStyle(color: AppTheme.primaryColor),
+                    style: const TextStyle(color: AppTheme.primaryColor),
                   ),
                   TextSpan(
                     text: 'Grow.\n',
-                    style: TextStyle(color: AppTheme.successColor),
+                    style: const TextStyle(color: AppTheme.successColor),
                   ),
                   TextSpan(
                     text: 'Succeed.',
@@ -343,7 +346,7 @@ class _AuthPageState extends State<AuthPage> {
                 ),
                 child: Text(
                   _error!,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppTheme.errorColor,
                     fontWeight: FontWeight.w500,
                   ),

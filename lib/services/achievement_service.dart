@@ -42,6 +42,7 @@ enum AchievementType {
 class AchievementService {
   static final _supabase = Supabase.instance.client;
   static Set<String> _unlockedAchievements = {};
+  static Set<String> _shownAchievementPopups = {}; // Track which popups were already shown
   static Function(Achievement)? _onAchievementUnlocked;
   static bool _loadedFromStorage = false;
   // Track for which userId the achievements were loaded to avoid cross-user leakage
@@ -334,6 +335,13 @@ class AchievementService {
         if (kDebugMode) debugPrint('DEBUG: User changed, forcing reload');
       }
       
+      // Load shown popups (these persist across user changes to prevent re-showing)
+      final shownPopupsJson = prefs.getString('shown_achievement_popups');
+      if (shownPopupsJson != null) {
+        _shownAchievementPopups = (jsonDecode(shownPopupsJson) as List).cast<String>().toSet();
+        if (kDebugMode) debugPrint('DEBUG: Loaded shown popups: $_shownAchievementPopups');
+      }
+      
       // Migrate from legacy global key if present and user-specific key missing
       final userKey = await _prefsKeyForUser();
       // Using storage key: $userKey
@@ -419,6 +427,16 @@ class AchievementService {
     if (!_loadedFromStorage) {
       // Loading achievements from storage
       await loadUnlockedAchievements();
+    }
+  }
+  
+  static Future<void> _saveShownPopups() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('shown_achievement_popups', jsonEncode(_shownAchievementPopups.toList()));
+      if (kDebugMode) debugPrint('DEBUG: Saved shown popups: $_shownAchievementPopups');
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error saving shown popups: $e');
     }
   }
   
@@ -511,8 +529,16 @@ class AchievementService {
         _unlockedAchievements.add(achievement.id);
         newlyUnlocked.add(achievement);
         
-        // Trigger animation callback
-        _onAchievementUnlocked?.call(achievement);
+        // Only trigger popup if not already shown
+        if (!_shownAchievementPopups.contains(achievement.id)) {
+          _shownAchievementPopups.add(achievement.id);
+          // Save shown popups immediately
+          _saveShownPopups();
+          // Trigger animation callback
+          _onAchievementUnlocked?.call(achievement);
+        } else {
+          if (kDebugMode) debugPrint('DEBUG: Skipping popup for already shown achievement: ${achievement.id}');
+        }
       }
     }
     
@@ -530,7 +556,7 @@ class AchievementService {
                     'unlocked_at': DateTime.now().toIso8601String(),
                   })
               .toList();
-          await _supabase.from('user_achievements').upsert(rows);
+          await _supabase.from('user_achievements').upsert(rows, onConflict: 'user_id,achievement_id');
           // Achievements synced to server: ${rows.length}
         }
       } catch (e) {
@@ -652,5 +678,83 @@ class AchievementService {
   
   static int getTotalCount() {
     return _allAchievements.length;
+  }
+  
+  /// Lade Achievements für einen spezifischen User (für Migration)
+  static Future<Set<String>> getUnlockedAchievementsForUser(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userKey = 'unlocked_achievements_$userId';
+      final unlockedJson = prefs.getString(userKey);
+      
+      if (unlockedJson != null) {
+        final List<dynamic> unlocked = jsonDecode(unlockedJson);
+        return unlocked.cast<String>().toSet();
+      }
+      
+      return {};
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error loading achievements for user $userId: $e');
+      return {};
+    }
+  }
+  
+  /// Lösche Achievements für einen spezifischen User (nach Migration)
+  static Future<void> clearAchievementsForUser(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userKey = 'unlocked_achievements_$userId';
+      await prefs.remove(userKey);
+      
+      if (kDebugMode) debugPrint('Cleared achievements for user: $userId');
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error clearing achievements for user $userId: $e');
+    }
+  }
+  
+  /// Bereinige doppelte Achievements in der Datenbank (Admin-Funktion)
+  static Future<void> cleanupDuplicateAchievements() async {
+    try {
+      final currentUid = _supabase.auth.currentUser?.id;
+      if (currentUid == null) return;
+      
+      // Lade alle Achievements des Users
+      final achievements = await _supabase
+          .from('user_achievements')
+          .select('id, achievement_id, unlocked_at')
+          .eq('user_id', currentUid)
+          .order('unlocked_at');
+      
+      // Gruppiere nach achievement_id und behalte nur das erste
+      final Map<String, List<Map<String, dynamic>>> grouped = {};
+      for (final achievement in achievements) {
+        final achievementId = achievement['achievement_id'] as String;
+        grouped.putIfAbsent(achievementId, () => []);
+        grouped[achievementId]!.add(achievement);
+      }
+      
+      // Lösche Duplikate (behalte immer das erste/älteste)
+      for (final entry in grouped.entries) {
+        if (entry.value.length > 1) {
+          // Behalte das erste, lösche die anderen
+          for (int i = 1; i < entry.value.length; i++) {
+            final duplicateId = entry.value[i]['id'];
+            await _supabase
+                .from('user_achievements')
+                .delete()
+                .eq('id', duplicateId);
+            
+            if (kDebugMode) debugPrint('Deleted duplicate achievement: ${entry.key}');
+          }
+        }
+      }
+      
+      // Lade die Achievements neu
+      await loadUnlockedAchievements();
+      
+      if (kDebugMode) debugPrint('Cleanup completed');
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error during cleanup: $e');
+    }
   }
 }

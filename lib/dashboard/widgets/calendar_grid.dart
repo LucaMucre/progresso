@@ -41,7 +41,6 @@ class _CalendarGridState extends State<CalendarGrid> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 900; // responsive grid
     // Smaller window => lower aspect ratio => taller cells to keep previews visible
     double childAspectRatio;
     if (screenWidth < 520) {
