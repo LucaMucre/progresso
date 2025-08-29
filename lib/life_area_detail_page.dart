@@ -91,10 +91,9 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
           ? await LifeAreasService.getAreaById(widget.area.parentId!)
           : null;
       
-      // Filter templates for this area
+      // Filter templates for this area (name-based matching only)
       final filteredTemplates = templates.where((template) {
-        return template.category.toLowerCase() == widget.area.category.toLowerCase() ||
-               template.name.toLowerCase().contains(widget.area.name.toLowerCase());
+        return template.name.toLowerCase().contains(widget.area.name.toLowerCase());
       }).toList();
       
       // Filter logs for this specific area
@@ -251,8 +250,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
           if (template.name.toLowerCase().contains(s)) return false;
         }
       }
-      if (template.category.toLowerCase() == category ||
-          template.name.toLowerCase().contains(areaName)) return true;
+      if (template.name.toLowerCase().contains(areaName)) return true;
       if (includeSubareasForParent) {
         for (final s in subKeys) {
           if (template.name.toLowerCase().contains(s)) return true;

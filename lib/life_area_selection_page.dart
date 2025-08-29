@@ -105,19 +105,51 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
 
   void _showCreateAreaDialog() {
     final nameController = TextEditingController();
-    String selectedCategory = 'Work';
     String selectedColor = '#2196F3';
-    String selectedIcon = 'circle';
+    String selectedIcon = 'fitness_center';
 
-    final categories = ['Work', 'Health', 'Social', 'Creativity', 'Finance', 'Learning', 'Inner'];
     final colors = [
       '#2196F3', '#FF5722', '#4CAF50', '#FF9800', 
-      '#9C27B0', '#F44336', '#795548', '#607D8B'
+      '#9C27B0', '#F44336', '#795548', '#607D8B',
+      '#E91E63', '#00BCD4', '#FFEB3B', '#FF4081',
+      '#00E676', '#536DFE', '#FF6D00', '#8BC34A',
+      '#E040FB', '#40C4FF', '#FFAB40', '#26A69A',
+      '#FFD54F', '#AB47BC', '#66BB6A', '#42A5F5'
     ];
-    final icons = [
-      'circle', 'work', 'fitness_center', 'favorite', 
-      'school', 'attach_money', 'self_improvement', 'art_track'
-    ];
+    final Map<String, String> iconOptions = {
+      'fitness_center': 'Fitness',
+      'restaurant': 'Nutrition',
+      'school': 'Learning',
+      'account_balance': 'Finance',
+      'palette': 'Art',
+      'people': 'Relationships',
+      'work': 'Career',
+      'home': 'Home',
+      'local_hospital': 'Health',
+      'flight': 'Travel',
+      'music_note': 'Music',
+      'sports_soccer': 'Sports',
+      'computer': 'Technology',
+      'eco': 'Nature',
+      'book': 'Reading',
+      'edit': 'Writing',
+      'favorite': 'Love',
+      'auto_stories': 'Stories',
+      'psychology': 'Mental Health',
+      'spa': 'Wellness',
+      'camera_alt': 'Photography',
+      'shopping_cart': 'Shopping',
+      'pets': 'Pets',
+      'beach_access': 'Beach',
+      'build': 'Tools',
+      'business_center': 'Business',
+      'directions_bike': 'Cycling',
+      'local_cafe': 'Coffee',
+      'theater_comedy': 'Entertainment',
+      'agriculture': 'Farming',
+      'celebration': 'Party',
+      'volunteer_activism': 'Volunteering',
+    };
 
     showDialog(
       context: context,
@@ -134,16 +166,6 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                     labelText: 'Name',
                     hintText: 'Enter life area name',
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: categories.map((category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  )).toList(),
-                  onChanged: (value) => setState(() => selectedCategory = value!),
                 ),
                 const SizedBox(height: 16),
                 const Text('Color:', style: TextStyle(fontWeight: FontWeight.w500)),
@@ -170,23 +192,54 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: icons.map((iconName) => GestureDetector(
-                    onTap: () => setState(() => selectedIcon = iconName),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: selectedIcon == iconName 
-                          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                          : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
-                        border: selectedIcon == iconName 
-                          ? Border.all(color: Theme.of(context).colorScheme.primary)
-                          : Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                  runSpacing: 8,
+                  children: iconOptions.entries.map((entry) {
+                    final iconName = entry.key;
+                    final iconLabel = entry.value;
+                    final isSelected = selectedIcon == iconName;
+                    return GestureDetector(
+                      onTap: () => setState(() => selectedIcon = iconName),
+                      child: Container(
+                        width: 60,
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isSelected 
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                            : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: isSelected 
+                            ? Border.all(color: Theme.of(context).colorScheme.primary)
+                            : Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getIconData(iconName),
+                              color: isSelected 
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey[600],
+                              size: 24,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              iconLabel,
+                              style: TextStyle(
+                                fontSize: 8,
+                                color: isSelected 
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey[600],
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Icon(_getIconData(iconName)),
-                    ),
-                  )).toList(),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -208,7 +261,7 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
                 try {
                   await LifeAreasService.createLifeArea(
                     name: nameController.text.trim(),
-                    category: selectedCategory,
+                    category: 'General',
                     color: selectedColor,
                     icon: selectedIcon,
                     orderIndex: _lifeAreas.length,
@@ -478,6 +531,28 @@ class _LifeAreaSelectionPageState extends State<LifeAreaSelectionPage> {
       case 'palette': return Icons.palette;
       case 'people': return Icons.people;
       case 'account_balance': return Icons.account_balance;
+      case 'home': return Icons.home;
+      case 'local_hospital': return Icons.local_hospital;
+      case 'flight': return Icons.flight;
+      case 'music_note': return Icons.music_note;
+      case 'sports_soccer': return Icons.sports_soccer;
+      case 'computer': return Icons.computer;
+      case 'eco': return Icons.eco;
+      case 'book': return Icons.book;
+      case 'edit': return Icons.edit;
+      case 'auto_stories': return Icons.auto_stories;
+      case 'camera_alt': return Icons.camera_alt;
+      case 'shopping_cart': return Icons.shopping_cart;
+      case 'pets': return Icons.pets;
+      case 'beach_access': return Icons.beach_access;
+      case 'build': return Icons.build;
+      case 'business_center': return Icons.business_center;
+      case 'directions_bike': return Icons.directions_bike;
+      case 'local_cafe': return Icons.local_cafe;
+      case 'theater_comedy': return Icons.theater_comedy;
+      case 'agriculture': return Icons.agriculture;
+      case 'celebration': return Icons.celebration;
+      case 'volunteer_activism': return Icons.volunteer_activism;
       default: return Icons.circle;
     }
   }

@@ -50,10 +50,39 @@ class _HomeShellState extends State<HomeShell> {
     });
   }
 
+  NavigationDestinationLabelBehavior _getLabelBehavior(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Für sehr schmale Displays: nur aktive Labels zeigen
+    if (screenWidth < 430) {
+      return NavigationDestinationLabelBehavior.onlyShowSelected;
+    }
+    // Für breite Displays: alle Labels zeigen
+    else if (ResponsiveUtils.isWideScreen(context)) {
+      return NavigationDestinationLabelBehavior.onlyShowSelected;
+    }
+    // Standard: alle Labels zeigen
+    else {
+      return NavigationDestinationLabelBehavior.alwaysShow;
+    }
+  }
+
+  String _getResponsiveLabel(BuildContext context, String fullLabel, String shortLabel) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Für sehr schmale Displays: kurze Labels verwenden
+    if (screenWidth < 420) {
+      return shortLabel;
+    }
+    // Sonst: vollständige Labels
+    return fullLabel;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isWide = ResponsiveUtils.isWideScreen(context);
     final t = AppLocalizations.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold
     (
@@ -72,8 +101,8 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
-          height: isWide ? 64 : 76,
-          labelBehavior: isWide ? NavigationDestinationLabelBehavior.onlyShowSelected : NavigationDestinationLabelBehavior.alwaysShow,
+          height: screenWidth < 350 ? 60 : (isWide ? 64 : 76),
+          labelBehavior: _getLabelBehavior(context),
           backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
           elevation: 0,
           surfaceTintColor: Colors.transparent,
@@ -106,12 +135,36 @@ class _HomeShellState extends State<HomeShell> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             destinations: [
-              NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: t?.navDashboard ?? 'Dashboard'),
-              NavigationDestination(icon: const Icon(Icons.add_circle_outline), selectedIcon: const Icon(Icons.add_circle), label: t?.navLog ?? 'Log'),
-              NavigationDestination(icon: const Icon(Icons.lightbulb_outline), selectedIcon: const Icon(Icons.lightbulb), label: 'Insights'),
-              NavigationDestination(icon: const Icon(Icons.analytics_outlined), selectedIcon: const Icon(Icons.analytics), label: 'Statistics'),
-              NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: t?.navProfile ?? 'Profile'),
-              NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: t?.navSettings ?? 'Settings'),
+              NavigationDestination(
+                icon: const Icon(Icons.dashboard_outlined), 
+                selectedIcon: const Icon(Icons.dashboard), 
+                label: _getResponsiveLabel(context, t?.navDashboard ?? 'Dashboard', 'Dash'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.add_circle_outline), 
+                selectedIcon: const Icon(Icons.add_circle), 
+                label: _getResponsiveLabel(context, t?.navLog ?? 'Log', 'Log'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.history), 
+                selectedIcon: const Icon(Icons.history), 
+                label: _getResponsiveLabel(context, 'Activity', 'Logs'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.analytics_outlined), 
+                selectedIcon: const Icon(Icons.analytics), 
+                label: _getResponsiveLabel(context, 'Statistics', 'Stats'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.person_outline), 
+                selectedIcon: const Icon(Icons.person), 
+                label: _getResponsiveLabel(context, t?.navProfile ?? 'Profile', 'Me'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.settings_outlined), 
+                selectedIcon: const Icon(Icons.settings), 
+                label: _getResponsiveLabel(context, t?.navSettings ?? 'Settings', 'Set'),
+              ),
             ],
           ),
         ),

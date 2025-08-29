@@ -183,8 +183,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
               for (final m in (res as List)) {
                 final name = (m['name'] as String?)?.toLowerCase();
                 final cat = (m['category'] as String?)?.toLowerCase();
-                if ((areaName != null && name == areaName.toLowerCase()) ||
-                    (category != null && cat == category.toLowerCase())) {
+                if (areaName != null && name != null && name.contains(areaName.toLowerCase())) {
                   setState(() {
                     _areaColor = Color(int.parse((m['color'] as String).replaceAll('#', '0xFF')));
                   });
@@ -205,8 +204,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     try {
       final areas = await LifeAreasService.getLifeAreas();
       for (final area in areas) {
-        if ((areaName != null && area.name.toLowerCase() == areaName.toLowerCase()) ||
-            (category != null && area.category.toLowerCase() == category.toLowerCase())) {
+        if (areaName != null && area.name.toLowerCase().contains(areaName.toLowerCase())) {
           if (mounted) {
             setState(() {
               _areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));

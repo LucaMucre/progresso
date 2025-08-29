@@ -7,9 +7,7 @@ import 'legal/terms_page.dart';
 import 'pages/backup_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'services/test_data_service.dart';
 import 'services/crash_reporting_service.dart';
-import 'services/db_service.dart' as db_service;
 import 'services/anonymous_user_service.dart';
 import 'navigation.dart';
 
@@ -211,8 +209,6 @@ class _SettingsPageState extends State<SettingsPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Debug section (only in debug mode)
-                if (kDebugMode) ..._buildDebugSection(),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.lock_reset),
@@ -282,84 +278,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  List<Widget> _buildDebugSection() {
-    return [
-      const ListTile(
-        leading: Icon(Icons.bug_report),
-        title: Text('Debug Tools'),
-        subtitle: Text('Development tools (debug mode only)'),
-      ),
-      ListTile(
-        leading: const Icon(Icons.data_usage),
-        title: const Text('Create Test Data'),
-        subtitle: const Text('Generate sample activities for testing'),
-        onTap: () async {
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Creating test data...')),
-            );
-            
-            await TestDataService.createTestData();
-            
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('✅ Test data created successfully')),
-            );
-          } catch (e) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('❌ Error creating test data: $e')),
-            );
-          }
-        },
-      ),
-      ListTile(
-        leading: const Icon(Icons.info),
-        title: const Text('Storage Info'),
-        subtitle: const Text('View local storage statistics'),
-        onTap: () async {
-          try {
-            final stats = await TestDataService.getLocalStats();
-            final hasData = await TestDataService.hasLocalData();
-            final storageMode = db_service.isUsingLocalStorage ? 'Local' : 'Remote';
-            
-            if (!mounted) return;
-            
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Storage Information'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Storage Mode: $storageMode'),
-                    Text('Has Local Data: $hasData'),
-                    Text('Templates: ${stats['templates'] ?? 0}'),
-                    Text('Logs: ${stats['logs'] ?? 0}'),
-                    Text('Achievements: ${stats['achievements'] ?? 0}'),
-                    Text('Total XP: ${stats['total_xp'] ?? 0}'),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Close'),
-                  ),
-                ],
-              ),
-            );
-          } catch (e) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error getting storage info: $e')),
-            );
-          }
-        },
-      ),
-      const Divider(),
-    ];
-  }
 
   @override
   void dispose() {

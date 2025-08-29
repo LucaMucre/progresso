@@ -819,10 +819,6 @@ class _BubblesGridState extends State<BubblesGrid> {
 
   void _showEditLifeAreaDialog(BuildContext context, LifeArea area) {
     final nameController = TextEditingController(text: area.name);
-    final categories = ['Work', 'Health', 'Social', 'Creativity', 'Finance', 'Learning', 'Inner', 'Development'];
-    
-    // Fallback to 'Work' if current category is not in list
-    String selectedCategory = categories.contains(area.category) ? area.category : 'Work';
     String selectedColor = area.color;
     String selectedIcon = area.icon;
     final colors = [
@@ -849,16 +845,6 @@ class _BubblesGridState extends State<BubblesGrid> {
                     labelText: 'Name',
                     hintText: 'Enter life area name',
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: categories.map((category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  )).toList(),
-                  onChanged: (value) => setState(() => selectedCategory = value!),
                 ),
                 const SizedBox(height: 16),
                 const Text('Color:'),
@@ -921,7 +907,7 @@ class _BubblesGridState extends State<BubblesGrid> {
                 try {
                   await LifeAreasService.updateLifeArea(area.id, {
                     'name': nameController.text.trim(),
-                    'category': selectedCategory,
+                    'category': area.category, // Keep existing category
                     'color': selectedColor,
                     'icon': selectedIcon,
                   });

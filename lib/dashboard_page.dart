@@ -304,9 +304,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
     final templateMap = {
       for (final t in (templatesRes as List)) (t['id'] as String): (t['name'] as String)
     };
-    final templateIdToCategory = {
-      for (final t in (templatesRes as List)) (t['id'] as String): LifeAreasService.canonicalCategory((t['category'] as String?) ?? '')
-    };
     final List<_AreaTag> areaTags = (lifeAreasRes as List).map((m) => _AreaTag(
       // Nutze kanonische Schlüssel (englisch, lowercase) für stabilen Match
       name: LifeAreasService.canonicalAreaName((m['name'] as String).trim()),
@@ -357,33 +354,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
             String areaKey = effectiveAreaName;
             // Normalize nutrition to health
             if (areaKey == 'nutrition') areaKey = 'health';
+            // If no area name available, default to general
             if (areaKey.isEmpty) {
-              switch (category) {
-                case 'inner':
-                  areaKey = 'spirituality';
-                  break;
-                case 'social':
-                  areaKey = 'relationships';
-                  break;
-                case 'work':
-                  areaKey = 'career';
-                  break;
-                case 'development':
-                  areaKey = 'learning';
-                  break;
-                case 'finance':
-                  areaKey = 'finance';
-                  break;
-                case 'health':
-                  areaKey = 'health';
-                  break;
-                case 'vitality':
-                  areaKey = 'vitality';
-                  break;
-                case 'creativity':
-                  areaKey = 'art';
-                  break;
-              }
+              areaKey = 'general';
             }
             if (areaKey.isNotEmpty) {
               return _colorForAreaKey(areaKey);
@@ -394,42 +367,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
       }
       
-      // Template-Kategorie Fallback
-      if (log.templateId != null) {
-        final cat = templateIdToCategory[log.templateId!];
-        if (cat != null && cat.isNotEmpty) {
-          String areaKey = '';
-          switch (cat) {
-            case 'inner':
-              areaKey = 'spirituality';
-              break;
-            case 'social':
-              areaKey = 'relationships';
-              break;
-            case 'work':
-              areaKey = 'career';
-              break;
-            case 'development':
-              areaKey = 'learning';
-              break;
-            case 'finance':
-              areaKey = 'finance';
-              break;
-            case 'health':
-              areaKey = 'health';
-              break;
-            case 'vitality':
-              areaKey = 'vitality';
-              break;
-            case 'creativity':
-              areaKey = 'art';
-              break;
-          }
-          if (areaKey.isNotEmpty) {
-            return _colorForAreaKey(areaKey);
-          }
-        }
-      }
+      // No template-based fallback, rely only on name-based matching
       
       return null;
     }
@@ -482,31 +420,9 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                             if (match != null) areaKey = match.name.toLowerCase();
                             // Normalize nutrition to health
                             if (areaKey == 'nutrition') areaKey = 'health';
-                            // Fallbacks wie in der RPC-Logik
+                            // Use default if no area name available
                             if (areaKey == 'unknown' || areaKey.isEmpty) {
-                              switch (category) {
-                                case 'inner':
-                                  areaKey = 'spirituality';
-                                  break;
-                                case 'social':
-                                  areaKey = 'relationships';
-                                  break;
-                                case 'work':
-                                  areaKey = 'career';
-                                  break;
-                                case 'development':
-                                  areaKey = 'learning';
-                                  break;
-                                case 'finance':
-                                  areaKey = 'finance';
-                                  break;
-                                case 'health':
-                                  areaKey = 'health';
-                                  break;
-                                case 'creativity':
-                                  areaKey = 'art';
-                                  break;
-                              }
+                              areaKey = 'general';
                             }
                           }
                         }
@@ -592,63 +508,18 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                                 areaKey = areaName.isNotEmpty ? areaName : lifeArea;
                                 // Normalize nutrition to health
                                 if (areaKey == 'nutrition') areaKey = 'health';
+                                // Use default if no area name available
                                 if (areaKey.isEmpty) {
-                                  switch (category) {
-                                    case 'inner':
-                                      areaKey = 'spirituality';
-                                      break;
-                                    case 'social':
-                                      areaKey = 'relationships';
-                                      break;
-                                    case 'work':
-                                      areaKey = 'career';
-                                      break;
-                                    case 'development':
-                                      areaKey = 'learning';
-                                      break;
-                                    case 'finance':
-                                      areaKey = 'finance';
-                                      break;
-                                    case 'health':
-                                      areaKey = 'health';
-                                      break;
-                                    case 'creativity':
-                                      areaKey = 'art';
-                                      break;
-                                  }
+                                  areaKey = 'general';
                                 }
                               }
                             }
                           } catch (e, stackTrace) {
         LoggingService.error('Error in dashboard operation', e, stackTrace, 'Dashboard');
       }
-                          if (areaKey.isEmpty && log.templateId != null) {
-                            final cat = templateIdToCategory[log.templateId!];
-                            if (cat != null && cat.isNotEmpty) {
-                              switch (cat) {
-                                case 'inner':
-                                  areaKey = 'spirituality';
-                                  break;
-                                case 'social':
-                                  areaKey = 'relationships';
-                                  break;
-                                case 'work':
-                                  areaKey = 'career';
-                                  break;
-                                case 'development':
-                                  areaKey = 'learning';
-                                  break;
-                                case 'finance':
-                                  areaKey = 'finance';
-                                  break;
-                                case 'health':
-                                  areaKey = 'health';
-                                  break;
-                                case 'creativity':
-                                  areaKey = 'art';
-                                  break;
-                              }
-                            }
+                          // Use default if no area name available
+                          if (areaKey.isEmpty) {
+                            areaKey = 'general';
                           }
                           return _getAreaColor(areaKey.isNotEmpty ? areaKey : 'unknown', areaTags);
                         })();
@@ -1121,23 +992,17 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           }
                         }
                         
-                        // Second priority: category match only if no name match found
-                        if (matchedLifeArea == null && searchCategory.isNotEmpty) {
-                          for (final la in lifeAreas) {
-                            if (la.category.toLowerCase() == searchCategory.toLowerCase()) {
-                              matchedLifeArea = la;
-                              break;
-                            }
-                          }
-                        }
+                        // No category-based fallback matching
                         
                         if (matchedLifeArea != null) {
                           areaName = matchedLifeArea.name;
                           areaColor = Color(int.parse(matchedLifeArea.color.replaceFirst('#', '0xFF')));
                           if (kDebugMode) debugPrint('Activity Table Debug: Matched life area "$areaName" with color "${matchedLifeArea.color}"');
                         } else {
-                          // Use the extracted name even if no exact match
-                          areaName = searchName.isNotEmpty ? searchName : searchCategory;
+                          // Use the extracted name only (no category fallback)
+                          if (searchName.isNotEmpty) {
+                            areaName = searchName;
+                          }
                           if (kDebugMode) debugPrint('Activity Table Debug: Using extracted area name "$areaName" with default color');
                         }
                       }
@@ -1366,15 +1231,16 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return exactMatch.color;
       }
       
-      // Try to find match by category
-      final categoryMatch = areaTags.where((tag) => 
-        tag.category.toLowerCase() == area.toLowerCase()).firstOrNull;
-      if (categoryMatch != null) {
-        return categoryMatch.color;
+      // Try to find partial match by area name (substring matching)
+      final partialMatch = areaTags.where((tag) => 
+        tag.name.toLowerCase().contains(area.toLowerCase()) ||
+        area.toLowerCase().contains(tag.name.toLowerCase())).firstOrNull;
+      if (partialMatch != null) {
+        return partialMatch.color;
       }
     }
     
-    // Fallback to improved hardcoded colors
+    // Fallback to improved hardcoded colors based on area name
     return _colorForAreaKey(area);
   }
 
@@ -1388,7 +1254,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
 
   void _showAddLifeAreaDialog(BuildContext context) {
     final nameController = TextEditingController();
-    final categoryController = TextEditingController();
     String selectedColor = '#2196F3';
     String selectedIcon = 'fitness_center';
 
@@ -1403,6 +1268,20 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       {'name': 'Gelb', 'color': '#FFEB3B'},
       {'name': 'Grau', 'color': '#607D8B'},
       {'name': 'Braun', 'color': '#795548'},
+      {'name': 'Orange Rot', 'color': '#FF5722'},
+      {'name': 'Hot Pink', 'color': '#FF4081'},
+      {'name': 'Hellgrün', 'color': '#00E676'},
+      {'name': 'Indigo', 'color': '#536DFE'},
+      {'name': 'Dunkelorange', 'color': '#FF6D00'},
+      {'name': 'Olivgrün', 'color': '#8BC34A'},
+      {'name': 'Magenta', 'color': '#E040FB'},
+      {'name': 'Hellblau', 'color': '#40C4FF'},
+      {'name': 'Amber', 'color': '#FFAB40'},
+      {'name': 'Teal', 'color': '#26A69A'},
+      {'name': 'Goldgelb', 'color': '#FFD54F'},
+      {'name': 'Violett', 'color': '#AB47BC'},
+      {'name': 'Mintgrün', 'color': '#66BB6A'},
+      {'name': 'Himmelblau', 'color': '#42A5F5'},
     ];
 
     final List<Map<String, dynamic>> iconOptions = [
@@ -1422,6 +1301,22 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
       {'name': 'Nature', 'icon': 'eco'},
       {'name': 'Reading', 'icon': 'book'},
       {'name': 'Writing', 'icon': 'edit'},
+      {'name': 'Love', 'icon': 'favorite'},
+      {'name': 'Stories', 'icon': 'auto_stories'},
+      {'name': 'Mental Health', 'icon': 'psychology'},
+      {'name': 'Wellness', 'icon': 'spa'},
+      {'name': 'Photography', 'icon': 'camera_alt'},
+      {'name': 'Shopping', 'icon': 'shopping_cart'},
+      {'name': 'Pets', 'icon': 'pets'},
+      {'name': 'Beach', 'icon': 'beach_access'},
+      {'name': 'Tools', 'icon': 'build'},
+      {'name': 'Business', 'icon': 'business_center'},
+      {'name': 'Cycling', 'icon': 'directions_bike'},
+      {'name': 'Coffee', 'icon': 'local_cafe'},
+      {'name': 'Entertainment', 'icon': 'theater_comedy'},
+      {'name': 'Farming', 'icon': 'agriculture'},
+      {'name': 'Party', 'icon': 'celebration'},
+      {'name': 'Volunteering', 'icon': 'volunteer_activism'},
     ];
 
     showDialog(
@@ -1479,7 +1374,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           onTap: () {
                             setDialogState(() {
                               nameController.text = d['name'] as String;
-                              categoryController.text = d['category'] as String;
                               selectedColor = d['color'] as String;
                               selectedIcon = d['icon'] as String;
                             });
@@ -1510,17 +1404,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       decoration: const InputDecoration(
                          labelText: 'Name',
                          hintText: 'e.g. Fitness, Learning, etc.',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    SizedBox(height: AppTheme.spacing16),
-                    
-                    // Category Field
-                    TextField(
-                      controller: categoryController,
-                      decoration: const InputDecoration(
-                         labelText: 'Category (optional)',
-                         hintText: 'e.g. Health, Personal',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -1646,7 +1529,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                     try {
                       await LifeAreasService.createLifeArea(
                         name: nameController.text.trim(),
-                         category: categoryController.text.trim().isEmpty ? 'General' : categoryController.text.trim(),
+                         category: 'General',
                         color: selectedColor,
                         icon: selectedIcon,
                       );
@@ -1730,6 +1613,34 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         return Icons.pets;
       case 'child_care':
         return Icons.child_care;
+      case 'edit':
+        return Icons.edit;
+      case 'auto_stories':
+        return Icons.auto_stories;
+      case 'spa':
+        return Icons.spa;
+      case 'shopping_cart':
+        return Icons.shopping_cart;
+      case 'beach_access':
+        return Icons.beach_access;
+      case 'build':
+        return Icons.build;
+      case 'business_center':
+        return Icons.business_center;
+      case 'directions_bike':
+        return Icons.directions_bike;
+      case 'local_cafe':
+        return Icons.local_cafe;
+      case 'theater_comedy':
+        return Icons.theater_comedy;
+      case 'agriculture':
+        return Icons.agriculture;
+      case 'celebration':
+        return Icons.celebration;
+      case 'volunteer_activism':
+        return Icons.volunteer_activism;
+      case 'local_hospital':
+        return Icons.local_hospital;
       default:
         return Icons.circle;
     }
@@ -1942,181 +1853,6 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
               ),
             ),
 
-                ],
-              ),
-            ),
-            SizedBox(height: AppTheme.spacing32),
-
-            // Quick Actions Section
-            _buildSectionContainer(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Section header
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Quick Actions',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Fast access to log activities in any life area',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: AppTheme.spacing20),
-
-                  // Quick Actions Grid
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: FutureBuilder<List<LifeArea>>(
-                      future: _loadLifeAreas(),
-                      builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.error, color: Colors.red, size: 48),
-                            const SizedBox(height: 8),
-                            Text('Error loading life areas'),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  final areas = snapshot.data ?? [];
-                  
-                  if (areas.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(
-                        child: Text('No life areas available'),
-                      ),
-                    );
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: areas.map((area) {
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
-                            ),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => LogActionPage(
-                                      selectedArea: area.name,
-                                      selectedCategory: area.category,
-                                      areaColorHex: area.color,
-                                      areaIcon: area.icon,
-                                    ),
-                                  ),
-                                 ).then((_) { if (mounted) setState(() { _refreshCounter++; _lifeAreasFuture = _loadLifeAreas(); }); });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: _parseColor(area.color).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(
-                                        _getIconData(area.icon),
-                                        color: _parseColor(area.color),
-                                        size: 24,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          // Oben: Bereich - Kategorie
-                                          Text(
-                                            '${area.name} - ${area.category}',
-                                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          // Unten: Aktion
-                                          Text(
-          'Add activity',
-                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: _parseColor(area.color).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Icon(
-                                        Icons.add,
-                                        size: 16,
-                                        color: _parseColor(area.color),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 16,
-                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  );
-                      },
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -3089,22 +2825,11 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           }
                         }
                         
-                        // Second priority: category match only if no name match found
-                        if (matchedLifeArea == null && searchCategory.isNotEmpty) {
-                          for (final la in lifeAreas) {
-                            if (la.category.toLowerCase() == searchCategory.toLowerCase()) {
-                              matchedLifeArea = la;
-                              area = la.name;
-                              break;
-                            }
-                          }
-                        }
+                        // No category-based fallback matching
                         
-                        // If no exact match, use the extracted name
+                        // If no exact match, use the extracted name only
                         if (matchedLifeArea == null && searchName.isNotEmpty) {
                           area = searchName;
-                        } else if (matchedLifeArea == null && searchCategory.isNotEmpty) {
-                          area = searchCategory;
                         }
                       }
                     }
@@ -4056,19 +3781,11 @@ Color _parseHexColor(String hex) {
 
 _AreaTag? _matchAreaTag(List<_AreaTag> tags, String? areaName, String? category) {
   final an = areaName?.toLowerCase();
-  final cat = category?.toLowerCase();
   
-  // Priorität 1: Exakter Area-Name-Match
+  // Only match by area name (with partial matching)
   if (an != null && an.isNotEmpty) {
     for (final t in tags) {
-      if (t.name.toLowerCase() == an) return t;
-    }
-  }
-  
-  // Priorität 2: Kategorie-Match nur als Fallback, wenn kein Area-Name
-  if ((an == null || an.isEmpty) && cat != null && cat.isNotEmpty) {
-    for (final t in tags) {
-      if (t.category.toLowerCase() == cat) return t;
+      if (t.name.toLowerCase().contains(an)) return t;
     }
   }
   
