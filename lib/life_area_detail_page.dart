@@ -1360,7 +1360,6 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
 
   Future<void> _createSubAreaDialog() async {
     final nameCtrl = TextEditingController();
-    final catCtrl = TextEditingController(text: widget.area.category);
     String color = widget.area.color;
     String icon = widget.area.icon;
     final ok = await showDialog<bool>(
@@ -1373,8 +1372,6 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')), 
-              const SizedBox(height: 8),
-              TextField(controller: catCtrl, decoration: const InputDecoration(labelText: 'Category')), 
             ],
           ),
         ),
@@ -1387,7 +1384,7 @@ class _LifeAreaDetailPageState extends State<LifeAreaDetailPage> with RouteAware
     if (ok == true && nameCtrl.text.trim().isNotEmpty) {
       await LifeAreasService.createLifeArea(
         name: nameCtrl.text.trim(),
-        category: catCtrl.text.trim().isEmpty ? widget.area.category : catCtrl.text.trim(),
+        category: widget.area.category,
         parentId: widget.area.id,
         color: color,
         icon: icon,

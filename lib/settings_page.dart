@@ -228,9 +228,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('Contact support'),
-                  subtitle: const Text('support@progresso.app'),
+                  subtitle: const Text('progresso.sup@gmail.com'),
                   onTap: () async {
-                    final uri = Uri(scheme: 'mailto', path: 'support@progresso.app', query: 'subject=Progresso Support');
+                    final uri = Uri(scheme: 'mailto', path: 'progresso.sup@gmail.com', query: 'subject=Progresso Support');
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri);
                     }

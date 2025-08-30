@@ -118,16 +118,46 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
     try {
       // Loading calendar data
       
-      final areaMap = <String, LifeArea>{
-        for (final a in areas) a.name: a
-      };
+      // Create area map with ALL areas (including subcategories) and complete areas list
+      final areaMap = <String, LifeArea>{};
+      final allAreas = <LifeArea>[...areas]; // Start with top-level areas
+      
+      // First add all top-level areas
+      for (final a in areas) {
+        areaMap[a.name] = a;
+        areaMap[a.name.toLowerCase()] = a; // Also add lowercase version for case-insensitive matching
+      }
+      
+      // Then recursively add all subcategories
+      for (final area in areas) {
+        try {
+          final childAreas = await LifeAreasService.getChildAreas(area.id);
+          for (final child in childAreas) {
+            allAreas.add(child); // Add to complete areas list for parent lookup
+            areaMap[child.name] = child;
+            areaMap[child.name.toLowerCase()] = child; // Also add lowercase version
+            if (kDebugMode && child.name == 'drei') {
+              print('Calendar Loading: Subcategory ${child.name} has parentId: ${child.parentId}, parent: ${area.name}');
+            }
+            // Added subcategory to areaMap
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error loading child areas for ${area.name}: $e');
+          }
+        }
+      }
 
       final dayToTitles = <DateTime, List<_DayEntry>>{};
 
+      if (kDebugMode) {
+        print('Calendar: Processing ${logs.length} logs for month ${_calendarMonth.month}/${_calendarMonth.year}');
+      }
+      
       for (final log in logs) {
         final d = log.occurredAt.toLocal();
         final dayKey = DateTime(d.year, d.month, d.day);
-
+        
         if (dayKey.year != _calendarMonth.year || dayKey.month != _calendarMonth.month) {
           continue;
         }
@@ -169,14 +199,38 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
               // Extract area information
               final area = obj['area'] as String?;
               final lifeArea = obj['life_area'] as String?;
+              final category = obj['category'] as String?; // For quick logs
               
-              final searchName = area?.trim() ?? lifeArea?.trim() ?? '';
+              final searchName = area?.trim() ?? lifeArea?.trim() ?? category?.trim() ?? '';
               if (searchName.isNotEmpty) {
                 areaKey = searchName;
-                final areaObj = areaMap[searchName];
+                // Try both exact match and lowercase match
+                final areaObj = areaMap[searchName] ?? areaMap[searchName.toLowerCase()];
                 if (areaObj != null) {
                   try {
-                    String colorString = areaObj.color;
+                    String colorString;
+                    
+                    // If this is a subcategory (has parentId), use parent's color
+                    if (areaObj.parentId != null) {
+                      if (kDebugMode) {
+                        print('Calendar Color: Subcategory ${areaObj.name} has parentId: ${areaObj.parentId}');
+                      }
+                      // Find parent area and use its color
+                      final parentArea = allAreas.firstWhere(
+                        (area) => area.id == areaObj.parentId,
+                        orElse: () => areaObj, // Fallback to own color
+                      );
+                      if (kDebugMode) {
+                        print('Calendar Color: Found parent: ${parentArea.name} with color: ${parentArea.color}');
+                      }
+                      colorString = parentArea.color;
+                    } else {
+                      colorString = areaObj.color;
+                      if (kDebugMode && searchName == 'drei') {
+                        print('Calendar Color: Area ${areaObj.name} has no parentId, using own color: ${colorString}');
+                      }
+                    }
+                    
                     if (colorString.startsWith('#')) {
                       colorString = colorString.substring(1);
                     }
@@ -208,7 +262,7 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
             .putIfAbsent(dayKey, () => <_DayEntry>[])
             .add(_DayEntry(title: title, color: tagColor, areaKey: areaKey, durationMin: durationMin));
             
-        // Added entry for day ${dayKey.day}
+        // Activity added to calendar
       }
       
       // Calendar data loaded successfully
@@ -224,10 +278,27 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
     // Use passed logs or fall back to provider
     final allLogs = widget.logs ?? ref.read(logsNotifierProvider).value ?? [];
     
-    // Filter logs to only include those from existing life areas
+    // Filter logs to only include those from existing life areas (INCLUDING SUBCATEGORIES)
     final existingAreas = widget.lifeAreas ?? await LifeAreasService.getLifeAreas();
-    final existingAreaNames = existingAreas.map((area) => area.name).toSet();
-    final existingCanonicalNames = existingAreas.map((area) => LifeAreasService.canonicalAreaName(area.name)).toSet();
+    final existingAreaNames = <String>{};
+    final existingCanonicalNames = <String>{};
+    
+    // Add top-level areas
+    for (final area in existingAreas) {
+      existingAreaNames.add(area.name);
+      existingCanonicalNames.add(LifeAreasService.canonicalAreaName(area.name));
+      
+      // Add all subcategories for each area
+      try {
+        final childAreas = await LifeAreasService.getChildAreas(area.id);
+        for (final child in childAreas) {
+          existingAreaNames.add(child.name);
+          existingCanonicalNames.add(LifeAreasService.canonicalAreaName(child.name));
+        }
+      } catch (e) {
+        print('Error loading child areas for ${area.name}: $e');
+      }
+    }
     
     final filteredLogs = allLogs.where((log) {
       final parsed = ParsedActivityData.fromNotes(log.notes);
@@ -247,6 +318,8 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
       final logDay = DateTime(d.year, d.month, d.day);
       return logDay == day;
     }).toList();
+
+    // Filtered day logs ready
 
     // Show day details dialog
     _showDayDetailsDialog(context, day, dayLogs);
@@ -611,10 +684,21 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
                   }
                 });
 
+                // Convert _DayEntry to CalendarDayEntry format
+                final convertedEntries = <DateTime, List<CalendarDayEntry>>{};
+                filteredData.forEach((day, entries) {
+                  convertedEntries[day] = entries.map((e) => CalendarDayEntry(
+                    title: e.title, 
+                    color: e.color,
+                  )).toList();
+                });
+
+                // Converted entries for CalendarGrid
+
                 return RepaintBoundary(
                   child: CalendarGrid(
                     month: _calendarMonth,
-                    dayEntries: {}, // No entries needed for simplified view
+                    dayEntries: convertedEntries,
                     dayDominantColors: dominant.isEmpty ? null : dominant,
                     onOpenDay: _openDayDetails,
                   ),

@@ -141,7 +141,10 @@ class LifeAreasService {
       }
       
       final List<dynamic> jsonList = jsonDecode(jsonString);
-      return jsonList.map((json) => LifeArea.fromJson(json)).toList();
+      final allAreas = jsonList.map((json) => LifeArea.fromJson(json)).toList();
+      
+      // Filter out subcategories (areas with parentId) to only show top-level areas
+      return allAreas.where((area) => area.parentId == null).toList();
     } catch (e) {
       return [];
     }
@@ -206,8 +209,8 @@ class LifeAreasService {
   static Future<List<LifeArea>> getChildAreas(String parentId) async {
     final user = _client.auth.currentUser;
     if (user == null) {
-      // Anonymous user - no child areas supported yet, return empty list
-      return [];
+      // Anonymous user - get child areas from local storage
+      return await _getChildAreasAnonymous(parentId);
     }
 
     final response = await _client
@@ -218,6 +221,29 @@ class LifeAreasService {
         .order('order_index');
 
     return (response as List).map((json) => LifeArea.fromJson(json)).toList();
+  }
+
+  /// Load child areas for anonymous users from local storage
+  static Future<List<LifeArea>> _getChildAreasAnonymous(String parentId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = await AnonymousUserService.getOrCreateAnonymousUserId();
+      final key = 'life_areas_$userId';
+      final jsonString = prefs.getString(key);
+      
+      if (jsonString == null) {
+        return [];
+      }
+      
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final allAreas = jsonList.map((json) => LifeArea.fromJson(json)).toList();
+      
+      // Filter to only return areas with the specified parentId
+      return allAreas.where((area) => area.parentId == parentId).toList()
+        ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    } catch (e) {
+      return [];
+    }
   }
 
   // Einzelnen Bereich per ID laden
@@ -770,6 +796,7 @@ class LifeAreasService {
             .from('life_areas')
             .select()
             .eq('user_id', userId)
+            .isFilter('parent_id', null)  // Only get top-level areas (no subcategories)
             .order('order_index');
         
         final serverAreas = (serverResponse as List).map((json) => LifeArea.fromJson(json)).toList();

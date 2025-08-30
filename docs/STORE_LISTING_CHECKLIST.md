@@ -41,8 +41,8 @@ Suggested screens to capture:
 
 ## Compliance/Metadata
 - Age rating: 4+ / ESRB E (no user‑generated public sharing, no violence)
-- Copyright: © 2025 Luca Reckemeyer
-- Contact email: support@progresso.app (adjust as needed)
+- Copyright: © 2025 Progresso
+- Contact email: progresso.sup@gmail.com
 - Sign‑in required: Yes (Supabase Auth)
 - App privacy: see `docs/app_store_privacy.md`
 

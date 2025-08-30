@@ -115,7 +115,7 @@ class TermsPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('For questions about these Terms of Service, contact us at:\nsupport@progresso.app'),
+            Text('For questions about these Terms of Service, contact us at:\nprogresso.sup@gmail.com'),
             SizedBox(height: 24),
           ],
         ),

@@ -27,7 +27,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('Luca Reckemeyer\nEmail: support@progresso.app\n\nThis Privacy Policy explains how we collect, use, and protect your personal data when you use Progresso, in compliance with the EU General Data Protection Regulation (GDPR) and other applicable privacy laws.'),
+            Text('Email: progresso.sup@gmail.com\n\nThis Privacy Policy explains how we collect, use, and protect your personal data when you use Progresso, in compliance with the EU General Data Protection Regulation (GDPR) and other applicable privacy laws.'),
             SizedBox(height: 16),
             
             Text(
@@ -123,7 +123,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('For privacy-related questions, data requests, or to exercise your rights, contact us at:\n\nEmail: support@progresso.app\nSubject: Privacy Request\n\nWe will respond to your request within 30 days as required by GDPR.'),
+            Text('For privacy-related questions, data requests, or to exercise your rights, contact us at:\n\nEmail: progresso.sup@gmail.com\nSubject: Privacy Request\n\nWe will respond to your request within 30 days as required by GDPR.'),
             SizedBox(height: 24),
           ],
         ),

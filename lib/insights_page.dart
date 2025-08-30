@@ -54,8 +54,23 @@ class _InsightsPageState extends State<InsightsPage> {
     setState(() => _isLoading = true);
     
     try {
-      // Load life areas for filter
-      final lifeAreas = await LifeAreasService.getLifeAreas();
+      // Load life areas for filter (including subcategories)
+      final topLevelAreas = await LifeAreasService.getLifeAreas();
+      final allAreas = <LifeArea>[...topLevelAreas];
+      
+      // Add all subcategories
+      for (final area in topLevelAreas) {
+        try {
+          final childAreas = await LifeAreasService.getChildAreas(area.id);
+          allAreas.addAll(childAreas);
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error loading child areas for ${area.name}: $e');
+          }
+        }
+      }
+      
+      final lifeAreas = allAreas;
       
       // Load all activities from local storage
       final logs = await db_service.fetchLogs();
