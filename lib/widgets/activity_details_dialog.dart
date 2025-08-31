@@ -173,21 +173,47 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
         if (areaName != null || category != null) {
           final user = Supabase.instance.client.auth.currentUser;
           if (user != null) {
-            // For authenticated users, query the database
+            // For authenticated users, query the database with subcategory support
             Supabase.instance.client
                 .from('life_areas')
-                .select('name,category,color')
+                .select('id,name,category,color,parent_id')
                 .eq('user_id', user.id)
                 .then((res) {
               if (!mounted) return;
-              for (final m in (res as List)) {
-                final name = (m['name'] as String?)?.toLowerCase();
-                final cat = (m['category'] as String?)?.toLowerCase();
-                if (areaName != null && name != null && name.contains(areaName.toLowerCase())) {
+              final areas = res as List;
+              final areaMap = <String, Map<String, dynamic>>{};
+              
+              // Build area map with both exact and lowercase keys
+              for (final area in areas) {
+                final name = area['name'] as String?;
+                if (name != null) {
+                  areaMap[name] = area;
+                  areaMap[name.toLowerCase()] = area;
+                }
+              }
+              
+              final searchName = areaName?.trim() ?? category?.trim() ?? '';
+              if (searchName.isNotEmpty) {
+                // Try both exact match and lowercase match
+                final foundArea = areaMap[searchName] ?? areaMap[searchName.toLowerCase()];
+                if (foundArea != null) {
+                  String colorString;
+                  
+                  // If this is a subcategory (has parent_id), use parent's color
+                  if (foundArea['parent_id'] != null) {
+                    // Find parent area and use its color
+                    final parentArea = areas.firstWhere(
+                      (area) => area['id'] == foundArea['parent_id'],
+                      orElse: () => foundArea, // Fallback to own color
+                    );
+                    colorString = parentArea['color'] as String;
+                  } else {
+                    colorString = foundArea['color'] as String;
+                  }
+                  
                   setState(() {
-                    _areaColor = Color(int.parse((m['color'] as String).replaceAll('#', '0xFF')));
+                    _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
                   });
-                  break;
                 }
               }
             }).catchError((_) {});
@@ -203,14 +229,55 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
   Future<void> _loadAreaColorForAnonymousUser(String? areaName, String? category) async {
     try {
       final areas = await LifeAreasService.getLifeAreas();
+      final areaMap = <String, LifeArea>{};
+      final allAreas = <LifeArea>[...areas]; // Start with top-level areas
+      
+      // First add all top-level areas
+      for (final a in areas) {
+        areaMap[a.name] = a;
+        areaMap[a.name.toLowerCase()] = a; // Also add lowercase version for case-insensitive matching
+      }
+      
+      // Then recursively add all subcategories
       for (final area in areas) {
-        if (areaName != null && area.name.toLowerCase().contains(areaName.toLowerCase())) {
+        try {
+          final childAreas = await LifeAreasService.getChildAreas(area.id);
+          for (final child in childAreas) {
+            allAreas.add(child); // Add to complete areas list for parent lookup
+            areaMap[child.name] = child;
+            areaMap[child.name.toLowerCase()] = child; // Also add lowercase version
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error loading child areas for ${area.name}: $e');
+          }
+        }
+      }
+      
+      final searchName = areaName?.trim() ?? category?.trim() ?? '';
+      if (searchName.isNotEmpty) {
+        // Try both exact match and lowercase match
+        final areaObj = areaMap[searchName] ?? areaMap[searchName.toLowerCase()];
+        if (areaObj != null) {
           if (mounted) {
+            String colorString;
+            
+            // If this is a subcategory (has parentId), use parent's color
+            if (areaObj.parentId != null) {
+              // Find parent area and use its color
+              final parentArea = allAreas.firstWhere(
+                (area) => area.id == areaObj.parentId,
+                orElse: () => areaObj, // Fallback to own color
+              );
+              colorString = parentArea.color;
+            } else {
+              colorString = areaObj.color;
+            }
+            
             setState(() {
-              _areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
+              _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
             });
           }
-          break;
         }
       }
     } catch (_) {}

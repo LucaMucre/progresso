@@ -328,6 +328,33 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
     widget.onOpenDay(day, dayLogs);
   }
 
+  Future<Map<String, LifeArea>> _buildCompleteAreaMap(List<LifeArea> areas) async {
+    final areaMap = <String, LifeArea>{};
+    
+    // First add all top-level areas
+    for (final a in areas) {
+      areaMap[a.name] = a;
+      areaMap[a.name.toLowerCase()] = a; // Also add lowercase version for case-insensitive matching
+    }
+    
+    // Then recursively add all subcategories
+    for (final area in areas) {
+      try {
+        final childAreas = await LifeAreasService.getChildAreas(area.id);
+        for (final child in childAreas) {
+          areaMap[child.name] = child;
+          areaMap[child.name.toLowerCase()] = child; // Also add lowercase version
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error loading child areas for ${area.name}: $e');
+        }
+      }
+    }
+    
+    return areaMap;
+  }
+
   void _showDayDetailsDialog(BuildContext context, DateTime day, List<models.ActionLog> dayLogs) {
     showDialog(
       context: context,
@@ -418,73 +445,89 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
       future: _lifeAreasFuture,
       builder: (context, areaSnap) {
         final areas = areaSnap.data ?? <LifeArea>[];
-        final areaMap = <String, LifeArea>{
-          for (final a in areas) a.name: a
-        };
+        return FutureBuilder<Map<String, LifeArea>>(
+          future: _buildCompleteAreaMap(areas),
+          builder: (context, areaMapSnap) {
+            final areaMap = areaMapSnap.data ?? <String, LifeArea>{};
 
-        // Extract title and color using same logic as above
-        String title = 'Activity';
-        Color color = Colors.grey;
-        
-        if (log.notes != null) {
-          try {
-            final obj = jsonDecode(log.notes!);
-            if (obj is Map<String, dynamic>) {
-              // Extract title
-              if (obj['title'] != null && obj['title'].toString().trim().isNotEmpty) {
-                title = obj['title'].toString().trim();
-              } else {
-                final delta = obj['delta'] ?? obj['ops'];
-                if (delta is List && delta.isNotEmpty) {
-                  final textParts = <String>[];
-                  for (final op in delta) {
-                    if (op is Map && op['insert'] is String) {
-                      textParts.add(op['insert'].toString());
+            // Extract title and color using same logic as above
+            String title = 'Activity';
+            Color color = Colors.grey;
+            
+            if (log.notes != null) {
+              try {
+                final obj = jsonDecode(log.notes!);
+                if (obj is Map<String, dynamic>) {
+                  // Extract title
+                  if (obj['title'] != null && obj['title'].toString().trim().isNotEmpty) {
+                    title = obj['title'].toString().trim();
+                  } else {
+                    final delta = obj['delta'] ?? obj['ops'];
+                    if (delta is List && delta.isNotEmpty) {
+                      final textParts = <String>[];
+                      for (final op in delta) {
+                        if (op is Map && op['insert'] is String) {
+                          textParts.add(op['insert'].toString());
+                        }
+                      }
+                      if (textParts.isNotEmpty) {
+                        final allText = textParts.join('').trim();
+                        final firstLine = allText.split('\n').first.trim();
+                        if (firstLine.isNotEmpty) {
+                          title = firstLine;
+                        }
+                      }
                     }
                   }
-                  if (textParts.isNotEmpty) {
-                    final allText = textParts.join('').trim();
-                    final firstLine = allText.split('\n').first.trim();
-                    if (firstLine.isNotEmpty) {
-                      title = firstLine;
+                  
+                  // Extract area and color with subcategory support
+                  final area = obj['area'] as String?;
+                  final lifeArea = obj['life_area'] as String?;
+                  final category = obj['category'] as String?;
+                  final searchName = area?.trim() ?? lifeArea?.trim() ?? category?.trim() ?? '';
+                  
+                  if (searchName.isNotEmpty) {
+                    // Try both exact match and lowercase match
+                    final areaObj = areaMap[searchName] ?? areaMap[searchName.toLowerCase()];
+                    if (areaObj != null) {
+                      try {
+                        String colorString;
+                        
+                        // If this is a subcategory (has parentId), use parent's color
+                        if (areaObj.parentId != null) {
+                          // Find parent area and use its color
+                          final parentArea = areas.firstWhere(
+                            (area) => area.id == areaObj.parentId,
+                            orElse: () => areaObj, // Fallback to own color
+                          );
+                          colorString = parentArea.color;
+                        } else {
+                          colorString = areaObj.color;
+                        }
+                        
+                        if (colorString.startsWith('#')) {
+                          colorString = colorString.substring(1);
+                        }
+                        if (colorString.length == 6) {
+                          colorString = 'FF$colorString';
+                        }
+                        color = Color(int.parse(colorString, radix: 16));
+                      } catch (e) {
+                        color = Colors.grey;
+                      }
                     }
                   }
                 }
-              }
-              
-              // Extract area and color
-              final area = obj['area'] as String?;
-              final lifeArea = obj['life_area'] as String?;
-              final searchName = area?.trim() ?? lifeArea?.trim() ?? '';
-              
-              if (searchName.isNotEmpty) {
-                final areaObj = areaMap[searchName];
-                if (areaObj != null) {
-                  try {
-                    String colorString = areaObj.color;
-                    if (colorString.startsWith('#')) {
-                      colorString = colorString.substring(1);
-                    }
-                    if (colorString.length == 6) {
-                      colorString = 'FF$colorString';
-                    }
-                    color = Color(int.parse(colorString, radix: 16));
-                  } catch (e) {
-                    color = Colors.grey;
+              } catch (e) {
+                // Use fallback
+                if (log.notes!.isNotEmpty) {
+                  final firstLine = log.notes!.split('\n').first.trim();
+                  if (firstLine.isNotEmpty) {
+                    title = firstLine.length > 50 ? '${firstLine.substring(0, 50)}...' : firstLine;
                   }
                 }
               }
             }
-          } catch (e) {
-            // Use fallback
-            if (log.notes!.isNotEmpty) {
-              final firstLine = log.notes!.split('\n').first.trim();
-              if (firstLine.isNotEmpty) {
-                title = firstLine.length > 50 ? '${firstLine.substring(0, 50)}...' : firstLine;
-              }
-            }
-          }
-        }
 
         return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -588,6 +631,8 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
         ),
       ),
     );
+          },
+        );
       },
     );
   }
