@@ -137,22 +137,20 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
             areaMap[child.name] = child;
             areaMap[child.name.toLowerCase()] = child; // Also add lowercase version
             if (kDebugMode && child.name == 'drei') {
-              print('Calendar Loading: Subcategory ${child.name} has parentId: ${child.parentId}, parent: ${area.name}');
+              if (kDebugMode) debugPrint('Calendar Loading: Subcategory ${child.name} has parentId: ${child.parentId}, parent: ${area.name}');
             }
             // Added subcategory to areaMap
           }
         } catch (e) {
           if (kDebugMode) {
-            print('Error loading child areas for ${area.name}: $e');
+            if (kDebugMode) debugPrint('Error loading child areas for ${area.name}: $e');
           }
         }
       }
 
       final dayToTitles = <DateTime, List<_DayEntry>>{};
 
-      if (kDebugMode) {
-        print('Calendar: Processing ${logs.length} logs for month ${_calendarMonth.month}/${_calendarMonth.year}');
-      }
+      if (kDebugMode) debugPrint('Calendar: Processing ${logs.length} logs for month ${_calendarMonth.month}/${_calendarMonth.year}');
       
       for (final log in logs) {
         final d = log.occurredAt.toLocal();
@@ -212,22 +210,18 @@ class _DashboardCalendarWidgetState extends ConsumerState<DashboardCalendarWidge
                     
                     // If this is a subcategory (has parentId), use parent's color
                     if (areaObj.parentId != null) {
-                      if (kDebugMode) {
-                        print('Calendar Color: Subcategory ${areaObj.name} has parentId: ${areaObj.parentId}');
-                      }
+                      if (kDebugMode) debugPrint('Calendar Color: Subcategory ${areaObj.name} has parentId: ${areaObj.parentId}');
                       // Find parent area and use its color
                       final parentArea = allAreas.firstWhere(
                         (area) => area.id == areaObj.parentId,
                         orElse: () => areaObj, // Fallback to own color
                       );
-                      if (kDebugMode) {
-                        print('Calendar Color: Found parent: ${parentArea.name} with color: ${parentArea.color}');
-                      }
+                      if (kDebugMode) debugPrint('Calendar Color: Found parent: ${parentArea.name} with color: ${parentArea.color}');
                       colorString = parentArea.color;
                     } else {
                       colorString = areaObj.color;
                       if (kDebugMode && searchName == 'drei') {
-                        print('Calendar Color: Area ${areaObj.name} has no parentId, using own color: ${colorString}');
+                        if (kDebugMode) debugPrint('Calendar Color: Area ${areaObj.name} has no parentId, using own color: ${colorString}');
                       }
                     }
                     

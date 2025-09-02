@@ -34,6 +34,73 @@ class DashboardGalleryWidget extends ConsumerStatefulWidget {
 
 class _DashboardGalleryWidgetState extends ConsumerState<DashboardGalleryWidget> {
   int _refreshCounter = 0;
+  Map<String, Map<String, dynamic>> _areaDataCache = {};
+  Map<String, String> _subcategoryToParentMap = {};
+  bool _areasLoaded = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadLifeAreas();
+  }
+  
+  Future<void> _loadLifeAreas() async {
+    try {
+      final areas = await LifeAreasService.getLifeAreas();
+      final cache = <String, Map<String, dynamic>>{};
+      final subcatMap = <String, String>{};
+      
+      // Build cache for parent areas
+      for (final area in areas) {
+        cache[area.name] = {
+          'name': area.name,
+          'color': area.color,
+          'icon': _getIconForArea(area.name),
+        };
+        cache[area.name.toLowerCase()] = cache[area.name]!;
+        
+        // Load subcategories
+        try {
+          final children = await LifeAreasService.getChildAreas(area.id);
+          for (final child in children) {
+            subcatMap[child.name] = area.name;
+            subcatMap[child.name.toLowerCase()] = area.name;
+            // Cache subcategory with parent's color
+            cache[child.name] = {
+              'name': child.name,
+              'color': area.color,
+              'icon': _getIconForArea(area.name),
+            };
+            cache[child.name.toLowerCase()] = cache[child.name]!;
+          }
+        } catch (_) {}
+      }
+      
+      if (mounted) {
+        setState(() {
+          _areaDataCache = cache;
+          _subcategoryToParentMap = subcatMap;
+          _areasLoaded = true;
+        });
+      }
+    } catch (e) {
+      LoggingService.error('Error loading life areas', e);
+    }
+  }
+  
+  IconData _getIconForArea(String areaName) {
+    final iconMap = {
+      'Fitness': Icons.fitness_center,
+      'Nutrition': Icons.restaurant,
+      'Learning': Icons.school,
+      'Finance': Icons.account_balance,
+      'Art': Icons.palette,
+      'Relationships': Icons.people,
+      'Spirituality': Icons.self_improvement,
+      'Career': Icons.work,
+    };
+    return iconMap[areaName] ?? Icons.circle;
+  }
 
   String _thumbUrl(String publicUrl, {int width = 600, int quality = 80}) {
     try {
@@ -72,9 +139,61 @@ class _DashboardGalleryWidgetState extends ConsumerState<DashboardGalleryWidget>
       final notes = imageData['notes'];
       if (notes != null) {
         final obj = jsonDecode(notes);
-        if (obj is Map<String, dynamic> && obj['area'] != null) {
-          final areaName = obj['area'].toString();
+        if (obj is Map<String, dynamic>) {
+          final areaName = obj['area']?.toString();
+          final categoryName = obj['category']?.toString();
           
+          if (areaName == null && categoryName == null) {
+            return {
+              'name': 'General',
+              'icon': Icons.circle,
+              'color': '#666666',
+            };
+          }
+          
+          // Use cached data if available
+          if (_areasLoaded && _areaDataCache.isNotEmpty) {
+            // First check if this is a subcategory
+            if (areaName != null) {
+              // Check both normal and lowercase versions
+              final parentName = _subcategoryToParentMap[areaName] ?? 
+                                _subcategoryToParentMap[areaName.toLowerCase()];
+              if (parentName != null) {
+                // This is a subcategory - get parent's color
+                final parentData = _areaDataCache[parentName] ?? _areaDataCache[parentName.toLowerCase()];
+                if (parentData != null) {
+                  return {
+                    'name': areaName,  // Keep subcategory name
+                    'icon': parentData['icon'],  // Use parent icon
+                    'color': parentData['color'],  // Use parent color
+                  };
+                }
+              }
+            }
+            
+            // Then check if we have this area in cache (parent area)
+            if (areaName != null) {
+              final cachedArea = _areaDataCache[areaName] ?? _areaDataCache[areaName.toLowerCase()];
+              if (cachedArea != null) {
+                return cachedArea;
+              }
+            }
+            
+            // If not found and we have a category, check for parent
+            if (categoryName != null) {
+              final cachedParent = _areaDataCache[categoryName] ?? _areaDataCache[categoryName.toLowerCase()];
+              if (cachedParent != null) {
+                // Return with subcategory name but parent's color
+                return {
+                  'name': areaName ?? categoryName,
+                  'icon': cachedParent['icon'],
+                  'color': cachedParent['color'],
+                };
+              }
+            }
+          }
+          
+          // Fallback to default areas if cache not loaded
           final defaultAreas = [
             {'name': 'Fitness', 'icon': Icons.fitness_center, 'color': '#FF5722'},
             {'name': 'Nutrition', 'icon': Icons.restaurant, 'color': '#4CAF50'},
@@ -86,16 +205,53 @@ class _DashboardGalleryWidgetState extends ConsumerState<DashboardGalleryWidget>
             {'name': 'Career', 'icon': Icons.work, 'color': '#795548'},
           ];
           
-          final area = defaultAreas.firstWhere(
-            (a) => a['name'] == areaName || 
-                   LifeAreasService.canonicalAreaName(a['name'] as String?) == LifeAreasService.canonicalAreaName(areaName),
-            orElse: () => {'name': 'General', 'icon': Icons.circle, 'color': '#666666'},
-          );
+          // First try to find the area by name (might be a parent area)
+          Map<String, dynamic>? area;
+          try {
+            area = defaultAreas.firstWhere(
+              (a) => a['name'] == areaName || 
+                     LifeAreasService.canonicalAreaName(a['name'] as String?) == LifeAreasService.canonicalAreaName(areaName),
+            );
+          } catch (_) {
+            area = null;
+          }
           
+          // If not found and we have a category, it might be a subcategory
+          if (area == null && categoryName != null) {
+            // Try to find the parent category
+            try {
+              area = defaultAreas.firstWhere(
+                (a) => a['name'] == categoryName || 
+                       LifeAreasService.canonicalAreaName(a['name'] as String?) == LifeAreasService.canonicalAreaName(categoryName),
+              );
+            } catch (_) {
+              area = null;
+            }
+            
+            // If we found the parent, use its color and icon but keep the subcategory name
+            if (area != null && areaName != null) {
+              return {
+                'name': areaName, // Use subcategory name
+                'icon': area['icon'], // Use parent icon
+                'color': area['color'], // Use parent color
+              };
+            }
+          }
+          
+          // If we found an area, return it
+          if (area != null) {
+            return {
+              'name': area['name'],
+              'icon': area['icon'],
+              'color': area['color'],
+            };
+          }
+          
+          // Fallback: use the provided name with general styling
           return {
-            'name': area['name'],
-            'icon': area['icon'],
-            'color': area['color'],
+            'name': areaName ?? categoryName ?? 'General',
+            'icon': Icons.circle,
+            'color': '#666666',
           };
         }
       }

@@ -103,6 +103,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
   String? _selectedImageUrl;
   String? _uploadedImageUrl;
   String _activityTitle = 'Activity';
+  String _categoryName = 'General';
   Color? _areaColor;
 
   @override
@@ -182,37 +183,88 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
               if (!mounted) return;
               final areas = res as List;
               final areaMap = <String, Map<String, dynamic>>{};
+              final idMap = <String, Map<String, dynamic>>{};
               
               // Build area map with both exact and lowercase keys
               for (final area in areas) {
                 final name = area['name'] as String?;
+                final id = area['id'] as String?;
                 if (name != null) {
                   areaMap[name] = area;
                   areaMap[name.toLowerCase()] = area;
                 }
+                if (id != null) {
+                  idMap[id] = area;
+                }
               }
               
-              final searchName = areaName?.trim() ?? category?.trim() ?? '';
+              // For subcategories, the area field contains the subcategory name (e.g., "Keto")
+              // and the category field contains the parent name (e.g., "Nutrition")
+              final searchName = areaName?.trim() ?? '';
+              final parentName = category?.trim() ?? '';
+              
               if (searchName.isNotEmpty) {
-                // Try both exact match and lowercase match
+                // First try to find the area by name (could be subcategory)
                 final foundArea = areaMap[searchName] ?? areaMap[searchName.toLowerCase()];
+                
                 if (foundArea != null) {
                   String colorString;
+                  String displayName = foundArea['name'] as String? ?? 'General';
                   
                   // If this is a subcategory (has parent_id), use parent's color
                   if (foundArea['parent_id'] != null) {
                     // Find parent area and use its color
-                    final parentArea = areas.firstWhere(
-                      (area) => area['id'] == foundArea['parent_id'],
-                      orElse: () => foundArea, // Fallback to own color
-                    );
-                    colorString = parentArea['color'] as String;
+                    final parentId = foundArea['parent_id'] as String;
+                    final parentArea = idMap[parentId];
+                    if (parentArea != null) {
+                      colorString = parentArea['color'] as String;
+                      // Keep the subcategory name for display
+                    } else {
+                      // Fallback to own color if parent not found
+                      colorString = foundArea['color'] as String;
+                    }
                   } else {
+                    // This is a parent area, use its own color
                     colorString = foundArea['color'] as String;
                   }
                   
                   setState(() {
+                    _categoryName = displayName;
                     _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
+                  });
+                } else if (parentName.isNotEmpty) {
+                  // If we didn't find by area name, try by category/parent name
+                  final parentArea = areaMap[parentName] ?? areaMap[parentName.toLowerCase()];
+                  if (parentArea != null) {
+                    final colorString = parentArea['color'] as String;
+                    setState(() {
+                      _categoryName = searchName.isNotEmpty ? searchName : parentName;
+                      _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
+                    });
+                  } else {
+                    // No match found, but use the extracted name
+                    setState(() {
+                      _categoryName = searchName.isNotEmpty ? searchName : parentName;
+                    });
+                  }
+                } else {
+                  // No match found, but use the extracted name
+                  setState(() {
+                    _categoryName = searchName;
+                  });
+                }
+              } else if (parentName.isNotEmpty) {
+                // Only category/parent name available
+                final parentArea = areaMap[parentName] ?? areaMap[parentName.toLowerCase()];
+                if (parentArea != null) {
+                  final colorString = parentArea['color'] as String;
+                  setState(() {
+                    _categoryName = parentName;
+                    _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
+                  });
+                } else {
+                  setState(() {
+                    _categoryName = parentName;
                   });
                 }
               }
@@ -230,12 +282,14 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
     try {
       final areas = await LifeAreasService.getLifeAreas();
       final areaMap = <String, LifeArea>{};
+      final idMap = <String, LifeArea>{};
       final allAreas = <LifeArea>[...areas]; // Start with top-level areas
       
       // First add all top-level areas
       for (final a in areas) {
         areaMap[a.name] = a;
         areaMap[a.name.toLowerCase()] = a; // Also add lowercase version for case-insensitive matching
+        idMap[a.id] = a;
       }
       
       // Then recursively add all subcategories
@@ -246,6 +300,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
             allAreas.add(child); // Add to complete areas list for parent lookup
             areaMap[child.name] = child;
             areaMap[child.name.toLowerCase()] = child; // Also add lowercase version
+            idMap[child.id] = child;
           }
         } catch (e) {
           if (kDebugMode) {
@@ -254,30 +309,75 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
         }
       }
       
-      final searchName = areaName?.trim() ?? category?.trim() ?? '';
+      // For subcategories, the area field contains the subcategory name (e.g., "Keto")
+      // and the category field contains the parent name (e.g., "Nutrition")
+      final searchName = areaName?.trim() ?? '';
+      final parentName = category?.trim() ?? '';
+      
       if (searchName.isNotEmpty) {
-        // Try both exact match and lowercase match
+        // First try to find the area by name (could be subcategory)
         final areaObj = areaMap[searchName] ?? areaMap[searchName.toLowerCase()];
+        
         if (areaObj != null) {
           if (mounted) {
             String colorString;
+            String displayName = areaObj.name;
             
             // If this is a subcategory (has parentId), use parent's color
             if (areaObj.parentId != null) {
               // Find parent area and use its color
-              final parentArea = allAreas.firstWhere(
-                (area) => area.id == areaObj.parentId,
-                orElse: () => areaObj, // Fallback to own color
-              );
-              colorString = parentArea.color;
+              final parentArea = idMap[areaObj.parentId];
+              if (parentArea != null) {
+                colorString = parentArea.color;
+                // Keep the subcategory name for display
+              } else {
+                // Fallback to own color if parent not found
+                colorString = areaObj.color;
+              }
             } else {
+              // This is a parent area, use its own color
               colorString = areaObj.color;
             }
             
             setState(() {
+              _categoryName = displayName;
               _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
             });
           }
+        } else if (parentName.isNotEmpty) {
+          // If we didn't find by area name, try by category/parent name
+          final parentArea = areaMap[parentName] ?? areaMap[parentName.toLowerCase()];
+          if (parentArea != null && mounted) {
+            final colorString = parentArea.color;
+            setState(() {
+              _categoryName = searchName.isNotEmpty ? searchName : parentName;
+              _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
+            });
+          } else if (mounted) {
+            // No match found, but use the extracted name
+            setState(() {
+              _categoryName = searchName.isNotEmpty ? searchName : parentName;
+            });
+          }
+        } else if (mounted) {
+          // No match found, but use the extracted name
+          setState(() {
+            _categoryName = searchName;
+          });
+        }
+      } else if (parentName.isNotEmpty) {
+        // Only category/parent name available
+        final parentArea = areaMap[parentName] ?? areaMap[parentName.toLowerCase()];
+        if (parentArea != null && mounted) {
+          final colorString = parentArea.color;
+          setState(() {
+            _categoryName = parentName;
+            _areaColor = Color(int.parse(colorString.replaceAll('#', '0xFF')));
+          });
+        } else if (mounted) {
+          setState(() {
+            _categoryName = parentName;
+          });
         }
       }
     } catch (_) {}
@@ -680,7 +780,7 @@ class _ActivityDetailsDialogState extends State<ActivityDetailsDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-          'Activity details',
+          _categoryName,
                           style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                 color: Colors.black.withValues(alpha: 0.6),
                               ),

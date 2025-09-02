@@ -123,7 +123,7 @@ class _SettingsPageState extends State<SettingsPage> {
         builder: (ctx) => AlertDialog(
           title: const Text('Enable AI assistance?'),
           content: const Text(
-              'If you enable AI assistance, requests with summarized content may be sent to an external AI service. Your data stays restricted to your account via RLS. You can disable this mode at any time.'),
+              'If you enable AI assistance, requests with summarized content may be sent to an external AI service. This is completely optional and requires your explicit consent. Your local data remains secure on your device. You can disable this mode at any time.'),
           actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enable')),

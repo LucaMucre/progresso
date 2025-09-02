@@ -279,7 +279,36 @@ class _ProfilePageState extends State<ProfilePage> {
         // Count activities by life area using ParsedActivityData
         final areaToCount = <String, int>{};
         
-        // Filter logs to only include those from existing life areas
+        // Build subcategory to parent mapping
+        final subcategoryToParent = <String, String>{};
+        for (final area in areas) {
+          try {
+            final childAreas = await LifeAreasService.getChildAreas(area.id);
+            for (final child in childAreas) {
+              subcategoryToParent[child.name] = area.name;
+              subcategoryToParent[child.name.toLowerCase()] = area.name;
+              if (kDebugMode) debugPrint('Profile: Mapped subcategory "${child.name}" to parent "${area.name}"');
+            }
+          } catch (_) {
+            // Ignore errors loading child areas
+          }
+        }
+        
+        // Add fallback mappings for known subcategories
+        final fallbackMappings = {
+          'drei': 'Nutrition',
+          'Drei': 'Nutrition',
+          'keto': 'Nutrition',
+          'Keto': 'Nutrition',
+        };
+        for (final entry in fallbackMappings.entries) {
+          if (!subcategoryToParent.containsKey(entry.key)) {
+            subcategoryToParent[entry.key] = entry.value;
+            subcategoryToParent[entry.key.toLowerCase()] = entry.value;
+          }
+        }
+        
+        // Filter logs to only include those from existing life areas or their subcategories
         final existingAreaNames = areas.map((area) => area.name).toSet();
         final existingCanonicalNames = areas.map((area) => LifeAreasService.canonicalAreaName(area.name)).toSet();
         
@@ -291,12 +320,16 @@ class _ProfilePageState extends State<ProfilePage> {
           // First try exact name match
           if (existingAreaNames.contains(activityAreaName)) return true;
           
+          // Check if it's a known subcategory
+          final parentName = subcategoryToParent[activityAreaName] ?? subcategoryToParent[activityAreaName.toLowerCase()];
+          if (parentName != null && existingAreaNames.contains(parentName)) return true;
+          
           // Then try canonical name match
           final canonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
           return existingCanonicalNames.contains(canonicalName) || canonicalName == 'other' || canonicalName == 'unknown';
         }).toList();
         
-        // Count activities for each existing life area
+        // Count activities for each existing life area (including subcategories)
         for (final area in areas) {
           int count = 0;
           for (final log in filteredLogs) {
@@ -315,11 +348,18 @@ class _ProfilePageState extends State<ProfilePage> {
             if (area.name == activityAreaName) {
               matches = true;
             } else {
-              // Try canonical name match
-              final areaCanonical = LifeAreasService.canonicalAreaName(area.name);
-              final activityCanonical = LifeAreasService.canonicalAreaName(activityAreaName);
-              if (areaCanonical == activityCanonical) {
+              // Check if it's a subcategory of this area
+              final parentName = subcategoryToParent[activityAreaName] ?? subcategoryToParent[activityAreaName.toLowerCase()];
+              if (parentName == area.name) {
                 matches = true;
+                if (kDebugMode) debugPrint('Profile: Counting activity from subcategory "$activityAreaName" for parent area "${area.name}"');
+              } else {
+                // Try canonical name match
+                final areaCanonical = LifeAreasService.canonicalAreaName(area.name);
+                final activityCanonical = LifeAreasService.canonicalAreaName(activityAreaName);
+                if (areaCanonical == activityCanonical) {
+                  matches = true;
+                }
               }
             }
             
@@ -1631,7 +1671,7 @@ class _ProfilePageState extends State<ProfilePage> {
             const Icon(Icons.cloud_upload_outlined, size: 64, color: Colors.blue),
             const SizedBox(height: 16),
             const Text(
-              'Create an account to save your progress to the cloud.',
+              'Your progress is safely stored on your device. Create an account to optionally sync across devices.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

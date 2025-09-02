@@ -64,9 +64,7 @@ class _InsightsPageState extends State<InsightsPage> {
           final childAreas = await LifeAreasService.getChildAreas(area.id);
           allAreas.addAll(childAreas);
         } catch (e) {
-          if (kDebugMode) {
-            print('Error loading child areas for ${area.name}: $e');
-          }
+          if (kDebugMode) debugPrint('Error loading child areas for ${area.name}: $e');
         }
       }
       

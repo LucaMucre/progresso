@@ -27,7 +27,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('Email: progresso.sup@gmail.com\n\nThis Privacy Policy explains how we collect, use, and protect your personal data when you use Progresso, in compliance with the EU General Data Protection Regulation (GDPR) and other applicable privacy laws.'),
+            Text('Email: progresso.sup@gmail.com\n\nThis Privacy Policy explains how we collect, use, and protect your personal data when you use Progresso, in compliance with the EU General Data Protection Regulation (GDPR) and other applicable privacy laws.\n\nIMPORTANT: Progresso is a privacy-first app. By default, all your data is stored locally on your device and never transmitted to external servers. Cloud services and data sharing are entirely optional and require your explicit consent.'),
             SizedBox(height: 16),
             
             Text(
@@ -35,7 +35,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('We collect the following categories of data:\n\n• Account Information: Email address, username, profile information\n• Activity Data: Your logged activities, notes, progress tracking data, uploaded images\n• Usage Data: App interactions, feature usage, crash reports (anonymous)\n• Technical Data: Device information, IP address, browser type (for web version)\n• Optional AI Data: When enabled, summarized content for AI processing'),
+            Text('We collect the following categories of data:\n\n• Local Activity Data: Your logged activities, notes, progress tracking data, uploaded images (stored locally on your device)\n• Optional Account Information: Email address, username, profile information (only when you create a cloud account)\n• Usage Data: App interactions, feature usage, crash reports (anonymous, opt-in only)\n• Technical Data: Device information for app functionality (stored locally)\n• Optional AI Data: When enabled, summarized content for AI processing (with explicit consent)'),
             SizedBox(height: 16),
             
             Text(
@@ -43,7 +43,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('We process your personal data for the following purposes:\n\n• Service Provision: Creating and managing your account, storing your progress data\n• App Functionality: Displaying statistics, generating insights, syncing across devices\n• Communication: Sending important service updates and responding to support requests\n• Improvement: Analyzing usage patterns to improve app features (anonymized data)\n• AI Features: Processing your content with external AI services (only with explicit consent)'),
+            Text('We process your personal data for the following purposes:\n\n• Local App Functionality: Storing your progress data locally on your device, displaying statistics and insights\n• Optional Cloud Services: When you create an account, syncing data across your devices and managing your cloud account\n• Communication: Sending important service updates and responding to support requests (only for registered users)\n• Improvement: Analyzing anonymous usage patterns to improve app features (opt-in only)\n• AI Features: Processing your content with external AI services (only with explicit consent)'),
             SizedBox(height: 16),
             
             Text(
@@ -59,7 +59,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('We share your data with:\n\n• Supabase: Cloud database and authentication provider (EU/US regions, GDPR compliant)\n• AI Providers: Only when AI features are enabled and with your explicit consent\n• Crash Reporting: Anonymous crash data to Sentry (only if opted in)\n\nWe never sell your personal data to third parties.'),
+            Text('Data sharing depends on your usage:\n\n• Anonymous/Local Usage: No data sharing - all data stays on your device\n• Optional Cloud Account: Supabase (cloud database provider, EU/US regions, GDPR compliant) - only when you create an account\n• AI Providers: Only when AI features are enabled and with your explicit consent\n• Crash Reporting: Anonymous crash data (only if opted in)\n\nWe never sell your personal data to third parties. By default, your data never leaves your device.'),
             SizedBox(height: 16),
             
             Text(
@@ -67,7 +67,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('We implement appropriate technical and organizational measures to protect your data:\n\n• Encryption in transit (TLS/HTTPS) and at rest\n• Regular security updates and vulnerability assessments\n• Access controls and authentication requirements\n• Secure data centers with physical and network security'),
+            Text('We implement appropriate security measures based on your usage:\n\n• Local Storage: Your data is encrypted and stored securely on your device using SQLite database\n• Cloud Storage (Optional): Encryption in transit (TLS/HTTPS) and at rest, secure data centers\n• Regular security updates and vulnerability assessments\n• Access controls and authentication requirements for cloud accounts\n• No third-party access to your local data'),
             SizedBox(height: 16),
             
             Text(
@@ -75,7 +75,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('We retain your data:\n\n• Account Data: Until you delete your account\n• Activity Data: Until account deletion or manual deletion by user\n• Backup Data: Up to 90 days for disaster recovery\n• Anonymous Usage Data: Up to 2 years for service improvement\n• Legal Requirements: As required by applicable law'),
+            Text('Data retention varies by usage:\n\n• Local Data: Stored on your device until you delete the app or manually delete data\n• Cloud Account Data: Until you delete your cloud account (local data remains intact)\n• Anonymous Usage Data: Up to 2 years for service improvement (opt-in only)\n• AI Processing Data: Not retained after processing (temporary processing only)\n• You have full control over your local data at all times'),
             SizedBox(height: 16),
             
             Text(
@@ -91,7 +91,7 @@ class PrivacyPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('When using AI features or certain cloud services, your data may be transferred to countries outside the EU. We ensure adequate protection through:\n\n• Standard Contractual Clauses (SCCs)\n• Adequacy decisions by the European Commission\n• Certification schemes and binding corporate rules'),
+            Text('International data transfers only occur when you explicitly enable certain features:\n\n• Local Usage: No international transfers - data stays on your device\n• Cloud Account: Data may be stored in EU/US regions with GDPR compliance\n• AI Features: When enabled, data may be sent to AI providers with Standard Contractual Clauses (SCCs)\n• All transfers are optional and require your explicit consent'),
             SizedBox(height: 16),
             
             Text(

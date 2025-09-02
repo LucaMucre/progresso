@@ -38,6 +38,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
   Future<Map<String, dynamic>>? _globalStatsFuture;
   Future<List<int>>? _globalActivity7dFuture;
   Future<Map<String, dynamic>>? _globalDurationStacksFuture;
+  Map<String, String> _subcategoryToParentMap = {}; // Cache for subcategory to parent mapping
   // View mode for life areas container: 0 = bubbles, 1 = calendar, 2 = gallery, 3 = table
   int _viewMode = 0;
   // Optional filter: show only activities for this life area name
@@ -978,11 +979,12 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                       final searchName = area?.trim() ?? lifeArea?.trim() ?? '';
                       final searchCategory = category?.trim() ?? '';
                       
+                      
                       if (searchName.isNotEmpty || searchCategory.isNotEmpty) {
                         // Find matching life area - prioritize exact name match over category
                         LifeArea? matchedLifeArea;
                         
-                        // First priority: exact name match
+                        // First priority: exact name match with main life areas
                         if (searchName.isNotEmpty) {
                           for (final la in lifeAreas) {
                             if (la.name.toLowerCase() == searchName.toLowerCase()) {
@@ -992,14 +994,33 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
                           }
                         }
                         
-                        // No category-based fallback matching
+                        // Check if it's a subcategory and find its parent using cached mapping
+                        if (matchedLifeArea == null && searchName.isNotEmpty) {
+                          if (kDebugMode) debugPrint('Activity Table: Checking subcategory mapping for "$searchName"');
+                          if (kDebugMode) debugPrint('Activity Table: Available mappings: $_subcategoryToParentMap');
+                          
+                          final parentName = _subcategoryToParentMap[searchName] ?? _subcategoryToParentMap[searchName.toLowerCase()];
+                          if (kDebugMode) debugPrint('Activity Table: Found parent "$parentName" for subcategory "$searchName"');
+                          
+                          if (parentName != null) {
+                            // Find the parent life area
+                            for (final la in lifeAreas) {
+                              if (la.name == parentName) {
+                                matchedLifeArea = la;
+                                areaName = searchName; // Keep the subcategory name
+                                if (kDebugMode) debugPrint('Activity Table: Matched parent life area: ${la.name} with color ${la.color}');
+                                break;
+                              }
+                            }
+                          }
+                        }
                         
                         if (matchedLifeArea != null) {
-                          areaName = matchedLifeArea.name;
+                          if (areaName.isEmpty) areaName = matchedLifeArea.name;
                           areaColor = Color(int.parse(matchedLifeArea.color.replaceFirst('#', '0xFF')));
                           if (kDebugMode) debugPrint('Activity Table Debug: Matched life area "$areaName" with color "${matchedLifeArea.color}"');
                         } else {
-                          // Use the extracted name only (no category fallback)
+                          // Use the extracted name only (no fallback)
                           if (searchName.isNotEmpty) {
                             areaName = searchName;
                           }
@@ -1874,12 +1895,82 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         // Standardbereiche nur einmalig anlegen (schutz vor parallelen FutureBuilder-Aufrufen)
         _ensureDefaultsFuture ??= LifeAreasService.createDefaultLifeAreas();
         await _ensureDefaultsFuture;
-        return await LifeAreasService.getLifeAreas();
+        final loadedAreas = await LifeAreasService.getLifeAreas();
+        await _buildSubcategoryMapping(loadedAreas);
+        return loadedAreas;
       }
+      
+      // Build subcategory to parent mapping
+      await _buildSubcategoryMapping(areas);
       return areas;
     } catch (e) {
-  if (kDebugMode) debugPrint('Error loading life areas: $e');
+      if (kDebugMode) debugPrint('Error loading life areas: $e');
       rethrow;
+    }
+  }
+  
+  Future<void> _buildSubcategoryMapping(List<LifeArea> areas) async {
+    final mapping = <String, String>{};
+    
+    for (final area in areas) {
+      try {
+        final childAreas = await LifeAreasService.getChildAreas(area.id);
+        for (final child in childAreas) {
+          mapping[child.name] = area.name;
+          mapping[child.name.toLowerCase()] = area.name;
+        }
+      } catch (_) {
+        // Ignore errors loading child areas
+      }
+    }
+    
+    // Add fallback mappings for known subcategories that might not be in database yet
+    // This handles cases where activities exist with subcategory names but the subcategories aren't properly stored
+    final fallbackMappings = <String, String>{
+      'drei': 'Nutrition',
+      'Drei': 'Nutrition',
+      'keto': 'Nutrition',
+      'Keto': 'Nutrition',
+      'meal': 'Nutrition',
+      'diet': 'Nutrition',
+      'workout': 'Fitness',
+      'exercise': 'Fitness',
+      'study': 'Learning',
+      'reading': 'Learning',
+      'course': 'Learning',
+      'project': 'Career',
+      'work': 'Career',
+      'drawing': 'Art',
+      'painting': 'Art',
+      'music': 'Art',
+    };
+    
+    // Only add fallback mappings if the subcategory doesn't already exist and the parent exists
+    for (final entry in fallbackMappings.entries) {
+      final subcat = entry.key;
+      final parent = entry.value;
+      
+      if (!mapping.containsKey(subcat) && !mapping.containsKey(subcat.toLowerCase())) {
+        // Check if parent life area exists
+        if (areas.any((area) => area.name == parent)) {
+          mapping[subcat] = parent;
+          mapping[subcat.toLowerCase()] = parent;
+        }
+      }
+    }
+    
+    
+    if (mounted) {
+      setState(() {
+        _subcategoryToParentMap = mapping;
+      });
+      if (kDebugMode) {
+        debugPrint('===== Subcategory to Parent Mapping =====');
+        mapping.forEach((key, value) {
+          debugPrint('  "$key" -> "$value"');
+        });
+        debugPrint('Total mappings: ${mapping.length}');
+      }
     }
   }
 
@@ -2784,7 +2875,7 @@ class _DashboardPageState extends State<DashboardPage> with RouteAware {
         }
 
         return FutureBuilder<List<LifeArea>>(
-          future: LifeAreasService.getLifeAreas(),
+          future: _lifeAreasFuture ?? _loadLifeAreas(),
           builder: (context, lifeAreasSnapshot) {
             final lifeAreas = lifeAreasSnapshot.data ?? [];
             

@@ -1,17 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/action_models.dart';
+import '../models/action_models.dart' as models;
 import '../services/db_service.dart';
 import '../services/life_areas_service.dart';
 
 /// Provider for loading dashboard logs
-final dashboardLogsProvider = FutureProvider.autoDispose<List<ActionLog>>((ref) async {
+final dashboardLogsProvider = FutureProvider.autoDispose<List<models.ActionLog>>((ref) async {
   return await fetchLogs();
 });
 
 /// Provider for loading life areas
 final lifeAreasProvider = FutureProvider.autoDispose<List<LifeArea>>((ref) async {
-  return await loadLifeAreas();
+  return await LifeAreasService.getLifeAreas();
 });
 
 /// State provider for area filter
@@ -24,7 +23,7 @@ final calendarViewModeProvider = StateProvider<CalendarViewMode>((ref) => Calend
 final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
 /// Computed provider for filtered logs based on area filter
-final filteredLogsProvider = Provider.autoDispose<AsyncValue<List<ActionLog>>>((ref) {
+final filteredLogsProvider = Provider.autoDispose<AsyncValue<List<models.ActionLog>>>((ref) {
   final logsAsync = ref.watch(dashboardLogsProvider);
   final areaFilter = ref.watch(areaFilterProvider);
   
@@ -69,20 +68,20 @@ class DashboardStats {
 }
 
 /// Helper function to check if log matches area filter
-bool _logMatchesArea(ActionLog log, String areaFilter) {
+bool _logMatchesArea(models.ActionLog log, String areaFilter) {
   // This would contain the logic from the original dashboard
   // for matching logs to area filters
   return true; // Simplified for now
 }
 
 /// Helper function to calculate dashboard statistics
-DashboardStats _calculateStats(List<ActionLog> logs) {
+DashboardStats _calculateStats(List<models.ActionLog> logs) {
   final totalActions = logs.length;
-  final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp);
+  final totalXp = logs.fold<int>(0, (sum, log) => sum + log.earnedXp.toInt());
   
   // Calculate area activity counts
   final Map<String, int> areaActivityCounts = {};
-  for (final log in logs) {
+  for (final _ in logs) {
     // Parse area from notes or template
     final area = 'General'; // Simplified for now
     areaActivityCounts[area] = (areaActivityCounts[area] ?? 0) + 1;

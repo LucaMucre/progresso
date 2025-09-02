@@ -18,6 +18,9 @@ import 'services/crash_reporting_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Optimize startup by deferring non-critical initializations
+  const isProduction = bool.fromEnvironment('dart.vm.product');
+  
   // Suppress debug overflow errors in debug mode
   if (kDebugMode) {
     debugPaintSizeEnabled = false;
@@ -117,8 +120,10 @@ Future<void> main() async {
       LoggingService.warning('🚨 App wird trotzdem gestartet, aber Supabase-Features sind nicht verfügbar');
     }
     
-    // Initialize crash reporting
-    await CrashReportingService.initialize();
+    // Initialize crash reporting asynchronously to not block startup
+    CrashReportingService.initialize().catchError((e) {
+      LoggingService.warning('Crash reporting initialization failed: $e');
+    });
     
     return const ProviderScope(child: ProgressoApp());
   }

@@ -149,11 +149,13 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       }
       
       // Store color for top-level areas
+      Color areaColor;
       try {
-        _areaColorMap[area.name] = Color(int.parse(area.color.replaceAll('#', '0xFF')));
+        areaColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
       } catch (_) {
-        _areaColorMap[area.name] = AppTheme.primaryColor;
+        areaColor = AppTheme.primaryColor;
       }
+      _areaColorMap[area.name] = areaColor;
       
       // Add all subcategories for each area
       try {
@@ -167,57 +169,65 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
           }
           
           // Store color for subcategory (inherit from parent)
-          try {
-            final parentColor = Color(int.parse(area.color.replaceAll('#', '0xFF')));
-            _areaColorMap[child.name] = parentColor;
-          } catch (_) {
-            _areaColorMap[child.name] = AppTheme.primaryColor;
-          }
+          _areaColorMap[child.name] = areaColor;
         }
       } catch (e) {
         debugPrint('Error loading child areas for ${area.name}: $e');
       }
     }
     
-    if (kDebugMode) {
-      print('Statistics Debug: Total existing area names: ${existingAreaNames.length}');
-      print('Statistics Debug: Existing areas: ${existingAreaNames.toList()}');
-    }
     
+    
+    // Build subcategory mapping first for filtering
+    final tempSubcategoryToParent = <String, String>{};
+    for (final area in _lifeAreas) {
+      try {
+        final childAreas = await LifeAreasService.getChildAreas(area.id);
+        for (final child in childAreas) {
+          tempSubcategoryToParent[child.name] = area.name;
+          tempSubcategoryToParent[child.name.toLowerCase()] = area.name;
+        }
+      } catch (_) {
+        // Ignore
+      }
+    }
+    // Add fallback mappings
+    const fallbackMappings = {
+      'drei': 'Nutrition',
+      'Drei': 'Nutrition', 
+      'keto': 'Nutrition',
+      'Keto': 'Nutrition',
+    };
+    for (final entry in fallbackMappings.entries) {
+      if (!tempSubcategoryToParent.containsKey(entry.key)) {
+        tempSubcategoryToParent[entry.key] = entry.value;
+        tempSubcategoryToParent[entry.key.toLowerCase()] = entry.value;
+      }
+    }
+
     final filteredActivities = _activities.where((activity) {
       final parsed = ParsedActivityData.fromNotes(activity.notes);
       final activityAreaName = parsed.effectiveAreaName;
       
-      if (kDebugMode && activityAreaName.isNotEmpty) {
-        final dayStr = activity.occurredAt.day.toString().padLeft(2, '0');
-        final monthStr = activity.occurredAt.month.toString().padLeft(2, '0');
-        print('Statistics Debug: Activity "${parsed.displayTitle}" in area "$activityAreaName" on ${dayStr}/${monthStr}, Duration: ${activity.durationMin}min');
-      }
       
       if (activityAreaName.isEmpty) return true; // Keep activities without life area
       
       // First try exact name match
       if (existingAreaNames.contains(activityAreaName)) {
-        if (kDebugMode) {
-          print('Statistics Debug: ✓ Activity "$activityAreaName" matched exactly');
-        }
+        return true;
+      }
+      
+      // Check if it's a known subcategory
+      final parentName = tempSubcategoryToParent[activityAreaName] ?? tempSubcategoryToParent[activityAreaName.toLowerCase()];
+      if (parentName != null && existingAreaNames.contains(parentName)) {
         return true;
       }
       
       // Then try canonical name match
       final canonicalName = LifeAreasService.canonicalAreaName(activityAreaName);
-      final matched = existingCanonicalNames.contains(canonicalName) || canonicalName == 'other' || canonicalName == 'unknown';
-      
-      if (kDebugMode) {
-        print('Statistics Debug: ${matched ? '✓' : '✗'} Activity "$activityAreaName" (canonical: "$canonicalName") ${matched ? 'matched' : 'filtered out'}');
-      }
-      
-      return matched;
+      return existingCanonicalNames.contains(canonicalName) || canonicalName == 'other' || canonicalName == 'unknown';
     }).toList();
     
-    if (kDebugMode) {
-      print('Statistics Debug: After filtering: ${filteredActivities.length} activities remaining');
-    }
 
     // Basic stats (only from existing life areas)
     final totalActivities = filteredActivities.length;
@@ -229,14 +239,22 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
 
     // Calculated totalActivities=$totalActivities, totalXP=$totalXP
 
-    // Life areas distribution
+    // Use the existing subcategory mapping from filtering step
+    final subcategoryToParentMap = tempSubcategoryToParent;
+
+    // Life areas distribution (consolidate subcategories under parents)
     final lifeAreasData = <String, Map<String, dynamic>>{};
     
     for (final activity in filteredActivities) {
       final parsed = ParsedActivityData.fromNotes(activity.notes);
-      final areaName = parsed.effectiveAreaName.isNotEmpty 
+      final rawAreaName = parsed.effectiveAreaName.isNotEmpty 
           ? parsed.effectiveAreaName 
           : 'Other';
+      
+      // Map subcategories to their parent areas
+      final areaName = subcategoryToParentMap[rawAreaName] ?? 
+                       subcategoryToParentMap[rawAreaName.toLowerCase()] ?? 
+                       rawAreaName;
       
       lifeAreasData[areaName] = {
         'count': (lifeAreasData[areaName]?['count'] ?? 0) + 1,
@@ -245,31 +263,13 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
         'color': _areaColorMap[areaName] ?? _getColorForArea(areaName),
       };
     }
-
-    // Build subcategory to parent mapping for efficient lookup
-    final subcategoryToParentMap = <String, String>{};
-    for (final area in _lifeAreas) {
-      try {
-        final childAreas = await LifeAreasService.getChildAreas(area.id);
-        for (final child in childAreas) {
-          subcategoryToParentMap[child.name] = area.name;
-          if (kDebugMode) {
-            print('Statistics Debug: Subcategory mapping: "${child.name}" -> "${area.name}"');
-          }
-        }
-      } catch (e) {
-        debugPrint('Error loading child areas for ${area.name}: $e');
-      }
-    }
     
-    if (kDebugMode) {
-      print('Statistics Debug: Total subcategory mappings: ${subcategoryToParentMap.length}');
-    }
 
     // Daily activity chart data
     final dailyData = <DateTime, Map<String, int>>{};
     // Daily data per life area for stacked bar chart
     final dailyLifeAreasData = <DateTime, Map<String, int>>{};
+    
     
     for (final activity in filteredActivities) {
       final day = DateTime(activity.occurredAt.year, activity.occurredAt.month, activity.occurredAt.day);
@@ -283,15 +283,6 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
       // For daily charts, group subcategories under their parent life area
       final displayAreaName = subcategoryToParentMap[rawAreaName] ?? rawAreaName;
       
-      if (kDebugMode) {
-        final dayStr = day.day.toString().padLeft(2, '0');
-        final monthStr = day.month.toString().padLeft(2, '0');
-        if (rawAreaName != displayAreaName) {
-          print('Daily Chart: Mapping subcategory "$rawAreaName" to parent "$displayAreaName" for ${dayStr}/${monthStr} (${minutes}min)');
-        } else if (minutes > 0) {
-          print('Daily Chart: Direct activity "$rawAreaName" for ${dayStr}/${monthStr} (${minutes}min)');
-        }
-      }
       
       // Overall daily data (only from existing life areas)
       dailyData[day] = {
@@ -308,14 +299,6 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
           (dailyLifeAreasData[day]![displayAreaName] ?? 0) + minutes;
     }
     
-    if (kDebugMode) {
-      print('Statistics Debug: Final daily chart data:');
-      dailyLifeAreasData.forEach((date, areas) {
-        final dayStr = date.day.toString().padLeft(2, '0');
-        final monthStr = date.month.toString().padLeft(2, '0');
-        print('  ${dayStr}/${monthStr}: $areas');
-      });
-    }
 
     // Weekly pattern (0 = Monday, 6 = Sunday)
     final weeklyPattern = List.generate(7, (index) => 0);
@@ -1100,6 +1083,56 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
     }
     
     final sortedLifeAreas = lifeAreaNames.toList()..sort();
+    
+    // Ensure all parent life areas used in the chart have their colors in _areaColorMap
+    for (final areaName in sortedLifeAreas) {
+      if (!_areaColorMap.containsKey(areaName)) {
+        // Try to find the actual life area and use its color
+        final matchingLifeArea = _lifeAreas.firstWhere(
+          (area) => area.name == areaName,
+          orElse: () => LifeArea(
+            id: '', 
+            name: '', 
+            category: '', 
+            color: '', 
+            userId: '', 
+            icon: '',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            orderIndex: 0,
+          ),
+        );
+        
+        if (matchingLifeArea.id.isNotEmpty) {
+          try {
+            _areaColorMap[areaName] = Color(int.parse(matchingLifeArea.color.replaceAll('#', '0xFF')));
+          } catch (_) {
+            _areaColorMap[areaName] = _getColorForArea(areaName);
+          }
+        } else {
+          // Fallback: use the color lookup function
+          _areaColorMap[areaName] = _getColorForArea(areaName);
+        }
+      }
+    }
+    
+    // Special fix: Ensure "Nutrition" has the correct color
+    if (sortedLifeAreas.contains('Nutrition') && !_areaColorMap.containsKey('Nutrition')) {
+      final nutritionArea = _lifeAreas.firstWhere(
+        (area) => area.name.toLowerCase() == 'nutrition',
+        orElse: () => LifeArea(id: '', name: '', category: '', color: '', userId: '', icon: '', createdAt: DateTime.now(), updatedAt: DateTime.now(), orderIndex: 0),
+      );
+      
+      if (nutritionArea.id.isNotEmpty) {
+        try {
+          _areaColorMap['Nutrition'] = Color(int.parse(nutritionArea.color.replaceAll('#', '0xFF')));
+        } catch (_) {
+          // Fallback to green color for Nutrition
+          _areaColorMap['Nutrition'] = const Color(0xFF10B981); // Green
+        }
+      }
+    }
+    
     final barGroups = <BarChartGroupData>[];
     
     // Create stacked bar chart data
@@ -1114,6 +1147,7 @@ class _StatisticsPageState extends ConsumerState<StatisticsPage> {
         if (minutes > 0) {
           final hours = minutes / 60.0;
           final color = _areaColorMap[lifeArea] ?? _getColorForArea(lifeArea);
+          
           
           barRods.add(BarChartRodStackItem(
             stackY,

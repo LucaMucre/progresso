@@ -27,7 +27,7 @@ class TermsPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('Progresso is a personal development application that allows you to track activities, log progress, manage life areas, and view personal statistics. The service may include optional AI-powered features that require explicit user consent.'),
+            Text('Progresso is a privacy-first personal development application that allows you to track activities, log progress, manage life areas, and view personal statistics. By default, all data is stored locally on your device. The service may include optional cloud synchronization and AI-powered features that require explicit user consent.'),
             SizedBox(height: 16),
             
             Text(
@@ -51,7 +51,7 @@ class TermsPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('You retain ownership of your content and data. By using Progresso, you grant us permission to store, process, and display your data as necessary to provide the service. You are responsible for backing up important data.'),
+            Text('You retain full ownership of your content and data. When using Progresso locally, your data never leaves your device. When using optional cloud features, you grant us permission to store, process, and display your data as necessary to provide cloud synchronization. You are responsible for backing up important data.'),
             SizedBox(height: 16),
             
             Text(
@@ -59,7 +59,7 @@ class TermsPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('Your privacy is important to us. Our data collection and processing practices are detailed in our Privacy Policy, which is incorporated by reference into these Terms. We comply with applicable data protection laws including GDPR.'),
+            Text('Your privacy is our top priority. Progresso is designed as a local-first application - your data stays on your device by default. Our data collection and processing practices for optional cloud features are detailed in our Privacy Policy, which is incorporated by reference into these Terms. We comply with applicable data protection laws including GDPR.'),
             SizedBox(height: 16),
             
             Text(
@@ -83,7 +83,7 @@ class TermsPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('The service is provided "as is" without warranties of any kind. We are not liable for data loss, service interruptions, or any indirect, incidental, or consequential damages. Our total liability is limited to the amount you paid for the service in the past 12 months.'),
+            Text('The service is provided "as is" without warranties of any kind. For local usage, you are responsible for your device security and data backups. For optional cloud services, we are not liable for data loss, service interruptions, or any indirect, incidental, or consequential damages. Our total liability is limited to the amount you paid for the service in the past 12 months.'),
             SizedBox(height: 16),
             
             Text(
@@ -91,7 +91,7 @@ class TermsPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             SizedBox(height: 8),
-            Text('You may delete your account at any time through the app settings. We may suspend or terminate accounts that violate these terms. Upon termination, your data will be deleted according to our data retention policies.'),
+            Text('You may delete your cloud account at any time through the app settings. Local data remains on your device even after cloud account deletion. We may suspend or terminate cloud accounts that violate these terms. Upon cloud account termination, your cloud data will be deleted according to our data retention policies, but your local data remains intact.'),
             SizedBox(height: 16),
             
             Text(

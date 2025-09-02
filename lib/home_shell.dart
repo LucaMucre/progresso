@@ -143,7 +143,7 @@ class _HomeShellState extends State<HomeShell> {
               NavigationDestination(
                 icon: const Icon(Icons.add_circle_outline), 
                 selectedIcon: const Icon(Icons.add_circle), 
-                label: _getResponsiveLabel(context, t?.navLog ?? 'Log', 'Log'),
+                label: _getResponsiveLabel(context, t?.navLog ?? 'Add', 'Add'),
               ),
               NavigationDestination(
                 icon: const Icon(Icons.history), 
